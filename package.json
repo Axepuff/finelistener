@@ -1,0 +1,56 @@
+{
+  "name": "finelistener",
+  "version": "1.0.0",
+  "description": "Electron app that converts audio to txt",
+  "main": "dist/electron/main.js",
+  "scripts": {
+    "dev:renderer": "vite --config vite.config.ts",
+    "build:electron": "tsc -p tsconfig.main.json",
+    "dev:electron": "npm run build:electron && electron .",
+    "dev": "concurrently \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "build:renderer": "vite build --config vite.config.ts",
+    "build:electron:prod": "tsc -p tsconfig.main.json",
+    "build": "npm run build:renderer && npm run build:electron:prod",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "eslint . --ext .ts,.tsx --fix"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Axepuff/finelistener.git"
+  },
+  "keywords": [
+    "whisper.cpp",
+    "electron",
+    "react",
+    "ai",
+    "audio"
+  ],
+  "author": "axepuff",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Axepuff/finelistener/issues"
+  },
+  "homepage": "https://github.com/Axepuff/finelistener#readme",
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@typescript-eslint/eslint-plugin": "^8.38.0",
+    "@typescript-eslint/parser": "^8.38.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.2.0",
+    "eslint": "^9.32.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0",
+    "vite": "^7.0.6"
+  },
+  "dependencies": {
+    "electron": "^37.2.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
+}
