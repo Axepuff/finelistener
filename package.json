@@ -4,15 +4,73 @@
   "description": "Electron app that converts audio to txt",
   "main": "dist/electron/main.js",
   "scripts": {
-    "dev:renderer": "vite --config vite.config.ts",
+    "web": "vite --config vite.config.mts --open",
+    "dev:renderer": "vite --config vite.config.mts",
     "build:electron": "tsc -p tsconfig.main.json",
     "dev:electron": "npm run build:electron && electron .",
     "dev": "concurrently \"npm:dev:renderer\" \"npm:dev:electron\"",
-    "build:renderer": "vite build --config vite.config.ts",
+    "build:renderer": "vite build --config vite.config.mts",
     "build:electron:prod": "tsc -p tsconfig.main.json",
     "build": "npm run build:renderer && npm run build:electron:prod",
     "lint": "eslint . --ext .ts,.tsx",
-    "format": "eslint . --ext .ts,.tsx --fix"
+    "format": "eslint . --ext .ts,.tsx --fix",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:dir": "npm run build && electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.axepuff.finelistener",
+    "productName": "FineListener",
+    "files": [
+      "dist/renderer/**",
+      "dist/electron/**",
+      "electron/**/preload.*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "whisper.cpp/build/bin",
+        "to": "whisper.cpp/build/bin"
+      },
+      {
+        "from": "whisper.cpp/build/src",
+        "to": "whisper.cpp/build/src"
+      },
+      {
+        "from": "whisper.cpp/models",
+        "to": "whisper.cpp/models"
+      }
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/whisper.cpp/**"
+    ],
+    "directories": {
+      "buildResources": "build"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.music",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "gatekeeperAssess": false,
+      "artifactName": "FineListener-${version}-mac.${ext}"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "FineListener-${version}-win.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "repository": {
     "type": "git",
@@ -32,12 +90,15 @@
   },
   "homepage": "https://github.com/Axepuff/finelistener#readme",
   "devDependencies": {
+    "@stylistic/eslint-plugin": "^5.2.2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@typescript-eslint/eslint-plugin": "^8.38.0",
     "@typescript-eslint/parser": "^8.38.0",
-    "@vitejs/plugin-react": "^4.7.0",
+    "@vitejs/plugin-react": "^5.0.0",
     "concurrently": "^9.2.0",
+    "electron": "^37.2.4",
+    "electron-builder": "^26.0.12",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
@@ -49,7 +110,10 @@
     "vite": "^7.0.6"
   },
   "dependencies": {
-    "electron": "^37.2.4",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.3.1",
+    "@mui/material": "^7.3.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   }

@@ -1,5 +1,6 @@
 import eslint from '@eslint/js';
 import ts_eslint from 'typescript-eslint';
+import stylisticPlugin from '@stylistic/eslint-plugin';
 import reactPlugin from 'eslint-plugin-react';
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
 import * as importPlugin from 'eslint-plugin-import';
@@ -8,7 +9,9 @@ export default ts_eslint.config({
     ignores: [
         'node_modules',
         'dist',
-        'coverage'
+        'coverage',
+        'whisper.cpp',
+        '**/*.config.{js,ts,mts}',
     ],
 }, {
     languageOptions: {
@@ -48,7 +51,6 @@ export default ts_eslint.config({
                 'no-undef': 'off',
                 'no-unneeded-ternary': 'warn',
                 'no-useless-escape': 'off',
-                'prefer-promise-reject-errors': 'error',
             },
         },
         ...ts_eslint.configs.recommendedTypeChecked,
@@ -138,6 +140,75 @@ export default ts_eslint.config({
             files: ['src/**/*.stories.tsx'],
             rules: {
                 'import/no-default-export': 'off',
+            },
+        },
+        stylisticPlugin.configs['disable-legacy'],
+        {
+            name: '@stylistic',
+            plugins: {
+                '@stylistic': stylisticPlugin,
+            },
+            rules: {
+                '@stylistic/semi': ['error', 'always'],
+                '@stylistic/indent': ['warn', 4, { 'SwitchCase': 1 }],
+                '@stylistic/comma-dangle': ['warn', 'always-multiline'],
+                '@stylistic/key-spacing': ['warn'],
+                '@stylistic/padding-line-between-statements': [
+                    'warn',
+                    { 'blankLine': 'always', 'prev': '*', 'next': 'return' },
+                    { 'blankLine': 'always', 'prev': ['const', 'let', 'var'], 'next': '*' },
+                    { 'blankLine': 'any', 'prev': ['const', 'let', 'var'], 'next': ['const', 'let', 'var'] }
+                ],
+                '@stylistic/max-len': [
+                    'warn',
+                    {
+                        'code': 120,
+                        'tabWidth': 4,
+                        'ignoreComments': true,
+                        'ignoreTrailingComments': true,
+                        'ignoreUrls': true,
+                        'ignoreRegExpLiterals': true,
+                        'ignoreStrings': true,
+                        'ignoreTemplateLiterals': true,
+                    },
+                ],
+                '@stylistic/quotes': ['warn', 'single', { 'avoidEscape': true }],
+                '@stylistic/object-curly-newline': ['warn', {
+                    ObjectExpression: { multiline: true, consistent: true },
+                    ObjectPattern: { multiline: true, consistent: true },
+                    ImportDeclaration: { multiline: true, consistent: true },
+                    ExportDeclaration: { multiline: true, consistent: true },
+                }],
+                '@stylistic/object-curly-spacing': ['warn', 'always'],
+                '@stylistic/quote-props': ['warn', 'as-needed'],
+                '@stylistic/space-infix-ops': ['warn'],
+                '@stylistic/keyword-spacing': ['warn'],
+                '@stylistic/no-multiple-empty-lines': ['warn', {
+                    'max': 1,
+                    'maxEOF': 1,
+                    'maxBOF': 0,
+                }],
+                '@stylistic/eol-last': 'warn',
+                '@stylistic/block-spacing': 'warn',
+                '@stylistic/comma-spacing': 'warn',
+                '@stylistic/no-multi-spaces': 'warn',
+                '@stylistic/space-before-blocks': 'warn',
+                '@stylistic/space-in-parens': 'warn',
+                '@stylistic/no-trailing-spaces': 'warn',
+                '@stylistic/jsx-quotes': ['warn', 'prefer-double'],
+                '@stylistic/jsx-child-element-spacing': 'warn',
+                '@stylistic/jsx-closing-bracket-location': 'warn',
+                '@stylistic/jsx-closing-tag-location': 'warn',
+                '@stylistic/jsx-curly-brace-presence': ['warn', { props: 'never', children: 'always', propElementValues: 'always' }],
+                '@stylistic/jsx-curly-newline': ['warn', 'never'],
+                '@stylistic/jsx-curly-spacing': ['warn', { when: 'never' }],
+                '@stylistic/jsx-equals-spacing': ['warn', 'never'],
+                '@stylistic/jsx-one-expression-per-line': ['warn', { allow: 'single-child' }],
+                '@stylistic/jsx-pascal-case': 'error',
+                '@stylistic/jsx-props-no-multi-spaces': 'warn',
+                '@stylistic/jsx-tag-spacing': 'warn',
+                '@stylistic/type-annotation-spacing': 'warn',
+                '@stylistic/member-delimiter-style': 'warn',
             },
         },
     ],
