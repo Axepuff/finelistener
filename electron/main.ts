@@ -1,103 +1,80 @@
-import { spawn } from 'child_process';
-import fs from 'fs/promises';
 import path from 'path';
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
+import { registerIpcHandlers } from './src/controllers/ipc';
 
-let mainWindow: BrowserWindow | null;
+let mainWindow: BrowserWindow | null = null;
 
-function createWindow() {
+// Use Electron's runtime flag instead of NODE_ENV which may be undefined in packaged apps
+const IS_DEV = !app.isPackaged;
+const RENDERER_DEV_URL = 'http://localhost:5173';
+const RENDERER_DIST_INDEX = path.join(__dirname, '../renderer/index.html');
+
+function createMainWindow(): void {
     mainWindow = new BrowserWindow({
-        width: 800,
-        height: 600,
+        width: 1024,
+        height: 800,
+        show: true,
+        autoHideMenuBar: true,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
+            sandbox: true,
+            webSecurity: true,
+            devTools: IS_DEV,
         },
     });
 
-    const isDev = process.env.NODE_ENV !== 'production';
-    const offline = process.env.OFFLINE_DEV === '1';
-
-    if (!isDev || offline) {
-        const indexHtml = path.join(__dirname, '../renderer/index.html'); // <- dist/renderer/index.html
-
-        mainWindow.loadFile(indexHtml).catch(console.error);
+    if (!IS_DEV) {
+        mainWindow.loadFile(RENDERER_DIST_INDEX).catch((err) => console.error('[loadFile]', err));
     } else {
-        mainWindow.loadURL('http://localhost:5173').catch(console.error);
+        mainWindow.loadURL(RENDERER_DEV_URL).catch((err) => console.error('[loadURL]', err));
     }
+
+    mainWindow.on('closed', () => {
+        mainWindow = null;
+    });
+}
+
+const gotLock = app.requestSingleInstanceLock();
+
+if (!gotLock) {
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+        }
+    });
 }
 
 app.whenReady()
-    .then(createWindow)
-    .catch(console.error);
+    .then(() => {
+        createMainWindow();
 
-ipcMain.handle('transcribe', async (_event, language: string) => {
-    const { canceled, filePaths } = await dialog.showOpenDialog({
-        filters: [{ name: 'Audio', extensions: ['wav', 'mp3', 'm4a', 'flac'] }],
-        properties: ['openFile'],
-    });
-
-    if (canceled || filePaths.length === 0) return '';
-
-    const audioPath = filePaths[0];
-    const isDev = process.env.NODE_ENV !== 'production';
-
-    // Путь к бинарю whisper-cli
-    const binPath = isDev
-        ? path.resolve(__dirname, '../../whisper.cpp/build/bin/whisper-cli')
-        : path.join(process.resourcesPath, 'whisper.cpp', 'build', 'bin', 'whisper-cli');
-    // Путь к модели
-    const modelPath = isDev
-        ? path.resolve(__dirname, '../../whisper.cpp/models/ggml-base.bin')
-        : path.join(process.resourcesPath, 'whisper.cpp', 'models', 'ggml-base.bin');
-
-    const lang = language || 'en'; // fallback
-
-    const env = {
-        ...process.env,
-        DYLD_LIBRARY_PATH: binPath,
-    };
-
-    return new Promise<string>((resolve, reject) => {
-        try {
-            const proc = spawn(binPath, [
-                '-m', modelPath,
-                '-l', lang,
-                '-f', audioPath,
-            ], { env });
-
-            let output = '';
-
-            proc.stdout.on('data', (data: Buffer) => (output += data.toString()));
-            proc.stderr.on('data', (data: Buffer) => console.error(data.toString()));
-            proc.on('error', (err) => reject(err));
-            proc.on('close', () => resolve(output));
-        } catch (e) {
-            if (e instanceof Error) reject(e);
-        }
-    });
-});
-
-ipcMain.handle('saveText', async (_event, content: string) => {
-    try {
-        const { canceled, filePath } = await dialog.showSaveDialog({
-            title: 'Сохранить расшифровку',
-            defaultPath: 'transcript.txt',
-            filters: [{ name: 'Text', extensions: ['txt'] }],
+        app.on('activate', () => {
+            if (BrowserWindow.getAllWindows().length === 0) {
+                createMainWindow();
+            }
         });
 
-        if (canceled || !filePath) {
-            return { ok: false, error: 'canceled' };
-        }
-        await fs.writeFile(filePath, content, 'utf8');
+        app.on('web-contents-created', (_e, contents) => {
+            contents.on('will-navigate', (event) => event.preventDefault());
+            contents.setWindowOpenHandler(({ url }) => {
+                shell.openExternal(url).catch(() => void 0);
 
-        return { ok: true, path: filePath };
-    } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+                return { action: 'deny' };
+            });
+        });
 
-        return { ok: false, error: message };
-    }
+        registerIpcHandlers(() => mainWindow);
+    })
+    .catch((err) => {
+        console.error('[app.whenReady] Error:', err);
+        app.quit();
+    });
+
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
 });
-
-app.on('window-all-closed', () => app.quit());

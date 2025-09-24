@@ -60,6 +60,7 @@ export default ts_eslint.config({
                 '@typescript-eslint/explicit-function-return-type': 'off',
                 '@typescript-eslint/naming-convention': 'off',
                 '@typescript-eslint/no-shadow': 'error',
+                "@typescript-eslint/no-misused-promises": "off",
                 '@typescript-eslint/no-unused-vars': [
                     'warn',
                     {
