@@ -2,8 +2,12 @@ import { Button, Checkbox, CircularProgress, FormControl, FormControlLabel, Grow
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
-import { Fragment, useState, type FC } from 'react';
+import { useAtom, useSetAtom } from 'jotai';
+import { useState, type FC } from 'react';
+import { atoms, type RegionTiming } from 'renderer/src/atoms';
 import { useApp } from '../../../../../AppContext';
+
+const { appState, transcription } = atoms;
 
 const LANGS = [
     { code: 'auto', label: 'Auto' },
@@ -15,52 +19,64 @@ const LANGS = [
 ];
 
 type Props = {
-    audioToTranscribe?: string;
+    audioToTranscribe?: string | string[];
+    regions?: RegionTiming;
+    onTranscribeStart: () => void;
+    onTranscribeEnd: (regions?: RegionTiming) => void;
 };
 
-export const TranscribeControl: FC<Props> = ({ audioToTranscribe }) => {
+export const TranscribeControl: FC<Props> = ({
+    audioToTranscribe,
+    onTranscribeEnd,
+}) => {
     const { isElectron } = useApp();
     const [lang, setLang] = useState('ru');
-    const [isStopping, setIsStopping] = useState<boolean>(false);
-    const [loading, setLoading] = useState(false);
     const [maxContext, setMaxContext] = useState<number>(128);
-    const [maxLen, setMaxLen] = useState<number>(0); // 0 = по умолчанию
+    const [maxLen, setMaxLen] = useState<number>(0);
     const [splitOnWord, setSplitOnWord] = useState<boolean>(true);
-    const [useVad, setUseVad] = useState<boolean>(false);
+    const [useVad, setUseVad] = useState<boolean>(true);
     const [collapseSettings, setCollapseSettings] = useState(false);
+    const [uiState, setUiState] = useAtom(appState.uiState);
+    const setLog = useSetAtom(transcription.log);
 
     const handleStart = async () => {
         if (!isElectron || !audioToTranscribe) return;
-        setLoading(true);
+        setUiState('transcribing');
         try {
-            await window.api!.transcribeStream(audioToTranscribe, {
-                language: lang,
-                maxContext,
-                maxLen,
-                splitOnWord,
-                useVad,
-            });
+            const path = Array.isArray(audioToTranscribe) ? audioToTranscribe : [audioToTranscribe];
+
+            for (const p of path) {
+                await window.api!.transcribeStream(p, {
+                    language: lang,
+                    maxContext,
+                    maxLen,
+                    splitOnWord,
+                    useVad,
+                });
+            }
         } finally {
-            setLoading(false);
+            onTranscribeEnd();
+            setUiState('ready');
         }
     };
 
     const handleStop = async () => {
-        setIsStopping(true);
         try {
             const stopped = await window.api!.stopTranscription();
 
             if (stopped) {
-                setLog(log + 'Команда остановки отправлена.');
+                setLog(log => log + 'Команда остановки отправлена.');
             } else {
-                setLog(log + 'Процесс не был запущен — останавливать нечего.');
+                setLog(log => log + 'Процесс не был запущен — останавливать нечего.');
             }
         } catch (err: unknown) {
-            setLog(log + `Ошибка остановки: ${(err as Error)?.message ?? String(err)}`);
+            setLog(log =>log + `Ошибка остановки: ${(err as Error)?.message ?? String(err)}`);
         } finally {
-            setIsStopping(false);
+            setUiState('ready');
         }
     };
+
+    const loading = uiState === 'transcribing';
 
     return (
         <Stack>
@@ -80,9 +96,6 @@ export const TranscribeControl: FC<Props> = ({ audioToTranscribe }) => {
                 </Select>
             </FormControl>
             <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-                <Button variant="outlined" onClick={handlePick}>
-                    {'Выбрать аудио'}
-                </Button>
                 <Button
                     variant="contained"
                     onClick={handleStart}
@@ -92,7 +105,7 @@ export const TranscribeControl: FC<Props> = ({ audioToTranscribe }) => {
                 >
                     {loading ? 'Распознаём…' : 'Старт'}
                 </Button>
-                <Button onClick={handleStop} disabled={!loading || isStopping}>
+                <Button onClick={handleStop} disabled={uiState !== 'transcribing'}>
                     {'Остановить'}
                 </Button>
             </Stack>
@@ -106,7 +119,7 @@ export const TranscribeControl: FC<Props> = ({ audioToTranscribe }) => {
                 )}
                 label="Расширенные настройки"
             />
-            <Grow in={collapseSettings}>
+            <Grow in={collapseSettings} mountOnEnter={true} unmountOnExit={true}>
                 <Stack>
                     <TextField
                         size="small"
@@ -144,6 +157,7 @@ export const TranscribeControl: FC<Props> = ({ audioToTranscribe }) => {
                     />
                 </Stack>
             </Grow>
+
         </Stack>
     );
 };

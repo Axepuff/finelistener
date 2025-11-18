@@ -19,7 +19,16 @@
         "resolveJsonModule": true,
         "isolatedModules": true,
         "noEmit": true,
-        "jsx": "react-jsx"
+        "jsx": "react-jsx",
+        "baseUrl": ".",
+        "paths": {
+            "@~/*": [
+                "renderer/src/features/*"
+            ],
+            "renderer/*": [
+                "renderer/*"
+            ]
+        }
     },
     "include": [
         "electron",

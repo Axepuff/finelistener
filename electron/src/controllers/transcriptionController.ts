@@ -14,6 +14,7 @@ export function registerTranscriptionController(ipc: IpcMain, getMainWindow: () 
     const service = createTranscriptionService({
         onStdoutChunk: (chunk) => getMainWindow()?.webContents.send('transcribe:progress', chunk),
         onStderrChunk: (chunk) => getMainWindow()?.webContents.send('transcribe:log', chunk),
+        onProgressPercent: (value) => getMainWindow()?.webContents.send('transcribe:progress-percent', value),
     });
 
     ipc.handle('transcribeStream', async (_event, audioPath: string, opts: TranscribeOpts) => {

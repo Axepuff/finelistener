@@ -6,6 +6,7 @@ import { buildTranscribeArgs, resolveWhisperPaths } from '../utils/whisper';
 type Callbacks = {
     onStdoutChunk?: (chunk: string) => void;
     onStderrChunk?: (chunk: string) => void;
+    onProgressPercent?: (value: number) => void;
 };
 
 export function createTranscriptionService(callbacks: Callbacks) {
@@ -26,6 +27,7 @@ export function createTranscriptionService(callbacks: Callbacks) {
 
     async function transcribe(audioPath: string, opts: TranscribeOpts): Promise<string> {
         const { binPath, modelPath, vadModelPath } = resolveWhisperPaths();
+
         const args = buildTranscribeArgs(audioPath, opts, { modelPath, vadModelPath });
 
         const env: NodeJS.ProcessEnv = { ...process.env };
@@ -43,6 +45,8 @@ export function createTranscriptionService(callbacks: Callbacks) {
 
         return new Promise<string>((resolve, reject) => {
             let full = '';
+            let progressBuffer = '';
+            let lastProgressReported = -1;
 
             child = spawn(binPath, args, { env });
 
@@ -58,6 +62,29 @@ export function createTranscriptionService(callbacks: Callbacks) {
             child.stderr.on('data', (chunk: unknown) => {
                 if (typeof chunk === 'string') {
                     callbacks.onStderrChunk?.(chunk);
+
+                    progressBuffer += chunk;
+
+                    const regex = /progress\s*=\s*(\d+)%/gi;
+                    let match: RegExpExecArray | null;
+                    let lastConsumedIdx = 0;
+
+                    while ((match = regex.exec(progressBuffer)) !== null) {
+                        lastConsumedIdx = Math.max(lastConsumedIdx, match.index + match[0].length);
+
+                        const progressValue = Number.parseInt(match[1], 10);
+
+                        if (!Number.isNaN(progressValue) && progressValue !== lastProgressReported) {
+                            lastProgressReported = progressValue;
+                            callbacks.onProgressPercent?.(progressValue);
+                        }
+                    }
+
+                    if (lastConsumedIdx > 0) {
+                        progressBuffer = progressBuffer.slice(lastConsumedIdx);
+                    } else if (progressBuffer.length > 256) {
+                        progressBuffer = progressBuffer.slice(-64);
+                    }
                 }
             });
 
@@ -71,7 +98,6 @@ export function createTranscriptionService(callbacks: Callbacks) {
         });
     }
 
-    // Чистим за собой при выходе
     process.on('beforeExit', () => stop());
     process.on('exit', () => stop());
 

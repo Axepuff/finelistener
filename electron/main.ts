@@ -1,5 +1,5 @@
 import path from 'path';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, shell, screen } from 'electron';
 import { registerIpcHandlers } from './src/controllers/ipc';
 
 let mainWindow: BrowserWindow | null = null;
@@ -10,9 +10,13 @@ const RENDERER_DEV_URL = 'http://localhost:5173';
 const RENDERER_DIST_INDEX = path.join(__dirname, '../renderer/index.html');
 
 function createMainWindow(): void {
+    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+    const winWidth = Math.floor(width * 0.8);
+    const winHeight = Math.floor(height * 0.8);
+
     mainWindow = new BrowserWindow({
-        width: 1024,
-        height: 800,
+        width: winWidth,
+        height: winHeight,
         show: true,
         autoHideMenuBar: true,
         webPreferences: {

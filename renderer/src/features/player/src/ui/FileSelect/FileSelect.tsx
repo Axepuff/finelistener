@@ -1,10 +1,10 @@
 import { Group } from '@mui/icons-material';
 import AudioFileIcon from '@mui/icons-material/AudioFile';
 import Button from '@mui/material/Button';
-import { styled } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
+import { styled } from '@mui/material/styles';
 import { useState, type FC } from 'react';
-import { useApp } from '../../../../AppContext';
+import { useApp } from '../../../../../AppContext';
 
 const VisuallyHiddenInput = styled('input')({
     clip: 'rect(0 0 0 0)',
@@ -21,6 +21,7 @@ const VisuallyHiddenInput = styled('input')({
 type Props = {
     onChange: (files: HTMLInputElement['files']) => void;
 };
+
 
 export const InputFileUpload: FC<Props> = ({ onChange }) => {
     const isElectron = useApp();

@@ -12,6 +12,13 @@ contextBridge.exposeInMainWorld('api', {
 
         return () => ipcRenderer.removeListener('transcribe:progress', handler);
     },
+    onTranscribeProgressValue: (cb: (value: number) => void) => {
+        const handler = (_e: unknown, value: number) => cb(value);
+
+        ipcRenderer.on('transcribe:progress-percent', handler);
+
+        return () => ipcRenderer.removeListener('transcribe:progress-percent', handler);
+    },
     onTranscribeLog: (cb: (line: string) => void) => {
         const handler = (_e: unknown, line: string) => cb(line);
 

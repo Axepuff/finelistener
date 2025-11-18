@@ -1,1 +1,1 @@
-export * from '../ui/FileSelect/FileSelect';
+export { Player } from '../src/ui/Player/Player';

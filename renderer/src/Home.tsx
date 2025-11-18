@@ -1,27 +1,27 @@
-import { Group, Transcribe } from '@mui/icons-material';
-import { Container, Stack } from '@mui/material';
+import { Box, Button, Container, Grid, Stack } from '@mui/material';
+import { Player } from '@~/player/lib';
+import { ProcessLog } from '@~/process-log';
+import { TranscribeControl } from '@~/transcribe-control';
+import { TranscribedText } from '@~/transcribed-text';
+import { useAtom, useSetAtom } from 'jotai';
 import { useState } from 'react';
+import { atoms, type RegionTiming } from 'renderer/src/atoms';
 
-type UiState = 'initial' | 'transcribing' | 'ready';
-type RegionTiming = { start: number; end: number };
+const { transcription, appState } = atoms;
 
 export const Home = () => {
-    const [uiState, setUiState] = useState<UiState>();
+    const setUiState = useSetAtom(appState.uiState);
     const [audioToTranscribe, setAudioToTranscribe] = useState<string[]>([]);
-    const [regions, setRegions] = useState<RegionTiming>();
-    const [transcribedRegions, setTranscribedRegions] = useState<RegionTiming>();
-    const [currentTime, setCurrentTime] = useState(0);
-    const [text, setText] = useState('');
+    const [regions, setRegions] = useAtom(transcription.regions);
+    const setTranscribedRegions = useSetAtom(transcription.transcribedRegions);
+    const setCurrentTime = useSetAtom(transcription.currentTime);
+    const resetTranscriptionState = useSetAtom(atoms.reset);
 
     const handleTranscribeStart = () => {
         setUiState('transcribing');
     };
 
-    const handleTranscribeProgress = (chunk: string) => {
-        setText((t) => t + chunk);
-    };
-
-    const handleTranscribeEnd = (endRegions: RegionTiming) => {
+    const handleTranscribeEnd = (endRegions?: RegionTiming) => {
         setUiState('ready');
         setTranscribedRegions(endRegions);
     };
@@ -30,26 +30,41 @@ export const Home = () => {
         setCurrentTime(time);
     };
 
+    const handleClear = () => {
+        setAudioToTranscribe([]);
+        resetTranscriptionState();
+    };
+
     return (
-        <Container maxWidth="md">
-            <Stack>
+        <Container maxWidth="xl" sx={{ py: 4 }}>
+            <Stack spacing="16px" sx={{ minHeight: '90vh' }}>
+                <Button variant="outlined" onClick={handleClear}>{'Очистить'}</Button>
                 <Player
                     onSetAudioToTranscribe={setAudioToTranscribe}
                     onSetRegions={setRegions}
                 />
-                <Group>
-                    <TranscribeControl
-                        audioToTranscribe={audioToTranscribe}
-                        onTranscribeStart={handleTranscribeStart}
-                        onTranscribeEnd={handleTranscribeEnd}
-                        onTranscribeProgress={handleTranscribeProgress}
-                    />
-                    <TranscribedText
-                        text={text}
-                        onSelectTime={handleSelectTime}
-                    />
-                </Group>
+                {/* <TranscribeState /> */}
+                <Grid container={true} spacing="16px">
+                    <Grid size={3}>
+                        <TranscribeControl
+                            regions={regions}
+                            audioToTranscribe={audioToTranscribe}
+                            onTranscribeStart={handleTranscribeStart}
+                            onTranscribeEnd={handleTranscribeEnd}
+                            // onTranscribeProgress={handleTranscribeProgress}
+                        />
+                    </Grid>
+                    <Grid size={9}>
+                        <TranscribedText
+                            onSelectTime={handleSelectTime}
+                        />
+                    </Grid>
+                </Grid>
+
             </Stack>
+            <Box component="footer" sx={{ mt: 'auto' }}>
+                <ProcessLog />
+            </Box>
         </Container>
     );
 };
