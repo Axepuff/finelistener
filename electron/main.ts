@@ -25,13 +25,14 @@ function createMainWindow(): void {
             nodeIntegration: false,
             sandbox: true,
             webSecurity: true,
-            devTools: IS_DEV,
+            devTools: true,
         },
     });
 
     if (!IS_DEV) {
         mainWindow.loadFile(RENDERER_DIST_INDEX).catch((err) => console.error('[loadFile]', err));
     } else {
+        mainWindow.webContents.openDevTools();
         mainWindow.loadURL(RENDERER_DEV_URL).catch((err) => console.error('[loadURL]', err));
     }
 

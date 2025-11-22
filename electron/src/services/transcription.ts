@@ -9,6 +9,34 @@ type Callbacks = {
     onProgressPercent?: (value: number) => void;
 };
 
+const handleProgress = (chunk: string, onProgressPercent?: (value: number) => void) => {
+    let progressBuffer = '';
+    let lastProgressReported = -1;
+
+    progressBuffer += chunk;
+
+    const regex = /progress\s*=\s*(\d+)%/gi;
+    let match: RegExpExecArray | null;
+    let lastConsumedIdx = 0;
+
+    while ((match = regex.exec(progressBuffer)) !== null) {
+        lastConsumedIdx = Math.max(lastConsumedIdx, match.index + match[0].length);
+
+        const progressValue = Number.parseInt(match[1], 10);
+
+        if (!Number.isNaN(progressValue) && progressValue !== lastProgressReported) {
+            lastProgressReported = progressValue;
+            onProgressPercent?.(progressValue);
+        }
+    }
+
+    if (lastConsumedIdx > 0) {
+        progressBuffer = progressBuffer.slice(lastConsumedIdx);
+    } else if (progressBuffer.length > 256) {
+        progressBuffer = progressBuffer.slice(-64);
+    }
+};
+
 export function createTranscriptionService(callbacks: Callbacks) {
     let child: ChildProcessWithoutNullStreams | null = null;
 
@@ -45,8 +73,7 @@ export function createTranscriptionService(callbacks: Callbacks) {
 
         return new Promise<string>((resolve, reject) => {
             let full = '';
-            let progressBuffer = '';
-            let lastProgressReported = -1;
+            let stderrFull = '';
 
             child = spawn(binPath, args, { env });
 
@@ -63,37 +90,30 @@ export function createTranscriptionService(callbacks: Callbacks) {
                 if (typeof chunk === 'string') {
                     callbacks.onStderrChunk?.(chunk);
 
-                    progressBuffer += chunk;
-
-                    const regex = /progress\s*=\s*(\d+)%/gi;
-                    let match: RegExpExecArray | null;
-                    let lastConsumedIdx = 0;
-
-                    while ((match = regex.exec(progressBuffer)) !== null) {
-                        lastConsumedIdx = Math.max(lastConsumedIdx, match.index + match[0].length);
-
-                        const progressValue = Number.parseInt(match[1], 10);
-
-                        if (!Number.isNaN(progressValue) && progressValue !== lastProgressReported) {
-                            lastProgressReported = progressValue;
-                            callbacks.onProgressPercent?.(progressValue);
-                        }
+                    stderrFull += chunk;
+                    if (stderrFull.length > 8000) {
+                        stderrFull = stderrFull.slice(-4000);
                     }
 
-                    if (lastConsumedIdx > 0) {
-                        progressBuffer = progressBuffer.slice(lastConsumedIdx);
-                    } else if (progressBuffer.length > 256) {
-                        progressBuffer = progressBuffer.slice(-64);
-                    }
+                    handleProgress(chunk, callbacks.onProgressPercent);
                 }
             });
 
-            child.on('error', (err) => reject(err));
+            child.on('error', (err) => {
+                child = null;
+                reject(err);
+            });
             child.on('close', (code) => {
+                child = null;
                 const exitCode = typeof code === 'number' ? code : -1;
+                const stderrDetails = stderrFull.trim();
 
                 if (exitCode === 0) resolve(full);
-                else reject(new Error(`whisper exited with code ${exitCode}`));
+                else {
+                    const details = stderrDetails ? ` Details:\n${stderrDetails}` : '';
+
+                    reject(new Error(`whisper exited with code ${exitCode}.${details}`));
+                }
             });
         });
     }

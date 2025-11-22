@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('api', {
     saveText: (content: string) => ipcRenderer.invoke('saveText', content),
     transcribeStream: (audioPath: string, opts: any) => ipcRenderer.invoke('transcribeStream', audioPath, opts),
     stopTranscription: () => ipcRenderer.invoke('stop-transcription'),
+    openDevTools: () => ipcRenderer.invoke('debug:open-devtools'),
     onTranscribeProgress: (cb: (chunk: string) => void) => {
         const handler = (_e: unknown, chunk: string) => cb(chunk);
 

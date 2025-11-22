@@ -12,11 +12,19 @@ const { appState, transcription } = atoms;
 const LANGS = [
     { code: 'auto', label: 'Auto' },
     { code: 'en', label: 'English' },
-    { code: 'ru', label: 'Русский' },
-    { code: 'es', label: 'Español' },
-    { code: 'de', label: 'Deutsch' },
-    { code: 'fr', label: 'Français' },
+    { code: 'ru', label: 'Russian' },
+    { code: 'es', label: 'Spanish' },
+    { code: 'de', label: 'German' },
+    { code: 'fr', label: 'French' },
 ];
+
+const formatErrorMessage = (err: unknown): string => {
+    if (err instanceof Error) return `${err.name}: ${err.message}`;
+
+    return String(err);
+};
+
+const getShortFileName = (target: string) => target.split(/[/\\]/).pop() || target;
 
 type Props = {
     audioToTranscribe?: string | string[];
@@ -27,11 +35,12 @@ type Props = {
 
 export const TranscribeControl: FC<Props> = ({
     audioToTranscribe,
+    onTranscribeStart,
     onTranscribeEnd,
 }) => {
     const { isElectron } = useApp();
     const [lang, setLang] = useState('ru');
-    const [maxContext, setMaxContext] = useState<number>(128);
+    const [maxContext, setMaxContext] = useState<number>(64);
     const [maxLen, setMaxLen] = useState<number>(0);
     const [splitOnWord, setSplitOnWord] = useState<boolean>(true);
     const [useVad, setUseVad] = useState<boolean>(true);
@@ -39,13 +48,25 @@ export const TranscribeControl: FC<Props> = ({
     const [uiState, setUiState] = useAtom(appState.uiState);
     const setLog = useSetAtom(transcription.log);
 
+    const appendLog = (message: string) => {
+        setLog((prev) => {
+            const prefix = prev ? '\n' : '';
+            const timestamp = new Date().toLocaleTimeString();
+
+            return `${prev}${prefix}[${timestamp}] ${message}`;
+        });
+    };
+
     const handleStart = async () => {
         if (!isElectron || !audioToTranscribe) return;
-        setUiState('transcribing');
-        try {
-            const path = Array.isArray(audioToTranscribe) ? audioToTranscribe : [audioToTranscribe];
+        onTranscribeStart();
 
-            for (const p of path) {
+        setUiState('transcribing');
+        const targets = Array.isArray(audioToTranscribe) ? audioToTranscribe : [audioToTranscribe];
+
+        try {
+            for (const p of targets) {
+                appendLog(`Starting Whisper transcription for ${getShortFileName(p)}`);
                 await window.api!.transcribeStream(p, {
                     language: lang,
                     maxContext,
@@ -53,7 +74,10 @@ export const TranscribeControl: FC<Props> = ({
                     splitOnWord,
                     useVad,
                 });
+                appendLog(`Finished Whisper transcription for ${getShortFileName(p)}`);
             }
+        } catch (err) {
+            appendLog(`Whisper process failed: ${formatErrorMessage(err)}`);
         } finally {
             onTranscribeEnd();
             setUiState('ready');
@@ -65,12 +89,12 @@ export const TranscribeControl: FC<Props> = ({
             const stopped = await window.api!.stopTranscription();
 
             if (stopped) {
-                setLog(log => log + 'Команда остановки отправлена.');
+                appendLog('Transcription interrupted by user request.');
             } else {
-                setLog(log => log + 'Процесс не был запущен — останавливать нечего.');
+                appendLog('No Whisper process was running.');
             }
         } catch (err: unknown) {
-            setLog(log =>log + `Ошибка остановки: ${(err as Error)?.message ?? String(err)}`);
+            appendLog(`Failed to stop Whisper process: ${formatErrorMessage(err)}`);
         } finally {
             setUiState('ready');
         }
@@ -157,7 +181,6 @@ export const TranscribeControl: FC<Props> = ({
                     />
                 </Stack>
             </Grow>
-
         </Stack>
     );
 };

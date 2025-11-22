@@ -20,10 +20,13 @@ export function resolveWhisperPaths() {
         ];
 
     const base = pickExistingPath(baseCandidates, 'Cannot locate whisper.cpp assets');
+    const binNames = process.platform === 'win32'
+        ? ['whisper-cli.exe', 'whisper-cli']
+        : ['whisper-cli'];
     const binPath = pickExistingPath(
         [
-            path.join(base, 'build', 'bin', 'whisper-cli'),
-            path.join(base, 'bin', 'whisper-cli'),
+            ...binNames.map((name) => path.join(base, 'build', 'bin', name)),
+            ...binNames.map((name) => path.join(base, 'bin', name)),
         ],
         'whisper-cli binary is missing. Did you run the native build?',
     );
