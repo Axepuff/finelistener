@@ -3,6 +3,7 @@ import { createTranscriptionService } from '../services/transcription';
 
 export interface TranscribeOpts {
     language: string;
+    model?: 'large' | 'small';
     maxContext?: number;
     maxLen?: number;
     splitOnWord?: boolean;

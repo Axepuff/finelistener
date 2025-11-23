@@ -8,6 +8,7 @@ class TranscriptionAtoms {
     readonly transcribedRegions = atom<RegionTiming | undefined>(undefined);
     readonly currentTime = atom(0);
     readonly log = atom('');
+    readonly audioToTranscribe = atom<string[]>([]);
 }
 
 class AppState {
@@ -24,6 +25,7 @@ class AtomRegistry {
         set(this.transcription.transcribedRegions, undefined);
         set(this.transcription.currentTime, 0);
         set(this.transcription.log, '');
+        set(this.transcription.audioToTranscribe, []);
     });
 }
 

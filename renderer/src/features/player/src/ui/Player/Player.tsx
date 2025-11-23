@@ -4,15 +4,12 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useCallback, useState, type FC } from 'react';
-import type { RegionTiming } from 'renderer/src/atoms';
-import { atom, computed, effect, useStore } from '../../../../../reactive';
 
-type PlayerProps = {
+type Props = {
     onSetAudioToTranscribe: (path: string[]) => void;
-    onSetRegions: (regions: RegionTiming) => void;
 };
 
-export const Player: FC<PlayerProps> = ({ onSetAudioToTranscribe, onSetRegions }) => {
+export const Player: FC<Props> = ({ onSetAudioToTranscribe }) => {
     const [audioPath, setAudioPath] = useState('');
 
     const handlePick = useCallback(async () => {

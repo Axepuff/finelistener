@@ -11,11 +11,11 @@ const { transcription, appState } = atoms;
 
 export const Home = () => {
     const setUiState = useSetAtom(appState.uiState);
-    const [audioToTranscribe, setAudioToTranscribe] = useState<string[]>([]);
+
     const [regions, setRegions] = useAtom(transcription.regions);
+    const [audioToTranscribe, setAudioToTranscribe] = useAtom(transcription.audioToTranscribe);
     const setTranscribedRegions = useSetAtom(transcription.transcribedRegions);
     const setCurrentTime = useSetAtom(transcription.currentTime);
-    const resetTranscriptionState = useSetAtom(atoms.reset);
 
     const handleTranscribeStart = () => {
         setUiState('transcribing');
@@ -30,28 +30,19 @@ export const Home = () => {
         setCurrentTime(time);
     };
 
-    const handleClear = () => {
-        setAudioToTranscribe([]);
-        resetTranscriptionState();
-    };
-
     return (
         <Container maxWidth="xl" sx={{ py: 4 }}>
             <Stack spacing="16px" sx={{ minHeight: '90vh' }}>
-                <Button variant="outlined" onClick={handleClear}>{'Очистить'}</Button>
                 <Player
                     onSetAudioToTranscribe={setAudioToTranscribe}
-                    onSetRegions={setRegions}
                 />
                 {/* <TranscribeState /> */}
                 <Grid container={true} spacing="16px">
                     <Grid size={3}>
                         <TranscribeControl
                             regions={regions}
-                            audioToTranscribe={audioToTranscribe}
                             onTranscribeStart={handleTranscribeStart}
                             onTranscribeEnd={handleTranscribeEnd}
-                            // onTranscribeProgress={handleTranscribeProgress}
                         />
                     </Grid>
                     <Grid size={9}>

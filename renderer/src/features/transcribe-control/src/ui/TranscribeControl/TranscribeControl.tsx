@@ -1,21 +1,27 @@
-import { Button, Checkbox, CircularProgress, FormControl, FormControlLabel, Grow, Stack, Switch, TextField } from '@mui/material';
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
+import {
+    Button,
+    CircularProgress,
+    FormControl,
+    InputLabel,
+    MenuItem,
+    Select,
+    Stack,
+} from '@mui/material';
 import { useAtom, useSetAtom } from 'jotai';
-import { useState, type FC } from 'react';
+import React, { useState } from 'react';
 import { atoms, type RegionTiming } from 'renderer/src/atoms';
 import { useApp } from '../../../../../AppContext';
+import { TranscribeAdvancedSettings } from '../TranscribeAdvancedSettings/TranscribeAdvancedSettings';
 
 const { appState, transcription } = atoms;
 
 const LANGS = [
-    { code: 'auto', label: 'Auto' },
-    { code: 'en', label: 'English' },
-    { code: 'ru', label: 'Russian' },
-    { code: 'es', label: 'Spanish' },
-    { code: 'de', label: 'German' },
-    { code: 'fr', label: 'French' },
+    { code: 'auto', label: 'Авто' },
+    { code: 'en', label: 'Английский' },
+    { code: 'ru', label: 'Русский' },
+    { code: 'es', label: 'Испанский' },
+    { code: 'de', label: 'Немецкий' },
+    { code: 'fr', label: 'Французский' },
 ];
 
 const formatErrorMessage = (err: unknown): string => {
@@ -24,29 +30,41 @@ const formatErrorMessage = (err: unknown): string => {
     return String(err);
 };
 
+const formatDuration = (ms: number): string => {
+    if (!Number.isFinite(ms) || ms < 0) return '0 с';
+
+    const totalSeconds = ms / 1000;
+
+    if (totalSeconds < 60) return `${totalSeconds.toFixed(1)} с`;
+
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds - minutes * 60;
+
+    return `${minutes} мин ${seconds.toFixed(1)} с`;
+};
+
 const getShortFileName = (target: string) => target.split(/[/\\]/).pop() || target;
 
-type Props = {
-    audioToTranscribe?: string | string[];
+interface Props {
     regions?: RegionTiming;
     onTranscribeStart: () => void;
     onTranscribeEnd: (regions?: RegionTiming) => void;
-};
+}
 
-export const TranscribeControl: FC<Props> = ({
-    audioToTranscribe,
+const TranscribeControl: React.FC<Props> = ({
     onTranscribeStart,
     onTranscribeEnd,
 }) => {
     const { isElectron } = useApp();
     const [lang, setLang] = useState('ru');
+    const [model, setModel] = useState<'large' | 'small'>('small');
     const [maxContext, setMaxContext] = useState<number>(64);
     const [maxLen, setMaxLen] = useState<number>(0);
     const [splitOnWord, setSplitOnWord] = useState<boolean>(true);
     const [useVad, setUseVad] = useState<boolean>(true);
-    const [collapseSettings, setCollapseSettings] = useState(false);
     const [uiState, setUiState] = useAtom(appState.uiState);
     const setLog = useSetAtom(transcription.log);
+    const [audioToTranscribe, setAudioToTranscribe] = useAtom(transcription.audioToTranscribe);
 
     const appendLog = (message: string) => {
         setLog((prev) => {
@@ -66,18 +84,24 @@ export const TranscribeControl: FC<Props> = ({
 
         try {
             for (const p of targets) {
-                appendLog(`Starting Whisper transcription for ${getShortFileName(p)}`);
+                appendLog(`Запускаем распознавание Whisper для ${getShortFileName(p)}`);
+                const startedAt = performance.now();
+
                 await window.api!.transcribeStream(p, {
                     language: lang,
+                    model,
                     maxContext,
                     maxLen,
                     splitOnWord,
                     useVad,
                 });
-                appendLog(`Finished Whisper transcription for ${getShortFileName(p)}`);
+                const durationMs = performance.now() - startedAt;
+
+                appendLog(`Распознавание Whisper завершено для ${getShortFileName(p)}`);
+                appendLog(`Время транскрибирования ${getShortFileName(p)}: ${formatDuration(durationMs)}.`);
             }
         } catch (err) {
-            appendLog(`Whisper process failed: ${formatErrorMessage(err)}`);
+            appendLog(`Whisper завершился с ошибкой: ${formatErrorMessage(err)}`);
         } finally {
             onTranscribeEnd();
             setUiState('ready');
@@ -89,21 +113,28 @@ export const TranscribeControl: FC<Props> = ({
             const stopped = await window.api!.stopTranscription();
 
             if (stopped) {
-                appendLog('Transcription interrupted by user request.');
+                appendLog('Распознавание остановлено по запросу пользователя.');
             } else {
-                appendLog('No Whisper process was running.');
+                appendLog('Сейчас ничего не распознается.');
             }
         } catch (err: unknown) {
-            appendLog(`Failed to stop Whisper process: ${formatErrorMessage(err)}`);
+            appendLog(`Не удалось остановить Whisper: ${formatErrorMessage(err)}`);
         } finally {
             setUiState('ready');
         }
     };
 
+    const resetTranscriptionState = useSetAtom(atoms.reset);
+
+    const handleClear = () => {
+        setAudioToTranscribe([]);
+        resetTranscriptionState();
+    };
+
     const loading = uiState === 'transcribing';
 
     return (
-        <Stack>
+        <Stack spacing={2}>
             <FormControl size="small" sx={{ minWidth: 160 }}>
                 <InputLabel id="lang-label">{'Язык'}</InputLabel>
                 <Select
@@ -119,7 +150,7 @@ export const TranscribeControl: FC<Props> = ({
                     ))}
                 </Select>
             </FormControl>
-            <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+            <Stack direction="row" spacing={2}>
                 <Button
                     variant="contained"
                     onClick={handleStart}
@@ -127,60 +158,28 @@ export const TranscribeControl: FC<Props> = ({
                     color="primary"
                     startIcon={loading ? <CircularProgress size={18} /> : undefined}
                 >
-                    {loading ? 'Распознаём…' : 'Старт'}
+                    {loading ? 'Распознаю...' : 'Распознать'}
                 </Button>
                 <Button onClick={handleStop} disabled={uiState !== 'transcribing'}>
                     {'Остановить'}
                 </Button>
+                <Button variant="outlined" onClick={handleClear}>{'Сброс'}</Button>
             </Stack>
 
-            <FormControlLabel
-                control={(
-                    <Switch checked={collapseSettings} onChange={() => {
-                        setCollapseSettings((prev) => !prev);
-                    }}
-                    />
-                )}
-                label="Расширенные настройки"
+            <TranscribeAdvancedSettings
+                maxContext={maxContext}
+                onChangeMaxContext={setMaxContext}
+                maxLen={maxLen}
+                onChangeMaxLen={setMaxLen}
+                model={model}
+                onChangeModel={setModel}
+                splitOnWord={splitOnWord}
+                onChangeSplitOnWord={setSplitOnWord}
+                useVad={useVad}
+                onChangeUseVad={setUseVad}
             />
-            <Grow in={collapseSettings} mountOnEnter={true} unmountOnExit={true}>
-                <Stack>
-                    <TextField
-                        size="small"
-                        label="--max-context"
-                        type="number"
-                        value={maxContext}
-                        onChange={(e) => setMaxContext(Number(e.target.value))}
-                        helperText="Количество токенов контекста (напр. 64–224)"
-                    />
-                    <TextField
-                        size="small"
-                        label="--max-len"
-                        type="number"
-                        value={maxLen}
-                        onChange={(e) => setMaxLen(Number(e.target.value))}
-                        helperText="Макс. длина сегмента (символы, 0 = авто)"
-                    />
-                    <FormControlLabel
-                        control={(
-                            <Checkbox
-                                checked={splitOnWord}
-                                onChange={(e) => setSplitOnWord(e.target.checked)}
-                            />
-                        )}
-                        label="--split-on-word"
-                    />
-                    <FormControlLabel
-                        control={(
-                            <Checkbox
-                                checked={useVad}
-                                onChange={(e) => setUseVad(e.target.checked)}
-                            />
-                        )}
-                        label="--vad (резать по речи)"
-                    />
-                </Stack>
-            </Grow>
         </Stack>
     );
 };
+
+export { TranscribeControl };

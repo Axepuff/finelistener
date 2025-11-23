@@ -6,11 +6,18 @@ const { spawnSync } = require('child_process');
 
 const whisperResourceDir = path.resolve(__dirname, 'whisper.cpp');
 
+// Не кладём whisper.cpp и другие тяжёлые артефакты внутрь app.asar, чтобы не дублировать ресурсы
+const packagerIgnore = [
+    /[\\/](?:whisper\.cpp)(?:[\\/]|$)/,
+    /[\\/]out(?:[\\/]|$)/,
+];
+
 module.exports = {
   packagerConfig: {
     asar: true,
     // Ship whisper.cpp binaries/models alongside the packaged app
     extraResource: [whisperResourceDir],
+    ignore: packagerIgnore,
   },
   rebuildConfig: {},
     makers: [

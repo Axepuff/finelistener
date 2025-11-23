@@ -6,7 +6,7 @@ import { App } from './App';
 const theme = createTheme({
     palette: {
         primary: {
-            main: '#d5eed1',
+            main: '#184b27ff',
         },
     },
 });

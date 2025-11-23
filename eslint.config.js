@@ -104,7 +104,6 @@ export default ts_eslint.config({
                 'react/function-component-definition': 'off',
                 'react/jsx-boolean-value': ['error', 'always'],
                 'react/jsx-filename-extension': 'off',
-                'react/jsx-fragments': ['error', 'element'],
                 'react/jsx-no-constructed-context-values': 'error',
                 'react/jsx-no-leaked-render': ['error', { 'validStrategies': ['ternary'] }],
                 'react/jsx-no-useless-fragment': ['error', { allowExpressions: true }],

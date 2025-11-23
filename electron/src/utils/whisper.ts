@@ -4,38 +4,36 @@ import { app } from 'electron';
 import type { TranscribeOpts } from '../controllers/transcriptionController';
 
 const IS_DEV = !app.isPackaged;
+const WHISPER_DIR_NAME = 'whisper.cpp';
+const WHISPER_BIN_NAMES = process.platform === 'win32' ? ['whisper-cli.exe', 'whisper-cli'] : ['whisper-cli'];
+const VAD_MODEL_FILE = 'ggml-silero-v5.1.2.bin';
+const MODEL_FILES = {
+    large: 'ggml-large-v3-q5_0.bin',
+    small: 'ggml-small-q8_0.bin',
+} as const;
 
-export function resolveWhisperPaths() {
+export type WhisperModelName = keyof typeof MODEL_FILES;
+
+export function resolveWhisperPaths(model: WhisperModelName = 'large') {
     const appPath = app.getAppPath();
-
     const baseCandidates = IS_DEV
-        ? [
-            path.resolve(appPath, 'whisper.cpp'),
-            path.resolve(appPath, '../whisper.cpp'),
-            path.resolve(__dirname, '../../../../whisper.cpp'),
-        ]
-        : [
-            path.join(process.resourcesPath, 'whisper.cpp'),
-            path.resolve(appPath, '../whisper.cpp'),
-        ];
+        ? [path.resolve(appPath, '..', WHISPER_DIR_NAME), path.resolve(appPath, WHISPER_DIR_NAME)]
+        : [path.join(process.resourcesPath, WHISPER_DIR_NAME), path.resolve(appPath, '..', WHISPER_DIR_NAME)];
 
     const base = pickExistingPath(baseCandidates, 'Cannot locate whisper.cpp assets');
-    const binNames = process.platform === 'win32'
-        ? ['whisper-cli.exe', 'whisper-cli']
-        : ['whisper-cli'];
     const binPath = pickExistingPath(
         [
-            ...binNames.map((name) => path.join(base, 'build', 'bin', name)),
-            ...binNames.map((name) => path.join(base, 'bin', name)),
+            ...WHISPER_BIN_NAMES.map((name) => path.join(base, 'build', 'bin', name)),
+            ...WHISPER_BIN_NAMES.map((name) => path.join(base, 'bin', name)),
         ],
         'whisper-cli binary is missing. Did you run the native build?',
     );
     const modelPath = pickExistingPath(
-        [path.join(base, 'models', 'ggml-large-v3-q5_0.bin')],
+        [path.join(base, 'models', MODEL_FILES[model])],
         'Whisper model file is missing',
     );
     const vadModelPath = pickExistingPath(
-        [path.join(base, 'models', 'ggml-silero-v5.1.2.bin')],
+        [path.join(base, 'models', VAD_MODEL_FILE)],
         'VAD model file is missing',
     );
 

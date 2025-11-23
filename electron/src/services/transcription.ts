@@ -54,7 +54,7 @@ export function createTranscriptionService(callbacks: Callbacks) {
     }
 
     async function transcribe(audioPath: string, opts: TranscribeOpts): Promise<string> {
-        const { binPath, modelPath, vadModelPath } = resolveWhisperPaths();
+        const { binPath, modelPath, vadModelPath } = resolveWhisperPaths(opts.model);
 
         const args = buildTranscribeArgs(audioPath, opts, { modelPath, vadModelPath });
 

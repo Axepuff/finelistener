@@ -65,7 +65,7 @@ console.error("Failed to load projects", error);
 
 - Читаемость важнее краткости.
 - Весь новый код пишется на **TypeScript**.
-- Все компоненты React объявляются в виде `const MyComponent: React.FC<Props> = ({ ... }) => { ... };`.
+- Все компоненты React объявляются в виде `export const MyComponent: React.FC<Props> = ({ ... }) => { ... };`.
 - Классовые компоненты **не используются**.
 - Бизнес-логику по возможности выносить из JSX в функции и хуки.
 - Не менять архитектуру и структуру проекта без явной необходимости.
@@ -159,22 +159,6 @@ console.error("Failed to load projects", error);
 ---
 
 ## 7. Стиль кода
-
-### Импорт
-
-- Сначала импортировать внешние библиотеки:
-
-  ```ts
-  import React from "react";
-  import { atom } from "jotai";
-  ```
-
-- Затем — внутренние модули проекта:
-
-  ```ts
-  import { projectsAtom } from "@/state/projects";
-  import { ProjectList } from "@/components/ProjectList";
-  ```
 
 ### Нейминг
 
