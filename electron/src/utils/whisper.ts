@@ -45,7 +45,7 @@ export function buildTranscribeArgs(
     opts: TranscribeOpts,
     modelPaths: { modelPath: string; vadModelPath: string },
 ): string[] {
-    const args: string[] = ['-m', modelPaths.modelPath, '-f', audioPath, '-otxt', '--print-progress'];
+    const args: string[] = ['-m', modelPaths.modelPath, '-f', audioPath, '--print-progress'];
 
     if (opts.language) args.push('-l', opts.language);
     if (typeof opts.maxContext === 'number') args.push('--max-context', String(opts.maxContext));

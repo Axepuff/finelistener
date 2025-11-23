@@ -1,57 +1,40 @@
-import { Group } from '@mui/icons-material';
 import AudioFileIcon from '@mui/icons-material/AudioFile';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
-import { styled } from '@mui/material/styles';
-import { useState, type FC } from 'react';
+import { useAtom } from 'jotai';
+import { type FC } from 'react';
 import { useApp } from '../../../../../AppContext';
+import { atoms } from 'renderer/src/atoms';
 
-const VisuallyHiddenInput = styled('input')({
-    clip: 'rect(0 0 0 0)',
-    clipPath: 'inset(50%)',
-    height: 1,
-    overflow: 'hidden',
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    whiteSpace: 'nowrap',
-    width: 1,
-});
-
-type Props = {
-    onChange: (files: HTMLInputElement['files']) => void;
-};
-
-
-export const InputFileUpload: FC<Props> = ({ onChange }) => {
-    const isElectron = useApp();
-    const [audioPath, setAudioPath] = useState<string>('');
+export const FileSelect: FC = () => {
+    const { isElectron } = useApp();
+    const [audioToTranscribe, setAudioToTranscribe] = useAtom(atoms.transcription.audioToTranscribe);
 
     const handlePick = async () => {
         if (!isElectron) return;
         const file = await window.api!.pickAudio();
 
-        if (file) setAudioPath(file);
+        if (file) setAudioToTranscribe([file]);
     };
 
+    const selectedLabel =
+        audioToTranscribe.length > 0 ? audioToTranscribe.join(', ') : 'Файл не выбран';
+
     return (
-        <Group>
+        <>
             <Typography variant="subtitle2" sx={{ mt: 2, opacity: 0.7 }}>
-                {audioPath || 'Файл не выбран'}
+                {selectedLabel}
             </Typography>
             <Button
                 component="label"
                 role={undefined}
                 variant="contained"
                 tabIndex={-1}
+                onClick={handlePick}
                 startIcon={<AudioFileIcon />}
             >
-                {'Выберите файл'}
-                <VisuallyHiddenInput
-                    type="file"
-                    onChange={(event) => onChange(event.target.files)}
-                />
+                {'Выбрать аудиофайл'}
             </Button>
-        </Group>
+        </>
     );
 };

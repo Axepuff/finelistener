@@ -1,7 +1,9 @@
+import { Stop } from '@mui/icons-material';
 import {
     Button,
     CircularProgress,
     FormControl,
+    IconButton,
     InputLabel,
     MenuItem,
     Select,
@@ -156,13 +158,13 @@ const TranscribeControl: React.FC<Props> = ({
                     onClick={handleStart}
                     disabled={loading}
                     color="primary"
-                    startIcon={loading ? <CircularProgress size={18} /> : undefined}
+                    startIcon={loading ? <CircularProgress size={8} /> : undefined}
                 >
                     {loading ? 'Распознаю...' : 'Распознать'}
                 </Button>
-                <Button onClick={handleStop} disabled={uiState !== 'transcribing'}>
-                    {'Остановить'}
-                </Button>
+                <IconButton onClick={handleStop} disabled={uiState !== 'transcribing'}>
+                    <Stop />
+                </IconButton>
                 <Button variant="outlined" onClick={handleClear}>{'Сброс'}</Button>
             </Stack>
 

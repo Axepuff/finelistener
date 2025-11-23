@@ -1,0 +1,12 @@
+{
+  "name": "@~/player",
+  "private": true,
+  "version": "0.0.0",
+  "author": "Whoosh LTD",
+  "license": "MIT",
+  "exports": {
+    ".": "./lib/index.ts",
+    "./*": "./lib/*.ts",
+    "./index": null
+  }
+}

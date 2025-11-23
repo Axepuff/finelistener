@@ -1,5 +1,5 @@
 import { Box, Button, Container, Grid, Stack } from '@mui/material';
-import { Player } from '@~/player/lib';
+import { FileSelect, Player } from '@~/player';
 import { ProcessLog } from '@~/process-log';
 import { TranscribeControl } from '@~/transcribe-control';
 import { TranscribedText } from '@~/transcribed-text';
@@ -33,9 +33,8 @@ export const Home = () => {
     return (
         <Container maxWidth="xl" sx={{ py: 4 }}>
             <Stack spacing="16px" sx={{ minHeight: '90vh' }}>
-                <Player
-                    onSetAudioToTranscribe={setAudioToTranscribe}
-                />
+                <FileSelect />
+                <Player />
                 {/* <TranscribeState /> */}
                 <Grid container={true} spacing="16px">
                     <Grid size={3}>

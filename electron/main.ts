@@ -1,13 +1,27 @@
 import path from 'path';
-import { app, BrowserWindow, shell, screen } from 'electron';
+import { pathToFileURL } from 'url';
+import { app, BrowserWindow, shell, screen, protocol, net } from 'electron';
 import { registerIpcHandlers } from './src/controllers/ipc';
 
 let mainWindow: BrowserWindow | null = null;
 
-// Use Electron's runtime flag instead of NODE_ENV which may be undefined in packaged apps
 const IS_DEV = !app.isPackaged;
 const RENDERER_DEV_URL = 'http://localhost:5173';
 const RENDERER_DIST_INDEX = path.join(__dirname, '../renderer/index.html');
+const LOCAL_FILE_PROTOCOL = 'local-file';
+
+protocol.registerSchemesAsPrivileged([
+    {
+        scheme: LOCAL_FILE_PROTOCOL,
+        privileges: {
+            secure: true,
+            standard: true,
+            supportFetchAPI: true,
+            stream: true,
+            corsEnabled: true,
+        },
+    },
+]);
 
 function createMainWindow(): void {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -74,6 +88,25 @@ app.whenReady()
         });
 
         registerIpcHandlers(() => mainWindow);
+
+        return protocol.handle(LOCAL_FILE_PROTOCOL, (request) => {
+            const url = new URL(request.url);
+
+            const pathname = decodeURIComponent(url.pathname);
+            const host = url.hostname;
+
+            let filePath = pathname;
+
+            if (process.platform === 'win32') {
+                // На Windows восстанавливаем букву диска из host (local-file://c/...) и убираем лишние слэши
+                filePath = `${host ? `${host}:` : ''}${pathname}`.replace(/^\/+/, '');
+            }
+
+            const normalizedPath = path.normalize(filePath);
+            const fileUrl = pathToFileURL(normalizedPath).toString();
+
+            return net.fetch(fileUrl);
+        });
     })
     .catch((err) => {
         console.error('[app.whenReady] Error:', err);
