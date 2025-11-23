@@ -1,0 +1,41 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "useDefineForClassFields": true,
+        "lib": [
+            "DOM",
+            "DOM.Iterable",
+            "ESNext"
+        ],
+        "allowJs": false,
+        "allowSyntheticDefaultImports": true,
+        "skipLibCheck": true,
+        "esModuleInterop": false,
+        "strict": true,
+        "noFallthroughCasesInSwitch": true,
+        "forceConsistentCasingInFileNames": true,
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "noEmit": true,
+        "jsx": "react-jsx",
+        "baseUrl": ".",
+        "paths": {
+            "@~/*": [
+                "renderer/src/features/*"
+            ],
+            "renderer/*": [
+                "renderer/*"
+            ]
+        }
+    },
+    "include": [
+        "electron",
+        "renderer/src",
+        "tsconfig.main.json",
+        "vite.config.mts",
+        "vite.config.*.ts",
+        ".eslintrc.js"
+    ]
+}
