@@ -11,9 +11,6 @@ const { transcription, appState } = atoms;
 
 export const Home = () => {
     const setUiState = useSetAtom(appState.uiState);
-
-    const [regions, setRegions] = useAtom(transcription.regions);
-    const [audioToTranscribe, setAudioToTranscribe] = useAtom(transcription.audioToTranscribe);
     const setTranscribedRegions = useSetAtom(transcription.transcribedRegions);
     const setCurrentTime = useSetAtom(transcription.currentTime);
 
@@ -39,7 +36,6 @@ export const Home = () => {
                 <Grid container={true} spacing="16px">
                     <Grid size={3}>
                         <TranscribeControl
-                            regions={regions}
                             onTranscribeStart={handleTranscribeStart}
                             onTranscribeEnd={handleTranscribeEnd}
                         />

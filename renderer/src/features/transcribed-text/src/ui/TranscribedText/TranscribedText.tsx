@@ -2,10 +2,10 @@ import { Button, LinearProgress } from '@mui/material';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { useEffect, useState, type FC } from 'react';
-import { useApp } from '../../../../../AppContext';
 import { useAtomValue } from 'jotai';
+import { useCallback, useEffect, useState, type FC, type MouseEvent } from 'react';
 import { atoms } from 'renderer/src/atoms';
+import { useApp } from '../../../../../AppContext';
 
 const { appState } = atoms;
 
@@ -13,9 +13,10 @@ type TranscribedTextProps = {
     onSelectTime: (time: number) => void;
 };
 
-export const TranscribedText: FC<TranscribedTextProps> = () => {
+export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
     const { isElectron } = useApp();
-    const [text, setText] = useState('');
+    const [plainText, setPlainText] = useState('');
+    const [renderedText, setRenderedText] = useState('');
     const [progress, setProgress] = useState(0);
     const uiState = useAtomValue(appState.uiState);
 
@@ -36,7 +37,7 @@ export const TranscribedText: FC<TranscribedTextProps> = () => {
 
             placeholders.push({
                 placeholder,
-                markup: `<span data-regions="${escapeHtml(firstRegion.trim())}">${escapeHtml(match)}</span>`
+                markup: `<span data-regions="${escapeHtml(firstRegion.trim())}">${escapeHtml(match)}</span>`,
             });
 
             return placeholder;
@@ -47,14 +48,53 @@ export const TranscribedText: FC<TranscribedTextProps> = () => {
         return placeholders.reduce((acc, { placeholder, markup }) => acc.split(placeholder).join(markup), escaped);
     };
 
+    const parseTimeToSeconds = (value: string): number | null => {
+        const sanitized = value.trim().replace(',', '.');
+
+        if (!sanitized) return null;
+
+        const parts = sanitized.split(':').map((part) => part.trim());
+
+        if (parts.some((part) => part === '')) return null;
+
+        let totalSeconds = 0;
+
+        for (const part of parts) {
+            const numeric = Number(part);
+
+            if (Number.isNaN(numeric)) return null;
+
+            totalSeconds = totalSeconds * 60 + numeric;
+        }
+
+        return totalSeconds;
+    };
+
     const handleTranscribeProgress = (chunk: string) => {
-        setText((t) => t + enhanceChunk(chunk));
+        setPlainText((t) => t + chunk);
+        setRenderedText((t) => t + enhanceChunk(chunk));
     };
 
     const handleSave = async () => {
-        if (!text) return;
-        await window.api!.saveText(text);
+        if (!plainText) return;
+        await window.api!.saveText(plainText);
     };
+
+    const handleRegionClick = useCallback(
+        (event: MouseEvent<HTMLElement>) => {
+            const regionElement = (event.target as HTMLElement | null)?.closest('span[data-regions]');
+
+            if (!regionElement) return;
+
+            const region = regionElement.getAttribute('data-regions');
+            const time = region ? parseTimeToSeconds(region) : null;
+
+            if (time === null) return;
+
+            onSelectTime(time);
+        },
+        [onSelectTime],
+    );
 
     useEffect(() => {
         if (!isElectron) return;
@@ -82,11 +122,11 @@ export const TranscribedText: FC<TranscribedTextProps> = () => {
     return (
         <Stack gap="16px">
             <Button
-                disabled={text.length === 0}
+                disabled={plainText.length === 0}
                 variant="contained"
                 onClick={handleSave}
             >
-                {'Сохранить .txt'}
+                {'Сохранить в .txt'}
             </Button>
             {uiState === 'transcribing' ? (
                 <Stack direction="row" spacing={1} alignItems="center">
@@ -100,8 +140,21 @@ export const TranscribedText: FC<TranscribedTextProps> = () => {
                 <Typography
                     component="div"
                     variant="body1"
-                    sx={{ whiteSpace: 'pre-wrap' }}
-                    dangerouslySetInnerHTML={{ __html: text }}
+                    sx={{
+                        whiteSpace: 'pre-wrap',
+                        '& span[data-regions]': {
+                            cursor: 'pointer',
+                            transition: 'background-color 0.15s ease, color 0.15s ease',
+                        },
+                        '& span[data-regions]:hover': {
+                            backgroundColor: 'rgba(28, 77, 5, 0.12)',
+                        },
+                        '& span[data-regions]:active': {
+                            backgroundColor: 'rgba(28, 77, 5, 0.2)',
+                        },
+                    }}
+                    onClick={handleRegionClick}
+                    dangerouslySetInnerHTML={{ __html: renderedText }}
                 />
             </Paper>
         </Stack>

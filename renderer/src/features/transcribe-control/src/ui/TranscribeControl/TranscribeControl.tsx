@@ -48,7 +48,6 @@ const formatDuration = (ms: number): string => {
 const getShortFileName = (target: string) => target.split(/[/\\]/).pop() || target;
 
 interface Props {
-    regions?: RegionTiming;
     onTranscribeStart: () => void;
     onTranscribeEnd: (regions?: RegionTiming) => void;
 }

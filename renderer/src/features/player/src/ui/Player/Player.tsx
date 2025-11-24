@@ -25,6 +25,7 @@ export const Player: FC = () => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const [urlIndex, setUrlIndex] = useState(0);
     const audioToTranscribe = useAtomValue(atoms.transcription.audioToTranscribe);
+    const selectedTime = useAtomValue(atoms.transcription.currentTime);
 
     useEffect(() => {
         setUrlIndex((index) => Math.min(index, Math.max(audioToTranscribe.length - 1, 0)));
@@ -49,6 +50,14 @@ export const Player: FC = () => {
 
         void wavesurfer?.load(buildLocalFileUrl(currentAudioPath));
     }, [currentAudioPath, wavesurfer]);
+
+    useEffect(() => {
+        if (!wavesurfer) return;
+
+        if (!Number.isFinite(selectedTime)) return;
+
+        wavesurfer.setTime(selectedTime);
+    }, [selectedTime, wavesurfer]);
 
     const onPlayPause = useCallback(async () => {
         if (wavesurfer) {
