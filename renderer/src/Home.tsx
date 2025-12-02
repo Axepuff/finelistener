@@ -1,19 +1,15 @@
-import { Box, Button, Container, Grid, Stack } from '@mui/material';
-import { Player } from '@~/player/lib';
+import { Box, Container, Grid, Stack } from '@mui/material';
+import { FileSelect, Player } from '@~/player';
 import { ProcessLog } from '@~/process-log';
 import { TranscribeControl } from '@~/transcribe-control';
 import { TranscribedText } from '@~/transcribed-text';
-import { useAtom, useSetAtom } from 'jotai';
-import { useState } from 'react';
+import { useSetAtom } from 'jotai';
 import { atoms, type RegionTiming } from 'renderer/src/atoms';
 
 const { transcription, appState } = atoms;
 
 export const Home = () => {
     const setUiState = useSetAtom(appState.uiState);
-
-    const [regions, setRegions] = useAtom(transcription.regions);
-    const [audioToTranscribe, setAudioToTranscribe] = useAtom(transcription.audioToTranscribe);
     const setTranscribedRegions = useSetAtom(transcription.transcribedRegions);
     const setCurrentTime = useSetAtom(transcription.currentTime);
 
@@ -33,14 +29,12 @@ export const Home = () => {
     return (
         <Container maxWidth="xl" sx={{ py: 4 }}>
             <Stack spacing="16px" sx={{ minHeight: '90vh' }}>
-                <Player
-                    onSetAudioToTranscribe={setAudioToTranscribe}
-                />
+                <FileSelect />
+                <Player />
                 {/* <TranscribeState /> */}
                 <Grid container={true} spacing="16px">
                     <Grid size={3}>
                         <TranscribeControl
-                            regions={regions}
                             onTranscribeStart={handleTranscribeStart}
                             onTranscribeEnd={handleTranscribeEnd}
                         />

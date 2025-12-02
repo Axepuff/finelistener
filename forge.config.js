@@ -5,6 +5,8 @@ const fs = require('fs');
 const { spawnSync } = require('child_process');
 
 const whisperResourceDir = path.resolve(__dirname, 'whisper.cpp');
+// Оставляем ffmpeg-static вне asar, чтобы можно было запускать бинарь
+const asarUnpackPattern = '**/node_modules/ffmpeg-static/**';
 
 // Не кладём whisper.cpp и другие тяжёлые артефакты внутрь app.asar, чтобы не дублировать ресурсы
 const packagerIgnore = [
@@ -14,7 +16,9 @@ const packagerIgnore = [
 
 module.exports = {
   packagerConfig: {
-    asar: true,
+    asar: {
+      unpack: asarUnpackPattern,
+    },
     // Ship whisper.cpp binaries/models alongside the packaged app
     extraResource: [whisperResourceDir],
     ignore: packagerIgnore,

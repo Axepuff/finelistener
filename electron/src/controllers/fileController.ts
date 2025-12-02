@@ -17,7 +17,7 @@ export function registerFileController(ipc: IpcMain, _getMainWindow: () => Brows
     ipc.handle('saveText', async (_event, content: string) => {
         try {
             const { canceled, filePath } = await dialog.showSaveDialog({
-                title: 'Сохранить расшифровку',
+                title: 'Сохранить текстовую расшифровку',
                 defaultPath: 'transcript.txt',
                 filters: [{ name: 'Text', extensions: ['txt'] }],
             });

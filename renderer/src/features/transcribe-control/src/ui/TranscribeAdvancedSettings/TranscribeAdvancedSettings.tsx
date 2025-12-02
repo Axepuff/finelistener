@@ -1,11 +1,7 @@
 import {
     Checkbox,
-    FormControl,
     FormControlLabel,
     Grow,
-    InputLabel,
-    MenuItem,
-    Select,
     Stack,
     Switch,
     TextField,
@@ -17,8 +13,6 @@ interface Props {
     onChangeMaxContext: (value: number) => void;
     maxLen: number;
     onChangeMaxLen: (value: number) => void;
-    model: 'large' | 'small';
-    onChangeModel: (value: 'large' | 'small') => void;
     splitOnWord: boolean;
     onChangeSplitOnWord: (value: boolean) => void;
     useVad: boolean;
@@ -30,8 +24,6 @@ export const TranscribeAdvancedSettings: React.FC<Props> = ({
     onChangeMaxContext,
     maxLen,
     onChangeMaxLen,
-    model,
-    onChangeModel,
     splitOnWord,
     onChangeSplitOnWord,
     useVad,
@@ -47,25 +39,12 @@ export const TranscribeAdvancedSettings: React.FC<Props> = ({
             />
             <Grow in={isOpen}>
                 <Stack spacing={1.5}>
-                    <FormControl size="small">
-                        <InputLabel id="transcribe-model-label">{'Модель'}</InputLabel>
-                        <Select
-                            labelId="transcribe-model-label"
-                            label="Модель"
-                            value={model}
-                            onChange={(e) => onChangeModel(e.target.value)}
-                        >
-                            <MenuItem value="large">{'Большая (лучшее качество, медленнее)'}</MenuItem>
-                            <MenuItem value="small">{'Малая (быстрее, меньше качество)'}</MenuItem>
-                        </Select>
-                    </FormControl>
                     <TextField
                         size="small"
                         label="Максимальный контекст (--max-context)"
                         type="number"
                         value={maxContext}
                         onChange={(e) => onChangeMaxContext(Number(e.target.value))}
-                        helperText="Количество предыдущих токенов (рекомендуется 64–224)"
                     />
                     <TextField
                         size="small"
@@ -73,7 +52,6 @@ export const TranscribeAdvancedSettings: React.FC<Props> = ({
                         type="number"
                         value={maxLen}
                         onChange={(e) => onChangeMaxLen(Number(e.target.value))}
-                        helperText="Ограничение на длину сегмента (0 — без ограничения)"
                     />
                     <FormControlLabel
                         control={(
@@ -82,17 +60,16 @@ export const TranscribeAdvancedSettings: React.FC<Props> = ({
                                 onChange={(e) => onChangeSplitOnWord(e.target.checked)}
                             />
                         )}
-                        label="Делить по словам (--split-on-word)"
+                        label="Делить по словам"
                     />
                     <FormControlLabel
                         control={(
                             <Checkbox checked={useVad} onChange={(e) => onChangeUseVad(e.target.checked)} />
                         )}
-                        label="Использовать VAD (--vad)"
+                        label="Использовать определение тишины"
                     />
                 </Stack>
             </Grow>
         </>
     );
 };
-
