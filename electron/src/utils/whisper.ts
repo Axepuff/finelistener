@@ -8,13 +8,16 @@ const WHISPER_DIR_NAME = 'whisper.cpp';
 const WHISPER_BIN_NAMES = process.platform === 'win32' ? ['whisper-cli.exe', 'whisper-cli'] : ['whisper-cli'];
 const VAD_MODEL_FILE = 'ggml-silero-v5.1.2.bin';
 const MODEL_FILES = {
-    large: 'ggml-large-v3-q5_0.bin',
+    large_v3_turbo: 'ggml-large-v3-turbo.bin',
     small: 'ggml-small-q8_0.bin',
+    base_q: 'ggml-base-q8_0.bin',
+    base: 'ggml-base.bin',
+    tiny: 'ggml-tiny-q8_0.bin',
 } as const;
 
 export type WhisperModelName = keyof typeof MODEL_FILES;
 
-export function resolveWhisperPaths(model: WhisperModelName = 'large') {
+export function resolveWhisperPaths(model: WhisperModelName = 'base') {
     const appPath = app.getAppPath();
     const baseCandidates = IS_DEV
         ? [path.resolve(appPath, '..', WHISPER_DIR_NAME), path.resolve(appPath, WHISPER_DIR_NAME)]

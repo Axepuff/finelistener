@@ -1,4 +1,4 @@
-import { Stop } from '@mui/icons-material';
+import { Earbuds, Stop } from '@mui/icons-material';
 import {
     Button,
     CircularProgress,
@@ -9,7 +9,7 @@ import {
     Select,
     Stack,
 } from '@mui/material';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import React, { useState } from 'react';
 import { atoms, type RegionTiming } from 'renderer/src/atoms';
 import { useApp } from '../../../../../AppContext';
@@ -45,6 +45,12 @@ const formatDuration = (ms: number): string => {
     return `${minutes} мин ${seconds.toFixed(1)} с`;
 };
 
+const formatSeconds = (seconds: number): string => {
+    if (!Number.isFinite(seconds) || seconds < 0) return '0 с';
+
+    return `${seconds.toFixed(2)} с`;
+};
+
 const getShortFileName = (target: string) => target.split(/[/\\]/).pop() || target;
 
 interface Props {
@@ -58,14 +64,15 @@ const TranscribeControl: React.FC<Props> = ({
 }) => {
     const { isElectron } = useApp();
     const [lang, setLang] = useState('ru');
-    const [model, setModel] = useState<'large' | 'small'>('small');
-    const [maxContext, setMaxContext] = useState<number>(64);
+    const [model, setModel] = useState<'large_v3_turbo' | 'small' | 'base' | 'base_q'>('large_v3_turbo');
+    const [maxContext, setMaxContext] = useState<number>(-1);
     const [maxLen, setMaxLen] = useState<number>(0);
-    const [splitOnWord, setSplitOnWord] = useState<boolean>(true);
+    const [splitOnWord, setSplitOnWord] = useState<boolean>(false);
     const [useVad, setUseVad] = useState<boolean>(true);
     const [uiState, setUiState] = useAtom(appState.uiState);
     const setLog = useSetAtom(transcription.log);
     const [audioToTranscribe, setAudioToTranscribe] = useAtom(transcription.audioToTranscribe);
+    const trimRange = useAtomValue(transcription.trimRange);
 
     const appendLog = (message: string) => {
         setLog((prev) => {
@@ -77,15 +84,44 @@ const TranscribeControl: React.FC<Props> = ({
     };
 
     const handleStart = async () => {
-        if (!isElectron || !audioToTranscribe) return;
+        if (!isElectron) return;
+        if (audioToTranscribe.length === 0) {
+            appendLog('Не выбрано ни одного аудиофайла для распознавания.');
+
+            return;
+        }
+
+        const segment: RegionTiming | undefined =
+            trimRange?.start !== undefined &&
+            trimRange?.end !== undefined &&
+            trimRange.end > trimRange.start
+                ? { start: trimRange.start, end: trimRange.end }
+                : undefined;
+
+        if (trimRange && !segment) {
+            appendLog('Диапазон для обрезки задан некорректно. Отметьте начало и конец на плеере.');
+
+            return;
+        }
+
         onTranscribeStart();
 
         setUiState('transcribing');
-        const targets = Array.isArray(audioToTranscribe) ? audioToTranscribe : [audioToTranscribe];
+        const targets = audioToTranscribe;
+        let completed = false;
 
         try {
             for (const p of targets) {
-                appendLog(`Запускаем распознавание Whisper для ${getShortFileName(p)}`);
+                const fileName = getShortFileName(p);
+
+                if (segment) {
+                    appendLog(
+                        `Распознаю фрагмент ${formatSeconds(segment.start)} — ${formatSeconds(segment.end)} файла ${fileName}`,
+                    );
+                } else {
+                    appendLog(`Запускаю распознавание Whisper для ${fileName}`);
+                }
+
                 const startedAt = performance.now();
 
                 await window.api!.transcribeStream(p, {
@@ -95,16 +131,18 @@ const TranscribeControl: React.FC<Props> = ({
                     maxLen,
                     splitOnWord,
                     useVad,
+                    segment,
                 });
                 const durationMs = performance.now() - startedAt;
 
-                appendLog(`Распознавание Whisper завершено для ${getShortFileName(p)}`);
-                appendLog(`Время транскрибирования ${getShortFileName(p)}: ${formatDuration(durationMs)}.`);
+                appendLog(`Распознавание Whisper завершено для ${fileName}`);
+                appendLog(`Обработано ${fileName}: ${formatDuration(durationMs)}.`);
             }
+            completed = true;
         } catch (err) {
             appendLog(`Whisper завершился с ошибкой: ${formatErrorMessage(err)}`);
         } finally {
-            onTranscribeEnd();
+            onTranscribeEnd(completed ? segment : undefined);
             setUiState('ready');
         }
     };
@@ -151,29 +189,44 @@ const TranscribeControl: React.FC<Props> = ({
                     ))}
                 </Select>
             </FormControl>
-            <Stack direction="row" spacing={2}>
+            <Stack direction="row" spacing={1}>
                 <Button
+                    fullWidth={true}
                     variant="contained"
                     onClick={handleStart}
                     disabled={loading}
                     color="primary"
-                    startIcon={loading ? <CircularProgress size={8} /> : undefined}
+                    startIcon={loading ? <CircularProgress size={8} /> : <Earbuds  />}
                 >
-                    {loading ? 'Распознаю...' : 'Распознать'}
+                    {'Распознать'}
                 </Button>
-                <IconButton onClick={handleStop} disabled={uiState !== 'transcribing'}>
+                <IconButton onClick={handleStop} color="error" disabled={uiState !== 'transcribing'}>
                     <Stop />
                 </IconButton>
                 <Button variant="outlined" onClick={handleClear}>{'Сброс'}</Button>
             </Stack>
+
+            <FormControl size="small">
+                <InputLabel id="transcribe-model-label">{'Модель'}</InputLabel>
+                <Select
+                    labelId="transcribe-model-label"
+                    label="Модель"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                >
+                    <MenuItem value="tiny">{'Tiny'}</MenuItem>
+                    <MenuItem value="base">{'Base'}</MenuItem>
+                    <MenuItem value="small">{'Base сжатая'}</MenuItem>
+                    <MenuItem value="small">{'Small'}</MenuItem>
+                    <MenuItem value="large_v3_turbo">{'Large V3 turbo'}</MenuItem>
+                </Select>
+            </FormControl>
 
             <TranscribeAdvancedSettings
                 maxContext={maxContext}
                 onChangeMaxContext={setMaxContext}
                 maxLen={maxLen}
                 onChangeMaxLen={setMaxLen}
-                model={model}
-                onChangeModel={setModel}
                 splitOnWord={splitOnWord}
                 onChangeSplitOnWord={setSplitOnWord}
                 useVad={useVad}

@@ -3,12 +3,14 @@ import { createTranscriptionService } from '../services/transcription';
 
 export interface TranscribeOpts {
     language: string;
-    model?: 'large' | 'small';
+    model?: 'large_v3_turbo' | 'small' | 'base' | 'base_q';
     maxContext?: number;
     maxLen?: number;
     splitOnWord?: boolean;
     useVad?: boolean;
+    useCuda?: boolean;
     vadModelPath?: string;
+    segment?: { start: number; end: number };
 }
 
 export function registerTranscriptionController(ipc: IpcMain, getMainWindow: () => BrowserWindow | null): void {

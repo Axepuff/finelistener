@@ -1,10 +1,9 @@
-import { Box, Button, Container, Grid, Stack } from '@mui/material';
+import { Box, Container, Grid, Stack } from '@mui/material';
 import { FileSelect, Player } from '@~/player';
 import { ProcessLog } from '@~/process-log';
 import { TranscribeControl } from '@~/transcribe-control';
 import { TranscribedText } from '@~/transcribed-text';
-import { useAtom, useSetAtom } from 'jotai';
-import { useState } from 'react';
+import { useSetAtom } from 'jotai';
 import { atoms, type RegionTiming } from 'renderer/src/atoms';
 
 const { transcription, appState } = atoms;

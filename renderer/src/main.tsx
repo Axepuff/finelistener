@@ -1,15 +1,8 @@
 import CssBaseline from '@mui/material/CssBaseline';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
 import { createRoot } from 'react-dom/client';
+import { theme } from 'renderer/src/theme';
 import { App } from './App';
-
-const theme = createTheme({
-    palette: {
-        primary: {
-            main: '#184b27ff',
-        },
-    },
-});
 
 const container = document.getElementById('root')!;
 const root = createRoot(container);

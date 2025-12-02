@@ -5,6 +5,7 @@ import { useAtom } from 'jotai';
 import { type FC } from 'react';
 import { useApp } from '../../../../../AppContext';
 import { atoms } from 'renderer/src/atoms';
+import Stack from '@mui/material/Stack';
 
 export const FileSelect: FC = () => {
     const { isElectron } = useApp();
@@ -21,10 +22,7 @@ export const FileSelect: FC = () => {
         audioToTranscribe.length > 0 ? audioToTranscribe.join(', ') : 'Файл не выбран';
 
     return (
-        <>
-            <Typography variant="subtitle2" sx={{ mt: 2, opacity: 0.7 }}>
-                {selectedLabel}
-            </Typography>
+        <Stack direction="row" spacing={2} alignItems="center">
             <Button
                 component="label"
                 role={undefined}
@@ -35,6 +33,9 @@ export const FileSelect: FC = () => {
             >
                 {'Выбрать аудиофайл'}
             </Button>
-        </>
+            <Typography variant="subtitle2" sx={{ mt: 2, opacity: 0.7 }}>
+                {selectedLabel}
+            </Typography>
+        </Stack>
     );
 };
