@@ -14,12 +14,10 @@
     "build": "npm run build:renderer && npm run build:electron:prod",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "eslint . --ext .ts,.tsx --fix",
-    "dist:mac": "npm run build && electron-builder --mac",
-    "dist:win": "npm run build && electron-builder --win",
-    "dist:dir": "npm run build && electron-builder --dir",
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
+    "make:mac": "npm run build && electron-forge make --platform=darwin --arch=arm64",
     "make:win64": "npm run build && electron-forge make --platform=win32 --arch=x64",
     "make:win64-zip": "npm run build && electron-forge make --platform=win32 --arch=x64 --targets=@electron-forge/maker-zip"
   },

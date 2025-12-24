@@ -1,5 +1,5 @@
 import type { IpcMain, BrowserWindow } from 'electron';
-import { createTranscriptionService } from '../services/transcription';
+import { TranscriptionService } from '../services/TranscriptionService';
 
 export interface TranscribeOpts {
     language: string;
@@ -8,13 +8,13 @@ export interface TranscribeOpts {
     maxLen?: number;
     splitOnWord?: boolean;
     useVad?: boolean;
-    useCuda?: boolean;
+    useGpu?: boolean;
     vadModelPath?: string;
     segment?: { start: number; end: number };
 }
 
 export function registerTranscriptionController(ipc: IpcMain, getMainWindow: () => BrowserWindow | null): void {
-    const service = createTranscriptionService({
+    const service = new TranscriptionService({
         onStdoutChunk: (chunk) => getMainWindow()?.webContents.send('transcribe:progress', chunk),
         onStderrChunk: (chunk) => getMainWindow()?.webContents.send('transcribe:log', chunk),
         onProgressPercent: (value) => getMainWindow()?.webContents.send('transcribe:progress-percent', value),

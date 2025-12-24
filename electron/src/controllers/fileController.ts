@@ -23,7 +23,7 @@ export function registerFileController(ipc: IpcMain, _getMainWindow: () => Brows
             });
 
             if (canceled || !filePath) {
-                return { ok: false as const, error: 'canceled' as const };
+                return { ok: false, error: 'canceled' };
             }
 
             await fs.writeFile(filePath, content ?? '', 'utf8');

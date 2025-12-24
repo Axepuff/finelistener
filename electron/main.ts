@@ -25,8 +25,8 @@ protocol.registerSchemesAsPrivileged([
 
 function createMainWindow(): void {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-    const winWidth = Math.floor(width * 0.8);
-    const winHeight = Math.floor(height * 0.8);
+    const winWidth = Math.floor(width * 0.9);
+    const winHeight = Math.floor(height * 0.9);
 
     mainWindow = new BrowserWindow({
         width: winWidth,
@@ -46,7 +46,7 @@ function createMainWindow(): void {
     if (!IS_DEV) {
         mainWindow.loadFile(RENDERER_DIST_INDEX).catch((err) => console.error('[loadFile]', err));
     } else {
-        mainWindow.webContents.openDevTools();
+        // mainWindow.webContents.openDevTools();
         mainWindow.loadURL(RENDERER_DEV_URL).catch((err) => console.error('[loadURL]', err));
     }
 
@@ -89,7 +89,7 @@ app.whenReady()
 
         registerIpcHandlers(() => mainWindow);
 
-        return protocol.handle(LOCAL_FILE_PROTOCOL, (request) => {
+        protocol.handle(LOCAL_FILE_PROTOCOL, (request) => {
             const url = new URL(request.url);
 
             const pathname = decodeURIComponent(url.pathname);
@@ -100,6 +100,9 @@ app.whenReady()
             if (process.platform === 'win32') {
                 // На Windows восстанавливаем букву диска из host (local-file://c/...) и убираем лишние слэши
                 filePath = `${host ? `${host}:` : ''}${pathname}`.replace(/^\/+/, '');
+            } else if (host) {
+                // Wavesurfer иногда теряет третий слэш и кладёт кусок пути в host; приклеиваем его обратно.
+                filePath = path.join('/', host, pathname);
             }
 
             const normalizedPath = path.normalize(filePath);

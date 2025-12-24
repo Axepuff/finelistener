@@ -54,14 +54,14 @@ export const ProcessLog: FC = () => {
                             flex: 1,
                             p: 1,
                             borderRadius: 1,
-                            border: '1px solid',
-                            borderColor: 'divider',
-                        }}
-                    >
-                        {log || 'No Whisper output captured yet.'}
-                    </Typography>
-                </Paper>
-            </Grow>
-        </Stack>
-    );
+                        border: '1px solid',
+                        borderColor: 'divider',
+                    }}
+                >
+                    {log || 'Лог whisper пока пуст.'}
+                </Typography>
+            </Paper>
+        </Grow>
+    </Stack>
+);
 };

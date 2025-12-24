@@ -8,7 +8,7 @@ declare global {
             pickAudio: () => Promise<string | null>;
             transcribeStream: (audioPath: string, opts: any) => Promise<string>;
             saveText: (content: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
-            onTranscribeProgress: (cb: (chunk: string) => void) => () => void;
+            onTranscribeText: (cb: (chunk: string) => void) => () => void;
             onTranscribeProgressValue: (cb: (value: number) => void) => () => void;
             onTranscribeLog: (cb: (line: string) => void) => () => void;
             stopTranscription: () => Promise<boolean>;
