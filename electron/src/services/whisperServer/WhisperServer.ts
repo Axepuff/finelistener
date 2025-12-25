@@ -26,6 +26,10 @@ export class WhisperServerRunner {
     private currentModelPath: string | null = null;
     private readonly callbacks: TranscriptionCallbacks;
     private readonly parseProgress: (value: string) => void;
+    private stdoutBuffer = '';
+    private hasRealtimeOutput = false;
+    private readonly transcriptLineRegex =
+        /^\[\d{2}:\d{2}:\d{2}\.\d{3}\s+-->\s+\d{2}:\d{2}:\d{2}\.\d{3}\]\s+/;
     private readonly handleProcessExit = () => {
         this.stopServer();
     };
@@ -74,6 +78,8 @@ export class WhisperServerRunner {
         const { wavPath, cleanup } = await prepareAudioFile(audioPath, opts.segment);
 
         this.abortController = new AbortController();
+        this.hasRealtimeOutput = false;
+        this.stdoutBuffer = '';
 
         this.callbacks.onProgressPercent?.(0);
 
@@ -121,7 +127,9 @@ export class WhisperServerRunner {
                 transcriptText = await response.text();
             }
 
-            this.callbacks.onStdoutChunk?.(transcriptText);
+            if (!this.hasRealtimeOutput) {
+                this.callbacks.onStdoutChunk?.(transcriptText);
+            }
             this.callbacks.onProgressPercent?.(100);
 
             return transcriptText;
@@ -173,13 +181,40 @@ export class WhisperServerRunner {
         throw new Error('whisper-server is not healthy /health');
     }
 
+    private handleStdoutChunk(text: string) {
+        // Buffer stdout to avoid losing lines when chunks split mid-line.
+        this.stdoutBuffer += text;
+
+        const lines = this.stdoutBuffer.split('\n');
+
+        // Keep the last partial line in the buffer for the next chunk.
+        this.stdoutBuffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+            const cleanedLine = line.replace(/\r$/, '');
+
+            // Whisper realtime output uses timestamped lines; ignore other log noise.
+            if (!this.transcriptLineRegex.test(cleanedLine)) continue;
+
+            this.hasRealtimeOutput = true;
+            this.callbacks.onStdoutChunk?.(`${cleanedLine}\n`);
+        }
+
+        // Prevent unbounded growth if server spams non-newline output.
+        if (this.stdoutBuffer.length > 10_000) {
+            this.stdoutBuffer = this.stdoutBuffer.slice(-2000);
+        }
+    }
+
     private createOutputHandler(source: 'stdout' | 'stderr') {
         return (chunk: unknown) => {
             const text = normalizeChunk(chunk);
 
             if (!text) return;
-            console.log(text);
 
+            if (source === 'stdout') {
+                this.handleStdoutChunk(text);
+            }
             this.callbacks.onStderrChunk?.(`[server:${source}] ${text}`);
             this.parseProgress(text);
         };
@@ -228,7 +263,6 @@ export class WhisperServerRunner {
     }
 
     private async loadModelIfNeeded(paths: WhisperServerParams) {
-        console.log('LOAD MODEL 1');
         if (!this.server) {
             await this.startServer(paths);
         }

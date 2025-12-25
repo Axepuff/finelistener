@@ -1,5 +1,5 @@
-import { WhisperServerRunner } from 'electron/src/services/whisperServer/WhisperServer';
 import type { TranscribeOpts } from '../controllers/transcriptionController';
+import { WhisperServerRunner } from '../services/whisperServer/WhisperServer';
 import { resolveWhisperPaths } from '../utils/whisper';
 import type { TranscriptionCallbacks } from './whisperServer/types';
 
