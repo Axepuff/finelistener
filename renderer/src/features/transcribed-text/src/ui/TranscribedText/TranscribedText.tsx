@@ -135,6 +135,8 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
     };
 
     const handleTranscribeProgress = (chunk: string) => {
+        console.log(chunk);
+
         setPlainText((t) => t + chunk);
         setRenderedText((t) => t + enhanceChunk(chunk));
     };
@@ -162,7 +164,7 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
 
     useEffect(() => {
         if (!isElectron) return;
-        const off1 = window.api!.onTranscribeProgress(handleTranscribeProgress);
+        const off1 = window.api!.onTranscribeText(handleTranscribeProgress);
         const off2 = window.api!.onTranscribeProgressValue((value) => {
             const next = Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0;
 
