@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { TranscribeOpts } from '../../electron/src/controllers/transcriptionController';
 import { AppContext } from './AppContext';
 import { Home } from './Home';
 
@@ -6,7 +7,7 @@ declare global {
     interface Window {
         api?: {
             pickAudio: () => Promise<string | null>;
-            transcribeStream: (audioPath: string, opts: any) => Promise<string>;
+            transcribeStream: (audioPath: string, opts: TranscribeOpts) => Promise<string>;
             saveText: (content: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
             onTranscribeText: (cb: (chunk: string) => void) => () => void;
             onTranscribeProgressValue: (cb: (value: number) => void) => () => void;

@@ -1,10 +1,10 @@
 import type { TranscribeOpts } from '../controllers/transcriptionController';
-import { WhisperServerRunner } from '../services/whisperServer/WhisperServer';
+import { Whisper } from '../services/whisperServer/Whisper';
 import { resolveWhisperPaths } from '../utils/whisper';
 import type { TranscriptionCallbacks } from './whisperServer/types';
 
 export class TranscriptionService {
-    private readonly serverRunner: WhisperServerRunner;
+    private readonly serverRunner: Whisper;
     private readonly callbacks: TranscriptionCallbacks;
     private readonly handleProcessExit = () => {
         this.stop();
@@ -12,7 +12,7 @@ export class TranscriptionService {
 
     constructor(callbacks: TranscriptionCallbacks) {
         this.callbacks = callbacks;
-        this.serverRunner = new WhisperServerRunner(callbacks);
+        this.serverRunner = new Whisper(callbacks);
         this.init().catch(() => void 0);
     }
 

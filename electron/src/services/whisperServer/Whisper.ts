@@ -21,7 +21,7 @@ interface WhisperServerParams {
     useGpu?: boolean;
 }
 
-export class WhisperServerRunner {
+export class Whisper {
     private readonly apiClient: WhisperServerApiClient;
     private readonly modelManager: WhisperModelManager;
     private readonly serverProcess: WhisperServerProcess;
