@@ -1,10 +1,10 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
 import type { TranscribeOpts } from '../../controllers/transcriptionController';
 import { createWhisperEnv, resolveWhisperPaths } from '../../utils/whisper';
 import { prepareAudioFile } from '../audioProcessing';
 import { createProgressParser } from '../progress';
+import { WhisperServerProcess } from './WhisperServerProcess';
 import type { TranscriptionCallbacks } from './types';
 import { delay, fetchWithTimeout, formatVerboseJson, normalizeChunk, type WhisperVerboseResponse } from './utils';
 
@@ -21,7 +21,7 @@ interface WhisperServerParams {
 }
 
 export class WhisperServerRunner {
-    private server: ChildProcessWithoutNullStreams | null = null;
+    private readonly serverProcess: WhisperServerProcess;
     private abortController: AbortController | null = null;
     private currentModelPath: string | null = null;
     private readonly callbacks: TranscriptionCallbacks;
@@ -33,10 +33,19 @@ export class WhisperServerRunner {
     private readonly handleProcessExit = () => {
         this.stopServer();
     };
+    private readonly handleServerExit = (code: number | null) => {
+        this.callbacks.onStderrChunk?.(`whisper-server has terminated (code: ${code ?? 'unknown'})`);
+        this.currentModelPath = null;
+    };
 
     constructor(callbacks: TranscriptionCallbacks) {
         this.callbacks = callbacks;
         this.parseProgress = createProgressParser(callbacks.onProgressPercent);
+        this.serverProcess = new WhisperServerProcess({
+            onStdoutData: this.createOutputHandler('stdout'),
+            onStderrData: this.createOutputHandler('stderr'),
+            onExit: this.handleServerExit,
+        });
 
         process.on('beforeExit', this.handleProcessExit);
         process.on('exit', this.handleProcessExit);
@@ -47,18 +56,13 @@ export class WhisperServerRunner {
     }
 
     public stopServer(): boolean {
-        if (!this.server) return false;
+        const stopped = this.serverProcess.stop();
 
-        try {
-            this.server.kill('SIGINT');
-        } catch {
-            // ignore
-        } finally {
-            this.server = null;
+        if (stopped) {
             this.currentModelPath = null;
         }
 
-        return true;
+        return stopped;
     }
 
     public async transcribe(audioPath: string, opts: TranscribeOpts): Promise<string> {
@@ -162,7 +166,7 @@ export class WhisperServerRunner {
 
     private async waitForHealth() {
         for (let attempt = 0; attempt < HEALTH_RETRIES; attempt += 1) {
-            if (!this.server) {
+            if (!this.serverProcess.isRunning()) {
                 throw new Error('whisper-server is not running');
             }
             console.log('TRY HEALTH');
@@ -244,26 +248,18 @@ export class WhisperServerRunner {
         this.callbacks.onStderrChunk?.(`\nWhisper-server is running: ${args.join(' ')}`);
         console.log(args);
 
-        this.server = spawn(params.serverBinPath, args, { env: createWhisperEnv(params.serverBinPath) });
-
-        this.server.stdout?.setEncoding('utf8');
-        this.server.stdout?.on('data', this.createOutputHandler('stdout'));
-
-        this.server.stderr?.setEncoding('utf8');
-        this.server.stderr?.on('data', this.createOutputHandler('stderr'));
-
-        this.server.on('close', (code) => {
-            this.callbacks.onStderrChunk?.(`whisper-server has terminated (code: ${code ?? 'unknown'})`);
-            this.server = null;
-            this.currentModelPath = null;
-        });
+        this.serverProcess.start(
+            params.serverBinPath,
+            args,
+            createWhisperEnv(params.serverBinPath),
+        );
 
         await this.waitForHealth();
         this.currentModelPath = params.modelPath;
     }
 
     private async loadModelIfNeeded(paths: WhisperServerParams) {
-        if (!this.server) {
+        if (!this.serverProcess.isRunning()) {
             await this.startServer(paths);
         }
 
