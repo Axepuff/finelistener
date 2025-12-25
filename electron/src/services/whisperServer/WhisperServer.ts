@@ -4,14 +4,14 @@ import type { TranscribeOpts } from '../../controllers/transcriptionController';
 import { createWhisperEnv, resolveWhisperPaths } from '../../utils/whisper';
 import { prepareAudioFile } from '../audioProcessing';
 import { createProgressParser } from '../progress';
+import { WhisperModelManager } from './WhisperModelManager';
+import { WhisperServerApiClient } from './WhisperServerApiClient';
 import { WhisperServerProcess } from './WhisperServerProcess';
 import type { TranscriptionCallbacks } from './types';
-import { delay, fetchWithTimeout, formatVerboseJson, normalizeChunk, type WhisperVerboseResponse } from './utils';
+import { normalizeChunk } from './utils';
 
 const SERVER_HOST = '127.0.0.1';
 const SERVER_PORT = 17895;
-const HEALTH_RETRIES = 20;
-const HEALTH_DELAY_MS = 500;
 
 interface WhisperServerParams {
     serverBinPath: string;
@@ -21,9 +21,10 @@ interface WhisperServerParams {
 }
 
 export class WhisperServerRunner {
+    private readonly apiClient: WhisperServerApiClient;
+    private readonly modelManager: WhisperModelManager;
     private readonly serverProcess: WhisperServerProcess;
     private abortController: AbortController | null = null;
-    private currentModelPath: string | null = null;
     private readonly callbacks: TranscriptionCallbacks;
     private readonly parseProgress: (value: string) => void;
     private stdoutBuffer = '';
@@ -35,16 +36,22 @@ export class WhisperServerRunner {
     };
     private readonly handleServerExit = (code: number | null) => {
         this.callbacks.onStderrChunk?.(`whisper-server has terminated (code: ${code ?? 'unknown'})`);
-        this.currentModelPath = null;
+        this.modelManager.reset();
     };
 
     constructor(callbacks: TranscriptionCallbacks) {
         this.callbacks = callbacks;
         this.parseProgress = createProgressParser(callbacks.onProgressPercent);
+        this.apiClient = new WhisperServerApiClient(this.baseUrl);
         this.serverProcess = new WhisperServerProcess({
             onStdoutData: this.createOutputHandler('stdout'),
             onStderrData: this.createOutputHandler('stderr'),
             onExit: this.handleServerExit,
+        });
+        this.modelManager = new WhisperModelManager({
+            apiClient: this.apiClient,
+            isServerRunning: () => this.serverProcess.isRunning(),
+            onLog: this.callbacks.onStderrChunk,
         });
 
         process.on('beforeExit', this.handleProcessExit);
@@ -59,7 +66,7 @@ export class WhisperServerRunner {
         const stopped = this.serverProcess.stop();
 
         if (stopped) {
-            this.currentModelPath = null;
+            this.modelManager.reset();
         }
 
         return stopped;
@@ -92,44 +99,26 @@ export class WhisperServerRunner {
             const safeBuffer = new Uint8Array(fileBuffer.byteLength);
 
             safeBuffer.set(fileBuffer);
-            const fileBlob = new Blob([safeBuffer]);
-            const form = new FormData();
-
-            form.append('file', fileBlob, path.basename(audioPath) || 'audio.wav');
-            form.append('response_format', 'verbose_json');
-
-            if (opts.language) form.append('language', opts.language);
-            if (typeof opts.maxContext === 'number') form.append('max_context', String(opts.maxContext));
-            if (typeof opts.maxLen === 'number' && opts.maxLen > 0) form.append('max_len', String(opts.maxLen));
-            if (typeof opts.splitOnWord === 'boolean') form.append('split_on_word', String(opts.splitOnWord));
-            if (typeof opts.useVad === 'boolean') form.append('vad', String(opts.useVad));
-
-            const response = await fetch(`${this.baseUrl}/inference`, {
-                method: 'POST',
-                body: form,
-                signal: this.abortController.signal,
-            });
+            const inferenceResult = await this.apiClient.inference(
+                {
+                    audioBuffer: safeBuffer,
+                    fileName: path.basename(audioPath) || 'audio.wav',
+                    options: opts,
+                },
+                this.abortController.signal,
+            );
 
             this.abortController = null;
 
-            if (!response.ok) {
-                const errorText = await response.text().catch(() => '');
-
+            if (!inferenceResult.ok) {
                 throw new Error(
-                    `whisper-server вернул ${response.status}: ${errorText || response.statusText}`,
+                    `whisper-server вернул ${inferenceResult.status}: ${
+                        inferenceResult.errorText || inferenceResult.statusText
+                    }`,
                 );
             }
 
-            const contentType = response.headers.get('content-type') ?? '';
-            let transcriptText = '';
-
-            if (contentType.includes('application/json')) {
-                const payload = (await response.json()) as WhisperVerboseResponse;
-
-                transcriptText = formatVerboseJson(payload);
-            } else {
-                transcriptText = await response.text();
-            }
+            const transcriptText = inferenceResult.text;
 
             if (!this.hasRealtimeOutput) {
                 this.callbacks.onStdoutChunk?.(transcriptText);
@@ -162,27 +151,6 @@ export class WhisperServerRunner {
         this.abortController = null;
 
         return true;
-    }
-
-    private async waitForHealth() {
-        for (let attempt = 0; attempt < HEALTH_RETRIES; attempt += 1) {
-            if (!this.serverProcess.isRunning()) {
-                throw new Error('whisper-server is not running');
-            }
-            console.log('TRY HEALTH');
-
-            try {
-                const res = await fetchWithTimeout(`${this.baseUrl}/health`, {}, 2000);
-
-                if (res.ok) return;
-            } catch {
-                // repeat
-            }
-
-            await delay(HEALTH_DELAY_MS);
-        }
-
-        throw new Error('whisper-server is not healthy /health');
     }
 
     private handleStdoutChunk(text: string) {
@@ -254,33 +222,16 @@ export class WhisperServerRunner {
             createWhisperEnv(params.serverBinPath),
         );
 
-        await this.waitForHealth();
-        this.currentModelPath = params.modelPath;
+        await this.modelManager.onServerStarted(params.modelPath);
     }
 
     private async loadModelIfNeeded(paths: WhisperServerParams) {
         if (!this.serverProcess.isRunning()) {
             await this.startServer(paths);
+
+            return;
         }
 
-        if (this.currentModelPath === paths.modelPath) return;
-
-        this.callbacks.onStderrChunk?.(`Model changed to ${path.basename(paths.modelPath)}`);
-
-        const form = new FormData();
-
-        form.append('model', paths.modelPath);
-        const res = await fetchWithTimeout(`${this.baseUrl}/load`, { method: 'POST', body: form }, 10_000);
-
-        if (!res.ok) {
-            const errorText = await res.text().catch(() => '');
-
-            throw new Error(
-                `Failed to load model for whisper-server (${res.status}): ${errorText || res.statusText}`,
-            );
-        }
-
-        await this.waitForHealth();
-        this.currentModelPath = paths.modelPath;
+        await this.modelManager.loadModelIfNeeded(paths.modelPath);
     }
 }

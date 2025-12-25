@@ -20,17 +20,6 @@ export const normalizeChunk = (chunk: unknown): string => {
     return '';
 };
 
-export const fetchWithTimeout = async (url: string, init: RequestInit = {}, timeoutMs = 5000) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-        return await fetch(url, { ...init, signal: controller.signal });
-    } finally {
-        clearTimeout(timer);
-    }
-};
-
 export const formatTimestamp = (seconds: number | undefined) => {
     if (!Number.isFinite(seconds ?? NaN)) return '00:00:00.000';
 
