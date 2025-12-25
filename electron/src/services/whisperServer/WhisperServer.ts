@@ -4,6 +4,7 @@ import type { TranscribeOpts } from '../../controllers/transcriptionController';
 import { createWhisperEnv, resolveWhisperPaths } from '../../utils/whisper';
 import { prepareAudioFile } from '../audioProcessing';
 import { createProgressParser } from '../progress';
+import { TranscriptStreamParser } from './TranscriptStreamParser';
 import { WhisperModelManager } from './WhisperModelManager';
 import { WhisperServerApiClient } from './WhisperServerApiClient';
 import { WhisperServerProcess } from './WhisperServerProcess';
@@ -24,13 +25,12 @@ export class WhisperServerRunner {
     private readonly apiClient: WhisperServerApiClient;
     private readonly modelManager: WhisperModelManager;
     private readonly serverProcess: WhisperServerProcess;
+    private readonly streamParser: TranscriptStreamParser;
     private abortController: AbortController | null = null;
+    private isTranscribing = false;
     private readonly callbacks: TranscriptionCallbacks;
     private readonly parseProgress: (value: string) => void;
-    private stdoutBuffer = '';
     private hasRealtimeOutput = false;
-    private readonly transcriptLineRegex =
-        /^\[\d{2}:\d{2}:\d{2}\.\d{3}\s+-->\s+\d{2}:\d{2}:\d{2}\.\d{3}\]\s+/;
     private readonly handleProcessExit = () => {
         this.stopServer();
     };
@@ -48,6 +48,7 @@ export class WhisperServerRunner {
             onStderrData: this.createOutputHandler('stderr'),
             onExit: this.handleServerExit,
         });
+        this.streamParser = new TranscriptStreamParser();
         this.modelManager = new WhisperModelManager({
             apiClient: this.apiClient,
             isServerRunning: () => this.serverProcess.isRunning(),
@@ -73,70 +74,76 @@ export class WhisperServerRunner {
     }
 
     public async transcribe(audioPath: string, opts: TranscribeOpts): Promise<string> {
-        if (this.abortController) {
+        if (this.isTranscribing) {
             throw new Error('Previous transcription is not finished yet');
         }
 
-        const resolved = resolveWhisperPaths(opts.model);
-
-        await this.loadModelIfNeeded({
-            serverBinPath: resolved.serverBinPath,
-            modelPath: resolved.modelPath,
-            vadModelPath: resolved.vadModelPath,
-            useGpu: opts.useGpu,
-        });
-
-        const { wavPath, cleanup } = await prepareAudioFile(audioPath, opts.segment);
-
-        this.abortController = new AbortController();
-        this.hasRealtimeOutput = false;
-        this.stdoutBuffer = '';
-
-        this.callbacks.onProgressPercent?.(0);
+        this.isTranscribing = true;
 
         try {
-            const fileBuffer = await fs.readFile(wavPath);
-            const safeBuffer = new Uint8Array(fileBuffer.byteLength);
+            const resolved = resolveWhisperPaths(opts.model);
 
-            safeBuffer.set(fileBuffer);
-            const inferenceResult = await this.apiClient.inference(
-                {
-                    audioBuffer: safeBuffer,
-                    fileName: path.basename(audioPath) || 'audio.wav',
-                    options: opts,
-                },
-                this.abortController.signal,
-            );
+            await this.loadModelIfNeeded({
+                serverBinPath: resolved.serverBinPath,
+                modelPath: resolved.modelPath,
+                vadModelPath: resolved.vadModelPath,
+                useGpu: opts.useGpu,
+            });
 
-            this.abortController = null;
+            const { wavPath, cleanup } = await prepareAudioFile(audioPath, opts.segment);
 
-            if (!inferenceResult.ok) {
-                throw new Error(
-                    `whisper-server вернул ${inferenceResult.status}: ${
-                        inferenceResult.errorText || inferenceResult.statusText
-                    }`,
+            this.abortController = new AbortController();
+            this.hasRealtimeOutput = false;
+            this.streamParser.reset();
+
+            this.callbacks.onProgressPercent?.(0);
+
+            try {
+                const fileBuffer = await fs.readFile(wavPath);
+                const safeBuffer = new Uint8Array(fileBuffer.byteLength);
+
+                safeBuffer.set(fileBuffer);
+                const inferenceResult = await this.apiClient.inference(
+                    {
+                        audioBuffer: safeBuffer,
+                        fileName: path.basename(audioPath) || 'audio.wav',
+                        options: opts,
+                    },
+                    this.abortController.signal,
                 );
-            }
 
-            const transcriptText = inferenceResult.text;
-
-            if (!this.hasRealtimeOutput) {
-                this.callbacks.onStdoutChunk?.(transcriptText);
-            }
-            this.callbacks.onProgressPercent?.(100);
-
-            return transcriptText;
-        } catch (error) {
-            if (this.abortController === null && error instanceof Error && error.name === 'AbortError') {
-                throw new Error('Распознавание остановлено пользователем');
-            }
-
-            throw error instanceof Error ? error : new Error(String(error));
-        } finally {
-            if (this.abortController) {
                 this.abortController = null;
+
+                if (!inferenceResult.ok) {
+                    throw new Error(
+                        `whisper-server вернул ${inferenceResult.status}: ${
+                            inferenceResult.errorText || inferenceResult.statusText
+                        }`,
+                    );
+                }
+
+                const transcriptText = inferenceResult.text;
+
+                if (!this.hasRealtimeOutput) {
+                    this.callbacks.onStdoutChunk?.(transcriptText);
+                }
+                this.callbacks.onProgressPercent?.(100);
+
+                return transcriptText;
+            } catch (error) {
+                if (this.abortController === null && error instanceof Error && error.name === 'AbortError') {
+                    throw new Error('Распознавание остановлено пользователем');
+                }
+
+                throw error instanceof Error ? error : new Error(String(error));
+            } finally {
+                if (this.abortController) {
+                    this.abortController = null;
+                }
+                await cleanup().catch(() => void 0);
             }
-            await cleanup().catch(() => void 0);
+        } finally {
+            this.isTranscribing = false;
         }
     }
 
@@ -154,27 +161,14 @@ export class WhisperServerRunner {
     }
 
     private handleStdoutChunk(text: string) {
-        // Buffer stdout to avoid losing lines when chunks split mid-line.
-        this.stdoutBuffer += text;
+        const lines = this.streamParser.pushChunk(text);
 
-        const lines = this.stdoutBuffer.split('\n');
-
-        // Keep the last partial line in the buffer for the next chunk.
-        this.stdoutBuffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-            const cleanedLine = line.replace(/\r$/, '');
-
-            // Whisper realtime output uses timestamped lines; ignore other log noise.
-            if (!this.transcriptLineRegex.test(cleanedLine)) continue;
-
+        if (lines.length > 0) {
             this.hasRealtimeOutput = true;
-            this.callbacks.onStdoutChunk?.(`${cleanedLine}\n`);
         }
 
-        // Prevent unbounded growth if server spams non-newline output.
-        if (this.stdoutBuffer.length > 10_000) {
-            this.stdoutBuffer = this.stdoutBuffer.slice(-2000);
+        for (const line of lines) {
+            this.callbacks.onStdoutChunk?.(line);
         }
     }
 
