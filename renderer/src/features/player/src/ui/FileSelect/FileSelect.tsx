@@ -1,11 +1,11 @@
 import AudioFileIcon from '@mui/icons-material/AudioFile';
 import Button from '@mui/material/Button';
+import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useAtom } from 'jotai';
 import { type FC } from 'react';
-import { useApp } from '../../../../../AppContext';
 import { atoms } from 'renderer/src/atoms';
-import Stack from '@mui/material/Stack';
+import { useApp } from '../../../../../AppContext';
 
 export const FileSelect: FC = () => {
     const { isElectron } = useApp();
@@ -15,7 +15,16 @@ export const FileSelect: FC = () => {
         if (!isElectron) return;
         const file = await window.api!.pickAudio();
 
-        if (file) setAudioToTranscribe([file]);
+        console.log(file);
+
+        try {
+
+            const { path } = await window.api!.convertAudio({ audioPath: file!, lowPass: 12000, highPass: 80 });
+
+            if (file) setAudioToTranscribe([path]);
+        } catch (error) {
+            console.log('ERROR', error);
+        }
     };
 
     const selectedLabel =

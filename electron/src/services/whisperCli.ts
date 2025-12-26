@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import type { TranscribeOpts } from '../controllers/transcriptionController';
 import { buildTranscribeArgs, createWhisperEnv, resolveWhisperPaths } from '../utils/whisper';
-import { prepareAudioFile } from './audioProcessing';
+import { AudioPreprocessor } from './AudioPreprocessor';
 import { createProgressParser } from './progress';
 import type { TranscriptionCallbacks } from './whisperServer/types';
 
@@ -11,6 +11,7 @@ import type { TranscriptionCallbacks } from './whisperServer/types';
 export const createWhisperCliRunner = (callbacks: TranscriptionCallbacks) => {
     let child: ChildProcessWithoutNullStreams | null = null;
     const parseProgress = createProgressParser(callbacks.onProgressPercent);
+    const audioPreprocessor = new AudioPreprocessor();
 
     const stop = (): boolean => {
         if (!child) return false;
@@ -28,7 +29,7 @@ export const createWhisperCliRunner = (callbacks: TranscriptionCallbacks) => {
     const transcribe = async (audioPath: string, opts: TranscribeOpts): Promise<string> => {
         const { modelPath, vadModelPath } = resolveWhisperPaths(opts.model);
         const cliBinPath = '';
-        const { wavPath, cleanup } = await prepareAudioFile(audioPath, opts.segment);
+        const { wavPath, cleanup } = await audioPreprocessor.prepareAudioFile(audioPath, opts.segment);
         const args = buildTranscribeArgs(wavPath, opts, { modelPath, vadModelPath });
         const env = createWhisperEnv(cliBinPath);
 

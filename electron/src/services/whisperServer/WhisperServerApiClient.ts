@@ -73,6 +73,7 @@ export class WhisperServerApiClient {
         if (typeof opts.maxLen === 'number' && opts.maxLen > 0) form.append('max_len', String(opts.maxLen));
         if (typeof opts.splitOnWord === 'boolean') form.append('split_on_word', String(opts.splitOnWord));
         if (typeof opts.useVad === 'boolean') form.append('vad', String(opts.useVad));
+        form.append('--beam-size', '10');
 
         const response = await fetch(`${this.baseUrl}/inference`, {
             method: 'POST',

@@ -34,7 +34,6 @@ class AtomRegistry {
         set(this.transcription.log, '');
         set(this.transcription.plainText, '');
         set(this.transcription.renderedText, '');
-        set(this.transcription.audioToTranscribe, []);
         set(this.transcription.trimRange, undefined);
         set(this.player.isPlaying, false);
     });

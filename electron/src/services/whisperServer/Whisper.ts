@@ -1,8 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 import type { TranscribeOpts } from '../../controllers/transcriptionController';
+import { AudioPreprocessor } from '../../services/AudioPreprocessor';
 import { createWhisperEnv, resolveWhisperPaths } from '../../utils/whisper';
-import { prepareAudioFile } from '../audioProcessing';
 import { createProgressParser } from '../progress';
 import { TranscriptStreamParser } from './TranscriptStreamParser';
 import { WhisperModelManager } from './WhisperModelManager';
@@ -26,6 +26,7 @@ export class Whisper {
     private readonly modelManager: WhisperModelManager;
     private readonly serverProcess: WhisperServerProcess;
     private readonly streamParser: TranscriptStreamParser;
+    private readonly audioPreprocessor: AudioPreprocessor;
     private abortController: AbortController | null = null;
     private isTranscribing = false;
     private readonly callbacks: TranscriptionCallbacks;
@@ -43,6 +44,7 @@ export class Whisper {
         this.callbacks = callbacks;
         this.parseProgress = createProgressParser(callbacks.onProgressPercent);
         this.apiClient = new WhisperServerApiClient(this.baseUrl);
+        this.audioPreprocessor = new AudioPreprocessor();
         this.serverProcess = new WhisperServerProcess({
             onStdoutData: this.createOutputHandler('stdout'),
             onStderrData: this.createOutputHandler('stderr'),
@@ -90,7 +92,11 @@ export class Whisper {
                 useGpu: opts.useGpu,
             });
 
-            const { wavPath, cleanup } = await prepareAudioFile(audioPath, opts.segment);
+            // const { wavPath, cleanup } = await this.audioPreprocessor.prepareAudioFile(audioPath, opts.segment, {
+            //     normalize: true,
+            //     lowPass: 10000,
+            //     highPass: 80,
+            // });
 
             this.abortController = new AbortController();
             this.hasRealtimeOutput = false;
@@ -99,7 +105,7 @@ export class Whisper {
             this.callbacks.onProgressPercent?.(0);
 
             try {
-                const fileBuffer = await fs.readFile(wavPath);
+                const fileBuffer = await fs.readFile(audioPath);
                 const safeBuffer = new Uint8Array(fileBuffer.byteLength);
 
                 safeBuffer.set(fileBuffer);
@@ -140,7 +146,7 @@ export class Whisper {
                 if (this.abortController) {
                     this.abortController = null;
                 }
-                await cleanup().catch(() => void 0);
+                // await cleanup().catch(() => void 0);
             }
         } finally {
             this.isTranscribing = false;

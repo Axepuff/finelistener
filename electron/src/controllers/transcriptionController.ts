@@ -1,6 +1,8 @@
 import type { IpcMain, BrowserWindow } from 'electron';
 import { TranscriptionService } from '../services/TranscriptionService';
 
+// TODO move types to suitable place
+export type Segment = { start: number; end: number };
 export interface TranscribeOpts {
     language: string;
     model?: 'large_v3_turbo' | 'small' | 'base' | 'base_q';
@@ -10,7 +12,7 @@ export interface TranscribeOpts {
     useVad?: boolean;
     useGpu?: boolean;
     vadModelPath?: string;
-    segment?: { start: number; end: number };
+    segment?: Segment;
 }
 
 export function registerTranscriptionController(ipc: IpcMain, getMainWindow: () => BrowserWindow | null): void {

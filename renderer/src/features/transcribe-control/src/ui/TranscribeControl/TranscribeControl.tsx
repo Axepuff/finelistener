@@ -65,13 +65,13 @@ const TranscribeControl: React.FC<Props> = ({
     const { isElectron } = useApp();
     const [lang, setLang] = useState('ru');
     const [model, setModel] = useState<'large_v3_turbo' | 'small' | 'base' | 'base_q'>('large_v3_turbo');
-    const [maxContext, setMaxContext] = useState<number>(-1);
-    const [maxLen, setMaxLen] = useState<number>(0);
-    const [splitOnWord, setSplitOnWord] = useState<boolean>(false);
+    const [maxContext, setMaxContext] = useState<number | null>(null);
+    const [maxLen, setMaxLen] = useState<number | null>(null);
+    const [splitOnWord, setSplitOnWord] = useState<boolean>(true);
     const [useVad, setUseVad] = useState<boolean>(true);
     const [uiState, setUiState] = useAtom(appState.uiState);
     const setLog = useSetAtom(transcription.log);
-    const [audioToTranscribe, setAudioToTranscribe] = useAtom(transcription.audioToTranscribe);
+    const audioToTranscribe = useAtomValue(transcription.audioToTranscribe);
     const trimRange = useAtomValue(transcription.trimRange);
 
     const appendLog = (message: string) => {
@@ -127,8 +127,8 @@ const TranscribeControl: React.FC<Props> = ({
                 await window.api!.transcribeStream(p, {
                     language: lang,
                     model,
-                    maxContext,
-                    maxLen,
+                    maxContext: maxContext ?? -1,
+                    maxLen: maxLen ?? 0,
                     splitOnWord,
                     useVad,
                     segment,
@@ -166,7 +166,6 @@ const TranscribeControl: React.FC<Props> = ({
     const resetTranscriptionState = useSetAtom(atoms.reset);
 
     const handleClear = () => {
-        setAudioToTranscribe([]);
         resetTranscriptionState();
     };
 
