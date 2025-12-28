@@ -92,12 +92,6 @@ export class Whisper {
                 useGpu: opts.useGpu,
             });
 
-            // const { wavPath, cleanup } = await this.audioPreprocessor.prepareAudioFile(audioPath, opts.segment, {
-            //     normalize: true,
-            //     lowPass: 10000,
-            //     highPass: 80,
-            // });
-
             this.abortController = new AbortController();
             this.hasRealtimeOutput = false;
             this.streamParser.reset();
@@ -146,7 +140,6 @@ export class Whisper {
                 if (this.abortController) {
                     this.abortController = null;
                 }
-                // await cleanup().catch(() => void 0);
             }
         } finally {
             this.isTranscribing = false;

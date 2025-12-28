@@ -130,17 +130,6 @@ export class WaveSurferAdapter extends PlayerAdapter {
 
             return;
         }
-
-        // if (typeof bounds.start === 'number' || typeof bounds.end === 'number') {
-        //     this.regions.addRegion({
-        //         start: bounds.start ?? 0,
-        //         end: bounds.end,
-        //         color: 'rgba(231, 255, 20, 0.2)',
-        //         drag: false,
-        //         resize: true,
-        //         content: '',
-        //     });
-        // }
     }
 
     clearRegions(): void {
