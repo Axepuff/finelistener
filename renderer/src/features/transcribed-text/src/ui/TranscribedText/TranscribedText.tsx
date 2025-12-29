@@ -1,9 +1,11 @@
-import { Button, LinearProgress } from '@mui/material';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import { Button, IconButton, LinearProgress } from '@mui/material';
 import Paper from '@mui/material/Paper';
+import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useAtom, useAtomValue } from 'jotai';
-import { useCallback, useEffect, useRef, useState, type FC, type MouseEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FC, type MouseEvent, type SyntheticEvent } from 'react';
 import { atoms, type TrimRange } from 'renderer/src/atoms';
 import { useApp } from '../../../../../AppContext';
 
@@ -71,6 +73,8 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
     const [plainText, setPlainText] = useAtom(transcription.plainText);
     const [renderedText, setRenderedText] = useAtom(transcription.renderedText);
     const [progress, setProgress] = useState(0);
+    const [isCopySnackbarOpen, setIsCopySnackbarOpen] = useState(false);
+    const [copySnackbarKey, setCopySnackbarKey] = useState(0);
     const uiState = useAtomValue(appState.uiState);
     const trimRange = useAtomValue(atoms.transcription.trimRange);
     const trimOffsetRef = useRef<number>(resolveTrimOffset(trimRange));
@@ -146,6 +150,24 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
         await window.api!.saveText(plainText);
     };
 
+    const handleCopy = async () => {
+        if (!plainText) return;
+
+        try {
+            await navigator.clipboard.writeText(plainText);
+            setCopySnackbarKey((value) => value + 1);
+            setIsCopySnackbarOpen(true);
+        } catch (error) {
+            console.error('Failed to copy transcribed text', error);
+        }
+    };
+
+    const handleCopySnackbarClose = (_event?: SyntheticEvent | Event, reason?: string) => {
+        if (reason === 'clickaway') return;
+
+        setIsCopySnackbarOpen(false);
+    };
+
     const handleRegionClick = useCallback(
         (event: MouseEvent<HTMLElement>) => {
             const regionElement = (event.target as HTMLElement | null)?.closest('span[data-regions]');
@@ -187,15 +209,24 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
 
     return (
         <Stack gap="16px" alignItems="flex-start">
-            <Button
-                size='large'
-                fullWidth={false}
-                disabled={plainText.length === 0}
-                variant="contained"
-                onClick={handleSave}
-            >
-                {'Сохранить в .txt'}
-            </Button>
+            <Stack direction="row" gap={2}>
+                <Button
+                    size="large"
+                    fullWidth={false}
+                    disabled={plainText.length === 0}
+                    variant="contained"
+                    onClick={handleSave}
+                >
+                    {'Сохранить в .txt'}
+                </Button>
+                <IconButton
+                    disabled={plainText.length === 0}
+                    onClick={handleCopy}
+                >
+                    <ContentCopyIcon />
+                </IconButton>
+            </Stack>
+
             {uiState === 'transcribing' ? (
                 <Stack direction="row" spacing={1} alignItems="center" width="100%">
                     <LinearProgress variant="determinate" value={progress} sx={{ flexGrow: 1 }} />
@@ -225,6 +256,14 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
                     dangerouslySetInnerHTML={{ __html: renderedText }}
                 />
             </Paper>
+            <Snackbar
+                key={copySnackbarKey}
+                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+                message="Текст скопирован"
+                open={isCopySnackbarOpen}
+                autoHideDuration={2000}
+                onClose={handleCopySnackbarClose}
+            />
         </Stack>
     );
 };

@@ -1,10 +1,11 @@
 import { Pause, PlayArrow } from '@mui/icons-material';
 import { Box, Button, CircularProgress, IconButton, Stack, Typography } from '@mui/material';
 import Paper from '@mui/material/Paper';
+import { WaveSurferAdapter } from '@~/player/src/ui/Player/WavesurfAdapter';
 import { useAtom, useAtomValue } from 'jotai';
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { atoms } from 'renderer/src/atoms';
-import { PlayerAdapter, WindsurfAdapter } from './PlayerAdapter';
+import { PlayerAdapter } from './PlayerAdapter';
 
 const formatPreciseTime = (seconds: number) => {
     if (!Number.isFinite(seconds) || seconds < 0) return '00:00.00';
@@ -37,7 +38,7 @@ export const Player: FC = () => {
     }, [audioToTranscribe, urlIndex]);
 
     useEffect(() => {
-        const adapter = new WindsurfAdapter(containerRef.current!, setIsPlaying, setIsLoading, setCurrentPosition);
+        const adapter = new WaveSurferAdapter(containerRef.current!, setIsPlaying, setIsLoading, setCurrentPosition);
 
         adapterRef.current = adapter;
 

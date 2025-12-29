@@ -8,11 +8,12 @@ import {
 } from '@mui/material';
 import React, { useState } from 'react';
 
+// TODO rework props to atoms
 interface Props {
-    maxContext: number;
-    onChangeMaxContext: (value: number) => void;
-    maxLen: number;
-    onChangeMaxLen: (value: number) => void;
+    maxContext: number | null;
+    onChangeMaxContext: (value: number | null) => void;
+    maxLen: number | null;
+    onChangeMaxLen: (value: number | null) => void;
     splitOnWord: boolean;
     onChangeSplitOnWord: (value: boolean) => void;
     useVad: boolean;
@@ -40,18 +41,20 @@ export const TranscribeAdvancedSettings: React.FC<Props> = ({
             <Grow in={isOpen}>
                 <Stack spacing={1.5}>
                     <TextField
-                        size="small"
-                        label="Максимальный контекст (--max-context)"
                         type="number"
+                        size="small"
+                        label="Максимальный контекст"
+                        helperText="--max-context"
                         value={maxContext}
-                        onChange={(e) => onChangeMaxContext(Number(e.target.value))}
+                        onChange={(e) => onChangeMaxContext(e.target.value ? Number(e.target.value) : null)}
                     />
                     <TextField
-                        size="small"
-                        label="Максимальная длина сегмента (--max-len)"
                         type="number"
+                        size="small"
+                        label="Максимальная длина сегмента"
+                        helperText="--max-len"
                         value={maxLen}
-                        onChange={(e) => onChangeMaxLen(Number(e.target.value))}
+                        onChange={(e) => onChangeMaxLen(e.target.value ? Number(e.target.value) : null)}
                     />
                     <FormControlLabel
                         control={(

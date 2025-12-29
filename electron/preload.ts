@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('api', {
     pickAudio: (lang: string) => ipcRenderer.invoke('pickAudio', lang),
+    convertAudio: (args: any) => ipcRenderer.invoke('convertAudio', args),
     saveText: (content: string) => ipcRenderer.invoke('saveText', content),
     transcribeStream: (audioPath: string, opts: any) => ipcRenderer.invoke('transcribeStream', audioPath, opts),
     stopTranscription: () => ipcRenderer.invoke('stop-transcription'),
