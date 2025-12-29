@@ -92,6 +92,8 @@ export class Whisper {
                 useGpu: opts.useGpu,
             });
 
+            const { wavPath, cleanup } = await this.audioPreprocessor.prepareAudioFile(audioPath, opts.segment);
+
             this.abortController = new AbortController();
             this.hasRealtimeOutput = false;
             this.streamParser.reset();
@@ -99,14 +101,14 @@ export class Whisper {
             this.callbacks.onProgressPercent?.(0);
 
             try {
-                const fileBuffer = await fs.readFile(audioPath);
+                const fileBuffer = await fs.readFile(wavPath);
                 const safeBuffer = new Uint8Array(fileBuffer.byteLength);
 
                 safeBuffer.set(fileBuffer);
                 const inferenceResult = await this.apiClient.inference(
                     {
                         audioBuffer: safeBuffer,
-                        fileName: path.basename(audioPath) || 'audio.wav',
+                        fileName: path.basename(wavPath) || 'audio.wav',
                         options: opts,
                     },
                     this.abortController.signal,
@@ -140,6 +142,7 @@ export class Whisper {
                 if (this.abortController) {
                     this.abortController = null;
                 }
+                await cleanup().catch(() => void 0);
             }
         } finally {
             this.isTranscribing = false;

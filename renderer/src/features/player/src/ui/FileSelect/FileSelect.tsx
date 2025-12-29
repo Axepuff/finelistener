@@ -15,15 +15,16 @@ export const FileSelect: FC = () => {
         if (!isElectron) return;
         const file = await window.api!.pickAudio();
 
-        console.log(file);
+        if (!file) {
+            return;
+        }
 
         try {
+            const { path } = await window.api!.convertAudio({ audioPath: file, lowPass: 12000, highPass: 80 });
 
-            const { path } = await window.api!.convertAudio({ audioPath: file!, lowPass: 12000, highPass: 80 });
-
-            if (file) setAudioToTranscribe([path]);
+            setAudioToTranscribe([path]);
         } catch (error) {
-            console.log('ERROR', error);
+            console.error('Failed to convert audio', error);
         }
     };
 

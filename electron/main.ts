@@ -2,8 +2,10 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 import { app, BrowserWindow, shell, screen, protocol, net } from 'electron';
 import { registerIpcHandlers } from './src/controllers/ipc';
+import { cleanupAudioTempDirs } from './src/services/AudioPreprocessor';
 
 let mainWindow: BrowserWindow | null = null;
+let isQuitting = false;
 
 const IS_DEV = !app.isPackaged;
 const RENDERER_DEV_URL = 'http://localhost:5173';
@@ -115,6 +117,16 @@ app.whenReady()
         console.error('[app.whenReady] Error:', err);
         app.quit();
     });
+
+app.on('before-quit', (event) => {
+    if (isQuitting) {
+        return;
+    }
+
+    event.preventDefault();
+    isQuitting = true;
+    void cleanupAudioTempDirs().finally(() => app.quit());
+});
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();

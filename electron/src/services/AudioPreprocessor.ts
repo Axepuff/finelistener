@@ -54,6 +54,23 @@ const DEFAULT_DYNAUDNORM_OPTIONS: Required<DynanormOptions> = {
     p: 0.95,
 };
 const DEFAULT_HIGH_PASS_HZ = 80;
+const tempDirs = new Set<string>();
+
+export const cleanupAudioTempDirs = async (): Promise<void> => {
+    const dirs = Array.from(tempDirs);
+
+    await Promise.all(
+        dirs.map(async (dir) => {
+            try {
+                await fs.rm(dir, { recursive: true, force: true });
+            } catch {
+                // ignore cleanup errors on shutdown
+            }
+        }),
+    );
+
+    tempDirs.clear();
+};
 
 export class AudioPreprocessor {
     private ffmpegExecutable: string | null;
@@ -173,13 +190,22 @@ export class AudioPreprocessor {
     }
 
     protected async createTempDir(): Promise<string> {
-        return fs.mkdtemp(path.join(tmpdir(), this.tmpDirPrefix));
+        const dir = await fs.mkdtemp(path.join(tmpdir(), this.tmpDirPrefix));
+
+        tempDirs.add(dir);
+
+        return dir;
     }
 
     protected async removeDirSafe(dir: string | undefined): Promise<void> {
         if (!dir) return;
 
-        await fs.rm(dir, { recursive: true, force: true }).catch(() => void 0);
+        try {
+            await fs.rm(dir, { recursive: true, force: true });
+            tempDirs.delete(dir);
+        } catch {
+            // keep entry for shutdown cleanup
+        }
     }
 
     protected async runFfmpeg(args: string[]): Promise<void> {
