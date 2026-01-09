@@ -1,3 +1,6 @@
+import { Blob } from 'buffer';
+import { Agent, FormData, fetch as undiciFetch } from 'undici';
+import type { RequestInit as UndiciRequestInit } from 'undici';
 import type { TranscribeOpts } from '../../controllers/transcriptionController';
 import { formatVerboseJson, type WhisperVerboseResponse } from './utils';
 
@@ -19,12 +22,19 @@ export type InferenceResponse =
         errorText: string;
     };
 
-const fetchWithTimeout = async (url: string, init: RequestInit = {}, timeoutMs = 5000) => {
+const DEFAULT_HEADERS_TIMEOUT_MS = 15 * 60_000;
+const DEFAULT_BODY_TIMEOUT_MS = 15 * 60_000;
+const whisperDispatcher = new Agent({
+    headersTimeout: DEFAULT_HEADERS_TIMEOUT_MS,
+    bodyTimeout: DEFAULT_BODY_TIMEOUT_MS,
+});
+
+const fetchWithTimeout = async (url: string, init: UndiciRequestInit = {}, timeoutMs = 5000) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-        return await fetch(url, { ...init, signal: controller.signal });
+        return await undiciFetch(url, { ...init, signal: controller.signal, dispatcher: whisperDispatcher });
     } finally {
         clearTimeout(timer);
     }
@@ -73,13 +83,14 @@ export class WhisperServerApiClient {
         if (typeof opts.maxLen === 'number' && opts.maxLen > 0) form.append('max_len', String(opts.maxLen));
         if (typeof opts.splitOnWord === 'boolean') form.append('split_on_word', String(opts.splitOnWord));
         if (typeof opts.useVad === 'boolean') form.append('vad', String(opts.useVad));
-        form.append('--beam-size', '10');
+        form.append('--beam-size', '8');
 
-        const response = await fetch(`${this.baseUrl}/inference`, {
+        const response = await undiciFetch(`${this.baseUrl}/inference`, {
             method: 'POST',
             body: form,
             signal,
-        });
+            dispatcher: whisperDispatcher,
+        } satisfies UndiciRequestInit);
 
         if (!response.ok) {
             const errorText = await response.text().catch(() => '');

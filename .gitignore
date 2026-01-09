@@ -6,3 +6,5 @@ models
 .vscode
 AGENTS.md
 out/
+resources/screencapturekit-helper/.build
+resources/ScreenCaptureKitHelper
