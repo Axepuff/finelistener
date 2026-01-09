@@ -56,12 +56,7 @@ export function registerRecordingController(ipc: IpcMain, getMainWindow: () => B
 }
 
 function createRecordingAdapter(): ScreenCaptureKitAdapter | AudioteeAdapter {
-    const preference = process.env.RECORDING_ADAPTER ?? 'audiotee';
-
-    if (preference === 'screen-capture-kit') {
-        return new ScreenCaptureKitAdapter();
-    }
-
+    // const preference = process.env.RECORDING_ADAPTER ?? 'audiotee';
     const audioteeBinaryPath = resolveAudioteeBinaryPath();
 
     return new AudioteeAdapter({

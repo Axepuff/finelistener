@@ -87,6 +87,12 @@ app.whenReady()
 
                 return { action: 'deny' };
             });
+            contents.session.setPermissionRequestHandler((_webContents, permission, callback, details) => {
+                const requestUrl = 'requestingUrl' in details ? details.requestingUrl : undefined;
+
+                console.log('[permission]', permission, requestUrl ?? 'unknown', details);
+                callback(false);
+            });
         });
 
         registerIpcHandlers(() => mainWindow);

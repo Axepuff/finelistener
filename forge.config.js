@@ -17,10 +17,63 @@ const packagerIgnore = [
     /[\\/]out(?:[\\/]|$)/,
 ];
 
+const signTarget = (targetPath, args = []) => {
+    const result = spawnSync('codesign', ['--force', '--sign', '-', ...args, targetPath], { encoding: 'utf8' });
+
+    if (result.status !== 0) {
+        console.warn('[forge postPackage] codesign failed for', targetPath, result.stderr || result.stdout);
+    } else {
+        console.log('[forge postPackage] codesign ok for', targetPath);
+    }
+};
+
+const signAppBundle = (appPath) => {
+    if (!appPath || !fs.existsSync(appPath)) return;
+
+    signTarget(appPath, ['--deep']);
+
+    const audioteePath = path.resolve(
+        appPath,
+        'Contents',
+        'Resources',
+        'app.asar.unpacked',
+        'node_modules',
+        'audiotee',
+        'bin',
+        'audiotee',
+    );
+
+    if (fs.existsSync(audioteePath)) {
+        signTarget(audioteePath);
+    }
+};
+
+const findAppBundles = (rootPath, depth = 4) => {
+    if (!rootPath || depth < 0 || !fs.existsSync(rootPath)) return [];
+
+    const stat = fs.statSync(rootPath);
+
+    if (stat.isDirectory()) {
+        if (rootPath.endsWith('.app')) {
+            return [rootPath];
+        }
+
+        return fs.readdirSync(rootPath)
+            .flatMap((entry) => findAppBundles(path.join(rootPath, entry), depth - 1));
+    }
+
+    return [];
+};
+
 module.exports = {
   packagerConfig: {
+    appBundleId: 'com.axepuff.finelistener',
+    name: 'Finelistener',
     asar: {
       unpack: asarUnpackPatterns,
+    },
+    extendInfo: {
+      NSAudioCaptureUsageDescription: 'This app records system audio for transcription.',
     },
     // Ship whisper.cpp binaries/models alongside the packaged app
     extraResource: [whisperResourceDir],
@@ -125,6 +178,20 @@ module.exports = {
             if (!hasMono) {
                 console.warn('[forge preMake] mono not found on PATH. maker-squirrel will fail without it.');
             }
+        },
+        postPackage: async (_config, options) => {
+            if (process.platform !== 'darwin') return;
+
+            const outputPaths = Array.isArray(options?.outputPaths) ? options.outputPaths : [];
+            const appPaths = outputPaths.flatMap((outputPath) => findAppBundles(outputPath));
+
+            if (!appPaths.length) {
+                console.warn('[forge postPackage] No app bundles found to sign.');
+
+                return;
+            }
+
+            appPaths.forEach(signAppBundle);
         },
     },
 };
