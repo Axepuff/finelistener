@@ -1,11 +1,11 @@
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import { Button, IconButton, LinearProgress } from '@mui/material';
+import { Button, FormControlLabel, IconButton, LinearProgress, Switch } from '@mui/material';
 import Paper from '@mui/material/Paper';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useAtom, useAtomValue } from 'jotai';
-import { useCallback, useEffect, useRef, useState, type FC, type MouseEvent, type SyntheticEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FC, type MouseEvent, type SyntheticEvent } from 'react';
 import { atoms, type TrimRange } from 'renderer/src/atoms';
 import { useApp } from '../../../../../AppContext';
 
@@ -68,6 +68,67 @@ const parseTimeToSeconds = (value: string): number | null => {
     return totalSeconds;
 };
 
+interface TranscribedSegment {
+    text: string;
+    startSeconds: number | null;
+}
+
+const collapseWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
+
+const resolveAdjustedSeconds = (rawSeconds: string, trimOffset: number) => {
+    const parsed = parseTimeToSeconds(rawSeconds);
+
+    if (parsed === null) return null;
+
+    const adjustedSeconds = parsed + trimOffset;
+
+    if (!Number.isFinite(adjustedSeconds)) return null;
+
+    return Number(adjustedSeconds.toFixed(3));
+};
+
+const buildPlainSegments = (source: string, trimOffset: number): TranscribedSegment[] => {
+    if (!source) return [];
+
+    const regionPattern = /\[([^\]]+)\]\s*/g;
+    const matches = Array.from(source.matchAll(regionPattern));
+
+    if (matches.length === 0) {
+        const text = collapseWhitespace(source);
+
+        return text ? [{ text, startSeconds: null }] : [];
+    }
+
+    const segments: TranscribedSegment[] = [];
+
+    const pushSegment = (text: string, regionContent?: string) => {
+        const normalizedText = collapseWhitespace(text);
+
+        if (!normalizedText) return;
+
+        const [rawStart = ''] = regionContent?.split('-->') ?? [];
+        const startSeconds = rawStart ? resolveAdjustedSeconds(rawStart.trim(), trimOffset) : null;
+
+        segments.push({ text: normalizedText, startSeconds });
+    };
+
+    const firstMatchIndex = matches[0]?.index ?? 0;
+
+    if (firstMatchIndex > 0) {
+        pushSegment(source.slice(0, firstMatchIndex));
+    }
+
+    matches.forEach((match, index) => {
+        const matchIndex = match.index ?? 0;
+        const contentStart = matchIndex + match[0].length;
+        const contentEnd = matches[index + 1]?.index ?? source.length;
+
+        pushSegment(source.slice(contentStart, contentEnd), match[1]);
+    });
+
+    return segments;
+};
+
 export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
     const { isElectron } = useApp();
     const [plainText, setPlainText] = useAtom(transcription.plainText);
@@ -75,9 +136,18 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
     const [progress, setProgress] = useState(0);
     const [isCopySnackbarOpen, setIsCopySnackbarOpen] = useState(false);
     const [copySnackbarKey, setCopySnackbarKey] = useState(0);
+    const [showRegions, setShowRegions] = useState(true);
     const uiState = useAtomValue(appState.uiState);
     const trimRange = useAtomValue(atoms.transcription.trimRange);
     const trimOffsetRef = useRef<number>(resolveTrimOffset(trimRange));
+    const trimOffset = resolveTrimOffset(trimRange);
+
+    const plainSegments = useMemo(() => buildPlainSegments(plainText, trimOffset), [plainText, trimOffset]);
+    const plainTextValue = useMemo(
+        () => plainSegments.map((segment) => segment.text).join(' '),
+        [plainSegments],
+    );
+    const currentTextValue = showRegions ? plainText : plainTextValue;
 
     useEffect(() => {
         trimOffsetRef.current = resolveTrimOffset(trimRange);
@@ -146,15 +216,15 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
     };
 
     const handleSave = async () => {
-        if (!plainText) return;
-        await window.api!.saveText(plainText);
+        if (!currentTextValue) return;
+        await window.api!.saveText(currentTextValue);
     };
 
     const handleCopy = async () => {
-        if (!plainText) return;
+        if (!currentTextValue) return;
 
         try {
-            await navigator.clipboard.writeText(plainText);
+            await navigator.clipboard.writeText(currentTextValue);
             setCopySnackbarKey((value) => value + 1);
             setIsCopySnackbarOpen(true);
         } catch (error) {
@@ -207,24 +277,47 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
         }
     }, [uiState]);
 
+    const textSx = {
+        whiteSpace: showRegions ? 'pre-wrap' : 'normal',
+        '& span[data-regions]': {
+            cursor: 'pointer',
+            transition: 'background-color 0.15s ease, color 0.15s ease',
+        },
+        '& span[data-regions]:hover': {
+            backgroundColor: 'rgba(28, 77, 5, 0.12)',
+        },
+        '& span[data-regions]:active': {
+            backgroundColor: 'rgba(28, 77, 5, 0.2)',
+        },
+    } as const;
+
     return (
         <Stack gap="16px" alignItems="flex-start">
-            <Stack direction="row" gap={2}>
+            <Stack direction="row" gap={2} alignItems="center" flexWrap="wrap">
                 <Button
                     size="large"
                     fullWidth={false}
-                    disabled={plainText.length === 0}
+                    disabled={currentTextValue.length === 0}
                     variant="contained"
                     onClick={handleSave}
                 >
                     {'Сохранить в .txt'}
                 </Button>
                 <IconButton
-                    disabled={plainText.length === 0}
+                    disabled={currentTextValue.length === 0}
                     onClick={handleCopy}
                 >
                     <ContentCopyIcon />
                 </IconButton>
+                <FormControlLabel
+                    control={(
+                        <Switch
+                            checked={showRegions}
+                            onChange={() => setShowRegions((prev) => !prev)}
+                        />
+                    )}
+                    label="Показывать таймкоды"
+                />
             </Stack>
 
             {uiState === 'transcribing' ? (
@@ -236,25 +329,28 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
                 </Stack>
             ) : null}
             <Paper variant="outlined" sx={{ p: 3, overflowY: 'auto', maxHeight: 800, width: '100%' }}>
-                <Typography
-                    component="div"
-                    variant="body1"
-                    sx={{
-                        whiteSpace: 'pre-wrap',
-                        '& span[data-regions]': {
-                            cursor: 'pointer',
-                            transition: 'background-color 0.15s ease, color 0.15s ease',
-                        },
-                        '& span[data-regions]:hover': {
-                            backgroundColor: 'rgba(28, 77, 5, 0.12)',
-                        },
-                        '& span[data-regions]:active': {
-                            backgroundColor: 'rgba(28, 77, 5, 0.2)',
-                        },
-                    }}
-                    onClick={handleRegionClick}
-                    dangerouslySetInnerHTML={{ __html: renderedText }}
-                />
+                {showRegions ? (
+                    <Typography
+                        component="div"
+                        variant="body1"
+                        sx={textSx}
+                        onClick={handleRegionClick}
+                        dangerouslySetInnerHTML={{ __html: renderedText }}
+                    />
+                ) : (
+                    <Typography component="div" variant="body1" sx={textSx} onClick={handleRegionClick}>
+                        {plainSegments.map((segment, index) => {
+                            const regionValue = segment.startSeconds;
+
+                            return (
+                                <span key={`${index}-${regionValue ?? 'na'}`} data-regions={regionValue?.toString()}>
+                                    {segment.text}
+                                    {index < plainSegments.length - 1 ? ' ' : ''}
+                                </span>
+                            );
+                        })}
+                    </Typography>
+                )}
             </Paper>
             <Snackbar
                 key={copySnackbarKey}
