@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import type { TranscribeOpts } from '../../controllers/transcriptionController';
+import type { TranscribeOpts } from '../../types/transcription';
 import { AudioPreprocessor } from '../../services/AudioPreprocessor';
 import { createWhisperEnv, resolveWhisperPaths } from '../../utils/whisper';
 import { createProgressParser } from '../progress';

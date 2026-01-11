@@ -9,7 +9,8 @@ import type {
 } from 'electron/src/services/RecordingService';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/recording/ScreenCaptureKitAdapter';
 import React, { useEffect } from 'react';
-import { TranscribeOpts } from '../../electron/src/controllers/transcriptionController';
+import type { TranscribeOpts } from '../../electron/src/types/transcription';
+import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from '../../electron/src/types/whisper';
 import { AppContext } from './AppContext';
 import { Home } from './Home';
 
@@ -34,6 +35,9 @@ declare global {
             onRecordingLevel: (cb: (level: RecordingLevel) => void) => () => void;
             onRecordingError: (cb: (payload: { message: string }) => void) => () => void;
             stopTranscription: () => Promise<boolean>;
+            getWhisperModels: () => Promise<WhisperModelInfo[]>;
+            downloadWhisperModel: (modelName: WhisperModelName) => Promise<void>;
+            onWhisperModelDownloadProgress: (cb: (payload: WhisperModelDownloadProgress) => void) => () => void;
             openDevTools: () => Promise<boolean>;
         };
     }

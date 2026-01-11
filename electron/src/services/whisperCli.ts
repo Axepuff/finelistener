@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
-import type { TranscribeOpts } from '../controllers/transcriptionController';
+import type { TranscribeOpts } from '../types/transcription';
 import { buildTranscribeArgs, createWhisperEnv, resolveWhisperPaths } from '../utils/whisper';
 import { AudioPreprocessor } from './AudioPreprocessor';
 import { createProgressParser } from './progress';

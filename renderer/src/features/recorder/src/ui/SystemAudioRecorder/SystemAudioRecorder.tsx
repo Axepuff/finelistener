@@ -237,11 +237,11 @@ export const SystemAudioRecorder: React.FC = () => {
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
                     {`Level: ${formatLevel(recordingLevel)}`}
                 </Typography>
-                {permissionStatus !== 'granted' && isRecordingAvailable ? (
+                {/* {permissionStatus !== 'granted' && isRecordingAvailable ? (
                     <Button variant="outlined" size="small" onClick={handleOpenPreferences}>
                         {'Open access'}
                     </Button>
-                ) : null}
+                ) : null} */}
             </Stack>
             {recordingState === 'recording' ? (
                 <LinearProgress

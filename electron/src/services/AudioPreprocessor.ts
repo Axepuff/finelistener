@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
 import ffmpegPath from 'ffmpeg-static';
-import type { Segment } from '../controllers/transcriptionController';
+import type { Segment } from '../types/transcription';
 import { Loudnorm, type LoudnormOptions } from './Loudnorm';
 
 interface AudioPreprocessorConfig {

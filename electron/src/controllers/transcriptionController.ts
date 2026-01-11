@@ -1,19 +1,6 @@
 import type { IpcMain, BrowserWindow } from 'electron';
 import { TranscriptionService } from '../services/TranscriptionService';
-
-// TODO move types to suitable place
-export type Segment = { start: number; end: number };
-export interface TranscribeOpts {
-    language: string;
-    model?: 'large_v3_turbo' | 'small' | 'base' | 'base_q';
-    maxContext?: number;
-    maxLen?: number;
-    splitOnWord?: boolean;
-    useVad?: boolean;
-    useGpu?: boolean;
-    vadModelPath?: string;
-    segment?: Segment;
-}
+import type { TranscribeOpts } from '../types/transcription';
 
 export function registerTranscriptionController(ipc: IpcMain, getMainWindow: () => BrowserWindow | null): void {
     const service = new TranscriptionService({

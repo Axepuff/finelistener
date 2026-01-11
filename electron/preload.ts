@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('api', {
     isRecordingAvailable: () => ipcRenderer.invoke('recording:is-available'),
     transcribeStream: (audioPath: string, opts: any) => ipcRenderer.invoke('transcribeStream', audioPath, opts),
     stopTranscription: () => ipcRenderer.invoke('stop-transcription'),
+    getWhisperModels: () => ipcRenderer.invoke('whisper-models:list'),
+    downloadWhisperModel: (modelName: string) => ipcRenderer.invoke('whisper-models:download', modelName),
     openDevTools: () => ipcRenderer.invoke('debug:open-devtools'),
     onTranscribeText: (cb: (chunk: string) => void) => {
         const handler = (_e: unknown, chunk: string) => cb(chunk);
@@ -61,5 +63,15 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.on('recording:error', handler);
 
         return () => ipcRenderer.removeListener('recording:error', handler);
+    },
+    onWhisperModelDownloadProgress: (cb: (payload: { name: string; percent: number | null; downloadedBytes: number; totalBytes: number | null }) => void) => {
+        const handler = (
+            _e: unknown,
+            payload: { name: string; percent: number | null; downloadedBytes: number; totalBytes: number | null },
+        ) => cb(payload);
+
+        ipcRenderer.on('whisper-models:download-progress', handler);
+
+        return () => ipcRenderer.removeListener('whisper-models:download-progress', handler);
     },
 });

@@ -1,7 +1,7 @@
 import { Blob } from 'buffer';
 import { Agent, FormData, fetch as undiciFetch } from 'undici';
 import type { RequestInit as UndiciRequestInit } from 'undici';
-import type { TranscribeOpts } from '../../controllers/transcriptionController';
+import type { TranscribeOpts } from '../../types/transcription';
 import { formatVerboseJson, type WhisperVerboseResponse } from './utils';
 
 interface InferencePayload {
