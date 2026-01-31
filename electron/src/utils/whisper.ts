@@ -53,29 +53,42 @@ export const getModelDownloadUrl = (model: WhisperModelName): string => MODEL_ME
 
 export const getModelFileName = (model: WhisperModelName): string => MODEL_METADATA[model].fileName;
 
-export const getBundledModelsDir = (): string => path.resolve(app.getAppPath(), 'models');
+const getBundledModelsCandidates = (): string[] => {
+    if (IS_DEV) {
+        return [path.resolve(app.getAppPath(), 'models')];
+    }
+
+    return [
+        path.join(process.resourcesPath, 'models'),
+        path.join(process.resourcesPath, 'app.asar.unpacked', 'models'),
+    ];
+};
+
+export const getBundledModelsDir = (): string => getBundledModelsCandidates()[0];
 
 export const getUserModelsDir = (): string => path.resolve(app.getPath('userData'), 'models');
 
 export const isModelBundled = (model: WhisperModelName): boolean => {
     const fileName = getModelFileName(model);
 
-    return fs.existsSync(path.join(getBundledModelsDir(), fileName));
+    return getBundledModelsCandidates().some((baseDir) => fs.existsSync(path.join(baseDir, fileName)));
 };
 
 export const isModelAvailable = (model: WhisperModelName): boolean => {
     const fileName = getModelFileName(model);
     const userPath = path.join(getUserModelsDir(), fileName);
-    const bundledPath = path.join(getBundledModelsDir(), fileName);
+    const isBundledAvailable = getBundledModelsCandidates().some((baseDir) =>
+        fs.existsSync(path.join(baseDir, fileName)),
+    );
 
-    return fs.existsSync(userPath) || fs.existsSync(bundledPath);
+    return fs.existsSync(userPath) || isBundledAvailable;
 };
 
 export const resolveModelPath = (model: WhisperModelName): string => {
     const fileName = getModelFileName(model);
     const candidates = [path.join(getUserModelsDir(), fileName)];
 
-    candidates.push(path.join(getBundledModelsDir(), fileName));
+    candidates.push(...getBundledModelsCandidates().map((baseDir) => path.join(baseDir, fileName)));
 
     return pickExistingPath(candidates, 'Whisper model file is missing');
 };
@@ -104,7 +117,7 @@ export function resolveWhisperPaths(model: WhisperModelName = DEFAULT_MODEL_NAME
     );
     const modelPath = resolveModelPath(model);
     const vadModelPath = pickExistingPath(
-        [path.join(getBundledModelsDir(), VAD_MODEL_FILE)],
+        getBundledModelsCandidates().map((baseDir) => path.join(baseDir, VAD_MODEL_FILE)),
         'VAD model file is missing',
     );
 

@@ -6,6 +6,7 @@ const { spawnSync } = require('child_process');
 
 const whisperResourceDir = path.resolve(__dirname, 'whisper.cpp');
 const miniaudioLoopbackResourceDir = path.resolve(__dirname, 'miniaudio-loopback');
+const modelsResourceDir = path.resolve(__dirname, 'models');
 // Оставляем бинарные зависимости вне asar, чтобы можно было запускать их напрямую
 const asarUnpackPatterns = [
     '**/node_modules/ffmpeg-static/**',
@@ -16,6 +17,7 @@ const asarUnpackPatterns = [
 // Не кладём whisper.cpp и другие тяжёлые артефакты внутрь app.asar, чтобы не дублировать ресурсы
 const packagerIgnore = [
     /[\\/](?:whisper\.cpp)(?:[\\/]|$)/,
+    /[\\/](?:models)(?:[\\/]|$)/,
     /[\\/]out(?:[\\/]|$)/,
 ];
 
@@ -78,7 +80,7 @@ module.exports = {
       NSAudioCaptureUsageDescription: 'This app records system audio for transcription.',
     },
     // Ship whisper.cpp binaries/models alongside the packaged app
-    extraResource: [whisperResourceDir, miniaudioLoopbackResourceDir],
+    extraResource: [whisperResourceDir, miniaudioLoopbackResourceDir, modelsResourceDir],
     ignore: packagerIgnore,
   },
   rebuildConfig: {},
