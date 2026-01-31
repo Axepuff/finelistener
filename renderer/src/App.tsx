@@ -1,24 +1,6 @@
-import type { ConvertAudioOptions } from 'electron/src/services/AudioPreprocessor';
 import React, { useEffect } from 'react';
-import { TranscribeOpts } from '../../electron/src/controllers/transcriptionController';
 import { AppContext } from './AppContext';
 import { Home } from './Home';
-
-declare global {
-    interface Window {
-        api?: {
-            pickAudio: () => Promise<string | null>;
-            transcribeStream: (audioPath: string, opts: TranscribeOpts) => Promise<string>;
-            convertAudio: (args: ConvertAudioOptions) => Promise<{ path: string }>;
-            saveText: (content: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
-            onTranscribeText: (cb: (chunk: string) => void) => () => void;
-            onTranscribeProgressValue: (cb: (value: number) => void) => () => void;
-            onTranscribeLog: (cb: (line: string) => void) => () => void;
-            stopTranscription: () => Promise<boolean>;
-            openDevTools: () => Promise<boolean>;
-        };
-    }
-}
 
 export const App: React.FC = () => {
     useEffect(() => {

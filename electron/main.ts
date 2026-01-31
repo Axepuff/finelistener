@@ -8,7 +8,7 @@ let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
 
 const IS_DEV = !app.isPackaged;
-const RENDERER_DEV_URL = 'http://localhost:5173';
+const RENDERER_DEV_URL = process.env.RENDERER_DEV_URL ?? 'http://127.0.0.1:5173';
 const RENDERER_DIST_INDEX = path.join(__dirname, '../renderer/index.html');
 const LOCAL_FILE_PROTOCOL = 'local-file';
 
@@ -86,6 +86,12 @@ app.whenReady()
                 shell.openExternal(url).catch(() => void 0);
 
                 return { action: 'deny' };
+            });
+            contents.session.setPermissionRequestHandler((_webContents, permission, callback, details) => {
+                const requestUrl = 'requestingUrl' in details ? details.requestingUrl : undefined;
+
+                console.log('[permission]', permission, requestUrl ?? 'unknown', details);
+                callback(false);
             });
         });
 

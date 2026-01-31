@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
 import ffmpegPath from 'ffmpeg-static';
-import type { Segment } from '../controllers/transcriptionController';
+import type { Segment } from '../types/transcription';
 import { Loudnorm, type LoudnormOptions } from './Loudnorm';
 
 interface AudioPreprocessorConfig {
@@ -18,6 +18,13 @@ export interface ConvertAudioOptions {
     dynanorm?: boolean | DynanormOptions;
     lowPass?: number;
     highPass?: number;
+}
+
+export interface WavFormat {
+    sampleRateHz: number;
+    channels: number;
+    codec: string;
+    bitDepth: number;
 }
 
 interface AudioFilterOptions {
@@ -54,6 +61,13 @@ const DEFAULT_DYNAUDNORM_OPTIONS: Required<DynanormOptions> = {
     p: 0.95,
 };
 const DEFAULT_HIGH_PASS_HZ = 80;
+
+export const DEFAULT_WAV_FORMAT: WavFormat = {
+    sampleRateHz: 16000,
+    channels: 1,
+    codec: 'pcm_s16le',
+    bitDepth: 16,
+};
 const tempDirs = new Set<string>();
 
 export const cleanupAudioTempDirs = async (): Promise<void> => {
@@ -262,11 +276,11 @@ export class AudioPreprocessor {
         return [
             ...this.buildBaseArgs(audioPath, filterChain),
             '-ar',
-            '16000',
+            String(DEFAULT_WAV_FORMAT.sampleRateHz),
             '-ac',
-            '1',
+            String(DEFAULT_WAV_FORMAT.channels),
             '-c:a',
-            'pcm_s16le',
+            DEFAULT_WAV_FORMAT.codec,
             outputPath,
         ];
     }
@@ -275,9 +289,9 @@ export class AudioPreprocessor {
         return [
             ...this.buildBaseArgs(audioPath, filterChain),
             '-ar',
-            '16000',
+            String(DEFAULT_WAV_FORMAT.sampleRateHz),
             '-ac',
-            '1',
+            String(DEFAULT_WAV_FORMAT.channels),
             '-f',
             'null',
             '-',

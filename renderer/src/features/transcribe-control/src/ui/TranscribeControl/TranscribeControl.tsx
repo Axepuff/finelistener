@@ -9,11 +9,13 @@ import {
     Select,
     Stack,
 } from '@mui/material';
+import type { WhisperModelName } from 'electron/src/types/whisper';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { atoms, type RegionTiming } from 'renderer/src/atoms';
 import { useApp } from '../../../../../AppContext';
 import { TranscribeAdvancedSettings } from '../TranscribeAdvancedSettings/TranscribeAdvancedSettings';
+import { WhisperModelSelect } from '../WhisperModelSelect/WhisperModelSelect';
 
 const { appState, transcription } = atoms;
 
@@ -64,7 +66,9 @@ const TranscribeControl: React.FC<Props> = ({
 }) => {
     const { isElectron } = useApp();
     const [lang, setLang] = useState('ru');
-    const [model, setModel] = useState<'large_v3_turbo' | 'small' | 'base' | 'base_q'>('large_v3_turbo');
+    const [model, setModel] = useState<WhisperModelName>('large');
+    const [isModelDownloaded, setIsModelDownloaded] = useState(false);
+    const [isModelDownloadActive, setIsModelDownloadActive] = useState(false);
     const [maxContext, setMaxContext] = useState<number | null>(null);
     const [maxLen, setMaxLen] = useState<number | null>(null);
     const [splitOnWord, setSplitOnWord] = useState<boolean>(true);
@@ -83,8 +87,16 @@ const TranscribeControl: React.FC<Props> = ({
         });
     };
 
+    const handleModelStatusChange = useCallback(
+        (status: { isModelDownloaded: boolean; isDownloadActive: boolean }) => {
+            setIsModelDownloaded(status.isModelDownloaded);
+            setIsModelDownloadActive(status.isDownloadActive);
+        },
+        [],
+    );
+
     const handleStart = async () => {
-        if (!isElectron) return;
+        if (!isElectron || !canStart) return;
         if (audioToTranscribe.length === 0) {
             appendLog('Не выбрано ни одного аудиофайла для распознавания.');
 
@@ -170,6 +182,7 @@ const TranscribeControl: React.FC<Props> = ({
     };
 
     const loading = uiState === 'transcribing';
+    const canStart = isModelDownloaded && !isModelDownloadActive;
 
     return (
         <Stack spacing={2}>
@@ -193,9 +206,9 @@ const TranscribeControl: React.FC<Props> = ({
                     fullWidth={true}
                     variant="contained"
                     onClick={handleStart}
-                    disabled={loading}
+                    disabled={loading || !canStart}
                     color="primary"
-                    startIcon={loading ? <CircularProgress size={8} /> : <Earbuds  />}
+                    startIcon={loading ? <CircularProgress size={8} /> : <Earbuds />}
                 >
                     {'Распознать'}
                 </Button>
@@ -205,21 +218,12 @@ const TranscribeControl: React.FC<Props> = ({
                 <Button variant="outlined" onClick={handleClear}>{'Сброс'}</Button>
             </Stack>
 
-            <FormControl size="small">
-                <InputLabel id="transcribe-model-label">{'Модель'}</InputLabel>
-                <Select
-                    labelId="transcribe-model-label"
-                    label="Модель"
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                >
-                    <MenuItem value="tiny">{'Tiny'}</MenuItem>
-                    <MenuItem value="base">{'Base'}</MenuItem>
-                    <MenuItem value="small">{'Base сжатая'}</MenuItem>
-                    <MenuItem value="small">{'Small'}</MenuItem>
-                    <MenuItem value="large_v3_turbo">{'Large V3 turbo'}</MenuItem>
-                </Select>
-            </FormControl>
+            <WhisperModelSelect
+                value={model}
+                onChange={setModel}
+                onStatusChange={handleModelStatusChange}
+                onDownloadError={appendLog}
+            />
 
             <TranscribeAdvancedSettings
                 maxContext={maxContext}

@@ -1,0 +1,51 @@
+flowchart TD
+    A[RecordingService]
+    A --> B[startRecording]
+    A --> C[stopRecording]
+    A --> D[handleAdapterError]
+    A --> E[setState]
+    A --> F[waitForAtom]
+    A --> G[waitForStopCompletion]
+    A --> H[resolveOutputPath]
+    A --> I[ensureUniquePath]
+    A --> J[pathExists]
+    A --> K[normalizeFileName]
+
+    subgraph State[State atoms]
+        S1[state]
+        S2[session]
+        S3[lastResult]
+        S4[lastError]
+        S5[startInFlight]
+        S6[stopInFlight]
+        S7[stopRequested]
+    end
+
+    B --> B1{state idle}
+    B1 -- no --> Bx[throw Recording already in progress]
+    B1 -- yes --> B2[set state starting and startInFlight true]
+    B2 --> B3[create session and set session]
+    B3 --> B4[adapter startRecording]
+    B4 --> B5{stopRequested}
+    B5 -- yes --> B6[return session]
+    B5 -- no --> B7[set state recording and return session]
+    B4 --> B8[onError to handleAdapterError]
+
+    C --> C0{stopInFlight}
+    C0 -- yes --> C1[waitForStopCompletion]
+    C0 -- no --> C2{state starting}
+    C2 -- yes --> C3[set stopRequested and wait startInFlight false]
+    C2 -- no --> C4{state idle}
+    C4 -- yes --> C5[return lastResult or throw lastError]
+    C4 -- no --> C6{state stopping}
+    C6 -- yes --> C1
+    C6 -- no --> C7[set stopInFlight true and state stopping]
+    C7 --> C8[adapter stopRecording]
+    C8 --> C9[finalize result set lastResult clear session state idle]
+    C8 --> C10[onError set state error set lastError callbacks]
+
+    D --> D1[set lastError and state error callbacks]
+    D1 --> D2{stopInFlight}
+    D2 -- yes --> D3[waitForStopCompletion]
+    D2 -- no --> D4[set stopInFlight true adapter stopRecording]
+    D4 --> D5[clear session set lastResult state idle]
