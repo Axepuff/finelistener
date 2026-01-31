@@ -5,13 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_WAV_FORMAT } from './AudioPreprocessor';
 import {
     RecordingService,
-    type CaptureAdapter,
-    type CaptureAdapterEvents,
-    type CaptureAdapterStartOptions,
     type RecordingLevel,
     type RecordingProgress,
     type RecordingResult,
 } from './RecordingService';
+import type { CaptureAdapter, CaptureAdapterStartOptions, CaptureAdapterEvents } from './capture/CaptureAdapter';
 
 let mockUserDataPath = '';
 
@@ -21,6 +19,7 @@ vi.mock('electron', () => ({
             if (name !== 'userData') {
                 throw new Error(`Unsupported app path: ${name}`);
             }
+
             return mockUserDataPath;
         },
     },
@@ -182,15 +181,17 @@ describe('RecordingService', () => {
 
     it('makes stopRecording idempotent', async () => {
         const service = new RecordingService(adapter);
+
         await service.startRecording();
 
         const stopDeferred = createDeferred<RecordingResult>();
+
         adapter.stopDeferred = stopDeferred;
 
         const stopPromise = service.stopRecording();
         const secondStopPromise = service.stopRecording();
 
-        expect(stopPromise).toStrictEqual(secondStopPromise);
+        expect(stopPromise).not.toBe(secondStopPromise);
         expect(adapter.stopRecording).toHaveBeenCalledTimes(1);
 
         stopDeferred.resolve({
@@ -198,8 +199,9 @@ describe('RecordingService', () => {
             format: adapter.startOptions[0].format,
         });
 
-        await stopPromise;
+        const [firstResult, secondResult] = await Promise.all([stopPromise, secondStopPromise]);
 
+        expect(firstResult).toStrictEqual(secondResult);
         expect(service.getState()).toBe('idle');
     });
 
@@ -218,11 +220,10 @@ describe('RecordingService', () => {
 
         const stopPromise = service.stopRecording();
 
+        startDeferred.resolve();
         await stopPromise;
 
         expect(service.getState()).toBe('idle');
-
-        startDeferred.resolve();
         await startPromise;
 
         expect(service.getState()).toBe('idle');

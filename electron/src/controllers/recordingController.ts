@@ -1,24 +1,42 @@
 import fs from 'fs';
 import path from 'path';
 import { app, type BrowserWindow, type IpcMain } from 'electron';
-import type { RecordingStartOptions } from '../services/RecordingService';
-import { RecordingService } from '../services/RecordingService';
-import { AudioteeAdapter } from '../services/recording/AudioteeAdapter';
-import {
-    ScreenCaptureKitAdapter,
-    type ScreenRecordingPermissionStatus,
-} from '../services/recording/ScreenCaptureKitAdapter';
+import { RecordingService, type RecordingStartOptions } from '../services/RecordingService';
+import { AudioteeAdapter } from '../services/capture/AudioteeAdapter';
+import type { CaptureAdapter } from '../services/capture/CaptureAdapter';
+import { MiniAudioAdapter, MINIAUDIO_WAV_FORMAT } from '../services/capture/MiniAudioAdapter';
+import type { ScreenRecordingPermissionStatus } from '../services/capture/ScreenCaptureKitAdapter';
 
 const toErrorPayload = (error: Error) => ({ message: error.message });
 
+type RecordingPermissionAdapter = {
+    getPermissionStatus: () => ScreenRecordingPermissionStatus;
+    openScreenRecordingPreferences: () => void;
+};
+
+const supportsPermissionStatus = (adapter: CaptureAdapter): adapter is CaptureAdapter & RecordingPermissionAdapter => {
+    const candidate = adapter as Partial<RecordingPermissionAdapter>;
+
+    return typeof candidate.getPermissionStatus === 'function';
+};
+
+const supportsOpenPreferences = (adapter: CaptureAdapter): adapter is CaptureAdapter & RecordingPermissionAdapter => {
+    const candidate = adapter as Partial<RecordingPermissionAdapter>;
+
+    return typeof candidate.openScreenRecordingPreferences === 'function';
+};
+
 export function registerRecordingController(ipc: IpcMain, getMainWindow: () => BrowserWindow | null): void {
-    const adapter = createRecordingAdapter();
+    const adapter: CaptureAdapter = createRecordingAdapter();
+    const serviceConfig = adapter instanceof MiniAudioAdapter
+        ? { defaultFormat: MINIAUDIO_WAV_FORMAT }
+        : undefined;
     const service = new RecordingService(adapter, {
         onStateChange: (state) => getMainWindow()?.webContents.send('recording:state', state),
         onProgress: (progress) => getMainWindow()?.webContents.send('recording:progress', progress),
         onLevel: (level) => getMainWindow()?.webContents.send('recording:level', level),
         onError: (error) => getMainWindow()?.webContents.send('recording:error', toErrorPayload(error)),
-    });
+    }, serviceConfig);
 
     ipc.handle('recording:is-available', async () => {
         if (!adapter.isAvailable) return true;
@@ -27,7 +45,7 @@ export function registerRecordingController(ipc: IpcMain, getMainWindow: () => B
     });
 
     ipc.handle('recording:get-permission-status', () => {
-        if ('getPermissionStatus' in adapter && typeof adapter.getPermissionStatus === 'function') {
+        if (supportsPermissionStatus(adapter)) {
             return adapter.getPermissionStatus();
         }
 
@@ -35,7 +53,7 @@ export function registerRecordingController(ipc: IpcMain, getMainWindow: () => B
     });
 
     ipc.handle('recording:open-permission-preferences', () => {
-        if ('openScreenRecordingPreferences' in adapter && typeof adapter.openScreenRecordingPreferences === 'function') {
+        if (supportsOpenPreferences(adapter)) {
             adapter.openScreenRecordingPreferences();
         }
 
@@ -43,6 +61,14 @@ export function registerRecordingController(ipc: IpcMain, getMainWindow: () => B
     });
 
     ipc.handle('recording:get-state', () => service.getState());
+
+    ipc.handle('recording:list-devices', async () => {
+        if (adapter.listDevices) {
+            return adapter.listDevices();
+        }
+
+        return [];
+    });
 
     ipc.handle('recording:start', async (_event, options?: RecordingStartOptions) => {
         if (adapter.isAvailable && !(await adapter.isAvailable())) {
@@ -55,7 +81,11 @@ export function registerRecordingController(ipc: IpcMain, getMainWindow: () => B
     ipc.handle('recording:stop', async () => service.stopRecording());
 }
 
-function createRecordingAdapter(): ScreenCaptureKitAdapter | AudioteeAdapter {
+function createRecordingAdapter(): CaptureAdapter {
+    if (process.platform === 'win32') {
+        return new MiniAudioAdapter();
+    }
+
     // const preference = process.env.RECORDING_ADAPTER ?? 'audiotee';
     const audioteeBinaryPath = resolveAudioteeBinaryPath();
 

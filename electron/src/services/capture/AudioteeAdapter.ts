@@ -3,8 +3,9 @@ import type { FileHandle } from 'fs/promises';
 import fsp from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import type { CaptureAdapter, CaptureAdapterEvents, CaptureAdapterStartOptions } from 'electron/src/services/capture/CaptureAdapter';
 import type { WavFormat } from '../AudioPreprocessor';
-import type { CaptureAdapter, CaptureAdapterEvents, CaptureAdapterStartOptions, RecordingResult } from '../RecordingService';
+import type { RecordingResult } from '../RecordingService';
 
 export interface AudioteeAdapterConfig {
     chunkDurationMs?: number;

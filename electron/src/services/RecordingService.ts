@@ -2,6 +2,8 @@ import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import { app } from 'electron';
+import type { CaptureAdapter } from 'electron/src/services/capture/CaptureAdapter';
+import { atom, createStore, type Atom } from 'jotai/vanilla';
 import { DEFAULT_WAV_FORMAT, type WavFormat } from './AudioPreprocessor';
 
 export interface RecordingLevel {
@@ -32,25 +34,6 @@ export interface RecordingResult {
 
 export type RecordingState = 'idle' | 'starting' | 'recording' | 'stopping' | 'error';
 
-export interface CaptureAdapterStartOptions {
-    outputPath: string;
-    format: WavFormat;
-}
-
-export interface CaptureAdapterEvents {
-    onLevel?: (level: RecordingLevel) => void;
-    onProgress?: (progress: RecordingProgress) => void;
-    onError?: (error: Error) => void;
-}
-
-export interface CaptureAdapter {
-    readonly id: string;
-    readonly label: string;
-    isAvailable?: () => Promise<boolean>;
-    startRecording(options: CaptureAdapterStartOptions, events: CaptureAdapterEvents): Promise<void>;
-    stopRecording(): Promise<RecordingResult>;
-}
-
 export interface RecordingServiceCallbacks {
     onStateChange?: (state: RecordingState) => void;
     onProgress?: (progress: RecordingProgress) => void;
@@ -66,6 +49,7 @@ export interface RecordingServiceConfig {
 export interface RecordingStartOptions {
     fileName?: string;
     format?: Partial<WavFormat>;
+    deviceId?: string;
 }
 
 export class RecordingService {
@@ -73,10 +57,16 @@ export class RecordingService {
     private readonly callbacks: RecordingServiceCallbacks;
     private readonly recordingsDir: string;
     private readonly defaultFormat: WavFormat;
-    private state: RecordingState = 'idle';
-    private currentSession: RecordingSession | null = null;
-    private stopPromise: Promise<RecordingResult> | null = null;
-    private lastResult: RecordingResult | null = null;
+    private readonly store = createStore();
+    private readonly atoms = {
+        state: atom<RecordingState>('idle'),
+        session: atom<RecordingSession | null>(null),
+        lastResult: atom<RecordingResult | null>(null),
+        lastError: atom<Error | null>(null),
+        startInFlight: atom(false),
+        stopInFlight: atom(false),
+        stopRequested: atom(false),
+    };
 
     constructor(
         adapter: CaptureAdapter,
@@ -87,24 +77,32 @@ export class RecordingService {
         this.callbacks = callbacks;
         this.recordingsDir = config.recordingsDir ?? path.join(app.getPath('userData'), 'recordings');
         this.defaultFormat = config.defaultFormat ?? { ...DEFAULT_WAV_FORMAT };
+
+        this.store.sub(this.atoms.state, () => {
+            this.callbacks.onStateChange?.(this.store.get(this.atoms.state));
+        });
     }
 
     public getState(): RecordingState {
-        return this.state;
+        return this.store.get(this.atoms.state);
     }
 
     public getCurrentSession(): RecordingSession | null {
-        return this.currentSession;
+        return this.store.get(this.atoms.session);
     }
 
     public async startRecording(options: RecordingStartOptions = {}): Promise<RecordingSession> {
-        if (this.state !== 'idle') {
+        if (this.getState() !== 'idle') {
             throw new Error('Recording is already in progress');
         }
 
         this.setState('starting');
+        this.store.set(this.atoms.stopRequested, false);
+        this.store.set(this.atoms.lastError, null);
+        this.store.set(this.atoms.startInFlight, true);
 
         const format: WavFormat = { ...this.defaultFormat, ...(options.format ?? {}) };
+        const deviceId = options.deviceId;
 
         await fs.mkdir(this.recordingsDir, { recursive: true });
 
@@ -117,13 +115,12 @@ export class RecordingService {
             startedAt: Date.now(),
         };
 
-        this.currentSession = session;
-        this.lastResult = null;
-        this.stopPromise = null;
+        this.store.set(this.atoms.session, session);
+        this.store.set(this.atoms.lastResult, null);
 
         try {
             await this.adapter.startRecording(
-                { outputPath, format },
+                { outputPath, format, deviceId },
                 {
                     onLevel: (level) => {
                         if (!this.isCurrentSession(sessionId)) return;
@@ -144,123 +141,155 @@ export class RecordingService {
                 return session;
             }
 
+            if (this.store.get(this.atoms.stopRequested)) {
+                return session;
+            }
+
             this.setState('recording');
 
             return session;
         } catch (error) {
+            const err = error instanceof Error ? error : new Error(String(error));
+
             if (this.isCurrentSession(sessionId)) {
-                this.currentSession = null;
-                this.stopPromise = null;
+                this.store.set(this.atoms.session, null);
                 this.setState('idle');
             }
-            throw error;
+
+            this.store.set(this.atoms.lastError, err);
+            throw err;
+        } finally {
+            this.store.set(this.atoms.startInFlight, false);
         }
     }
 
     public async stopRecording(): Promise<RecordingResult> {
-        if (this.stopPromise) {
-            return this.stopPromise;
+        if (this.store.get(this.atoms.stopInFlight)) {
+            return this.waitForStopCompletion();
         }
 
-        if (this.state === 'idle') {
-            if (this.lastResult) {
-                return this.lastResult;
+        if (this.getState() === 'starting') {
+            this.store.set(this.atoms.stopRequested, true);
+
+            await this.waitForAtom(this.atoms.startInFlight, (value) => !value);
+        }
+
+        if (this.getState() === 'idle') {
+            const lastResult = this.store.get(this.atoms.lastResult);
+            const lastError = this.store.get(this.atoms.lastError);
+
+            if (lastResult) {
+                return lastResult;
+            }
+            if (lastError) {
+                throw lastError;
             }
             throw new Error('Recording is not active');
         }
 
-        const session = this.currentSession;
+        if (this.getState() === 'stopping') {
+            return this.waitForStopCompletion();
+        }
+
+        const session = this.store.get(this.atoms.session);
 
         if (!session) {
-            if (this.lastResult) {
-                return this.lastResult;
+            const lastResult = this.store.get(this.atoms.lastResult);
+            const lastError = this.store.get(this.atoms.lastError);
+
+            if (lastResult) {
+                return lastResult;
+            }
+            if (lastError) {
+                throw lastError;
             }
             throw new Error('Recording session is not available');
         }
 
+        this.store.set(this.atoms.stopInFlight, true);
         this.setState('stopping');
 
         const sessionId = session.sessionId;
-        const stopPromise = (async () => {
-            try {
-                const result = await this.adapter.stopRecording();
 
-                if (!this.isCurrentSession(sessionId)) {
-                    return result;
-                }
+        try {
+            const result = await this.adapter.stopRecording();
 
-                const finalized = this.attachSessionResult(result, session);
-
-                this.lastResult = finalized;
-                this.currentSession = null;
-                this.setState('idle');
-
-                return finalized;
-            } catch (error) {
-                const err = error instanceof Error ? error : new Error(String(error));
-
-                if (this.isCurrentSession(sessionId)) {
-                    this.setState('error');
-                }
-                this.callbacks.onError?.(err);
-                throw err;
+            if (!this.isCurrentSession(sessionId)) {
+                return result;
             }
-        })();
 
-        this.stopPromise = stopPromise;
+            const finalized = this.attachSessionResult(result, session);
 
-        void stopPromise.finally(() => {
-            if (this.stopPromise === stopPromise) {
-                this.stopPromise = null;
+            this.store.set(this.atoms.lastResult, finalized);
+            this.store.set(this.atoms.session, null);
+            this.store.set(this.atoms.lastError, null);
+            this.setState('idle');
+
+            return finalized;
+        } catch (error) {
+            const err = error instanceof Error ? error : new Error(String(error));
+
+            if (this.isCurrentSession(sessionId)) {
+                this.setState('error');
             }
-        });
-
-        return stopPromise;
+            this.store.set(this.atoms.lastError, err);
+            this.callbacks.onError?.(err);
+            throw err;
+        } finally {
+            this.store.set(this.atoms.stopInFlight, false);
+        }
     }
 
     private setState(state: RecordingState): void {
-        if (this.state === state) return;
+        if (this.store.get(this.atoms.state) === state) return;
 
-        this.state = state;
-        this.callbacks.onStateChange?.(state);
+        this.store.set(this.atoms.state, state);
     }
 
     private isCurrentSession(sessionId: string): boolean {
-        return this.currentSession?.sessionId === sessionId;
+        return this.store.get(this.atoms.session)?.sessionId === sessionId;
     }
 
     private async handleAdapterError(error: Error, sessionId: string): Promise<void> {
         if (!this.isCurrentSession(sessionId)) return;
 
+        this.store.set(this.atoms.lastError, error);
         this.callbacks.onError?.(error);
         this.setState('error');
 
-        const activeStopPromise = this.stopPromise ?? this.adapter.stopRecording();
+        if (this.store.get(this.atoms.stopInFlight)) {
+            try {
+                await this.waitForStopCompletion();
+            } catch {
+                // ignore cleanup errors
+            }
 
-        this.stopPromise ??= activeStopPromise;
+            return;
+        }
+
+        this.store.set(this.atoms.stopInFlight, true);
 
         try {
-            const result = await activeStopPromise;
+            const result = await this.adapter.stopRecording();
 
             if (!this.isCurrentSession(sessionId)) {
                 return;
             }
 
-            const session = this.currentSession;
+            const session = this.store.get(this.atoms.session);
 
-            this.currentSession = null;
+            this.store.set(this.atoms.session, null);
 
             if (session) {
-                this.lastResult = this.attachSessionResult(result, session);
+                this.store.set(this.atoms.lastResult, this.attachSessionResult(result, session));
             }
 
+            this.store.set(this.atoms.lastError, null);
             this.setState('idle');
         } catch {
             // ignore cleanup errors
         } finally {
-            if (this.stopPromise === activeStopPromise) {
-                this.stopPromise = null;
-            }
+            this.store.set(this.atoms.stopInFlight, false);
         }
     }
 
@@ -270,6 +299,47 @@ export class RecordingService {
             durationMs: result.durationMs ?? Math.max(0, Date.now() - session.startedAt),
             sessionId: session.sessionId,
         };
+    }
+
+    private waitForAtom<T>(atomRef: Atom<T>, predicate: (value: T) => boolean): Promise<T> {
+        const current = this.store.get(atomRef);
+
+        if (predicate(current)) {
+            return Promise.resolve(current);
+        }
+
+        return new Promise<T>((resolve) => {
+            const unsubscribe = this.store.sub(atomRef, () => {
+                const next = this.store.get(atomRef);
+
+                if (!predicate(next)) return;
+
+                unsubscribe();
+                resolve(next);
+            });
+        });
+    }
+
+    private async waitForStopCompletion(): Promise<RecordingResult> {
+        await this.waitForAtom(this.atoms.stopInFlight, (value) => !value);
+
+        const lastResult = this.store.get(this.atoms.lastResult);
+        const lastError = this.store.get(this.atoms.lastError);
+        const state = this.getState();
+
+        if (lastResult) {
+            return lastResult;
+        }
+
+        if (lastError && state === 'error') {
+            throw lastError;
+        }
+
+        if (lastError) {
+            throw lastError;
+        }
+
+        throw new Error('Recording is not active');
     }
 
     private async resolveOutputPath(fileName?: string): Promise<string> {

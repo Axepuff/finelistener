@@ -4,7 +4,10 @@ dist
 whisper.cpp
 models
 .vscode
-AGENTS.md
 out/
 resources/screencapturekit-helper/.build
 resources/ScreenCaptureKitHelper
+miniaudio-loopback/bin/
+miniaudio-loopback/build/
+miniaudio-loopback/*.sln
+miniaudio-loopback/*.vcxproj*

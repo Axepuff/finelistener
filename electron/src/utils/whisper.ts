@@ -10,9 +10,9 @@ const WHISPER_SERVER_BIN_NAMES = process.platform === 'win32' ? ['whisper-server
 const VAD_MODEL_FILE = 'ggml-silero-v5.1.2.bin';
 const MODEL_METADATA: Record<WhisperModelName, { fileName: string; sizeLabel: string; downloadUrl: string }> = {
     large: {
-        fileName: 'ggml-large-v3-q5_0.bin',
-        sizeLabel: '1.0 GB',
-        downloadUrl: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin',
+        fileName: 'ggml-large-v3-turbo-q8_0.bin',
+        sizeLabel: '874 mb',
+        downloadUrl: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin',
     },
     base: {
         fileName: 'ggml-base.bin',
@@ -22,7 +22,7 @@ const MODEL_METADATA: Record<WhisperModelName, { fileName: string; sizeLabel: st
     small: {
         fileName: 'ggml-small-q8_0.bin',
         sizeLabel: '264 MB',
-        downloadUrl: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin',
+        downloadUrl: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q8_0.bin',
     },
 };
 

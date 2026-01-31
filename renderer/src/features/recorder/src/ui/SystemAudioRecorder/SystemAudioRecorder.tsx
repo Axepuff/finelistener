@@ -2,12 +2,17 @@ import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import StopIcon from '@mui/icons-material/Stop';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import FormControl from '@mui/material/FormControl';
 import IconButton from '@mui/material/IconButton';
+import InputLabel from '@mui/material/InputLabel';
 import LinearProgress from '@mui/material/LinearProgress';
+import MenuItem from '@mui/material/MenuItem';
+import Select, { type SelectChangeEvent } from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import type { RecordingLevel, RecordingProgress, RecordingState } from 'electron/src/services/RecordingService';
-import type { ScreenRecordingPermissionStatus } from 'electron/src/services/recording/ScreenCaptureKitAdapter';
+import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
+import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
 import { useSetAtom } from 'jotai';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { atoms } from 'renderer/src/atoms';
@@ -43,6 +48,9 @@ export const SystemAudioRecorder: React.FC = () => {
     const [recordingError, setRecordingError] = useState<string | null>(null);
     const [permissionStatus, setPermissionStatus] = useState<ScreenRecordingPermissionStatus>('unknown');
     const [isRecordingAvailable, setIsRecordingAvailable] = useState(true);
+    const [devices, setDevices] = useState<RecordingDevice[]>([]);
+    const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+    const [deviceError, setDeviceError] = useState<string | null>(null);
     const [isProcessingRecording, setIsProcessingRecording] = useState(false);
     const recordingStartRef = useRef<number | null>(null);
     const lastProgressAtRef = useRef<number | null>(null);
@@ -68,6 +76,23 @@ export const SystemAudioRecorder: React.FC = () => {
         void window.api?.getRecordingState?.()
             .then((state) => setRecordingState(state))
             .catch(() => setRecordingState('idle'));
+        void window.api?.listRecordingDevices?.()
+            .then((list: RecordingDevice[]) => {
+                const normalized = list ?? [];
+
+                setDevices(normalized);
+                const preferred = normalized.find((device) => device.isDefault) ?? normalized[0];
+                const id = preferred?.id ?? (preferred?.index !== undefined ? String(preferred.index) : '');
+
+                setSelectedDeviceId(id);
+                setDeviceError(null);
+            })
+            .catch((error: unknown) => {
+                const message = error instanceof Error ? error.message : String(error);
+
+                setDeviceError(message);
+                setDevices([]);
+            });
     }, [isElectron]);
 
     useEffect(() => {
@@ -142,6 +167,7 @@ export const SystemAudioRecorder: React.FC = () => {
 
                 setRecordingError(message);
                 appendLog(message);
+
                 return;
             }
 
@@ -150,6 +176,7 @@ export const SystemAudioRecorder: React.FC = () => {
 
                 setRecordingError(message);
                 appendLog(message);
+
                 return;
             }
 
@@ -157,7 +184,9 @@ export const SystemAudioRecorder: React.FC = () => {
                 appendLog('Screen recording permission is disabled for the app. Trying to request it via the helper.');
             }
 
-            const session = await window.api!.startSystemRecording();
+            const session = await window.api!.startSystemRecording({
+                deviceId: selectedDeviceId || undefined,
+            });
 
             appendLog(`Recording started: ${session.filePath}`);
         } catch (error) {
@@ -197,15 +226,6 @@ export const SystemAudioRecorder: React.FC = () => {
         }
     };
 
-    const handleOpenPreferences = async () => {
-        if (!isElectron) return;
-
-        await window.api!.openRecordingPreferences();
-        const status = await window.api!.getRecordingPermissionStatus();
-
-        setPermissionStatus(status);
-    };
-
     const isRecordingActive = recordingState !== 'idle';
 
     const canStartRecording = isElectron
@@ -214,6 +234,15 @@ export const SystemAudioRecorder: React.FC = () => {
         && isRecordingAvailable
         && permissionStatus !== 'restricted';
     const canStopRecording = isElectron && (recordingState === 'starting' || recordingState === 'recording' || recordingState === 'error');
+    const showDeviceSelect = isElectron && devices.length > 0;
+
+    const handleDeviceChange = (event: SelectChangeEvent<string>) => {
+        setSelectedDeviceId(event.target.value);
+    };
+
+    const formatDeviceLabel = (device: RecordingDevice): string => {
+        return device.isDefault ? `${device.name} (Default)` : device.name;
+    };
 
     return (
         <Stack spacing={2}>
@@ -237,11 +266,29 @@ export const SystemAudioRecorder: React.FC = () => {
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
                     {`Level: ${formatLevel(recordingLevel)}`}
                 </Typography>
-                {/* {permissionStatus !== 'granted' && isRecordingAvailable ? (
-                    <Button variant="outlined" size="small" onClick={handleOpenPreferences}>
-                        {'Open access'}
-                    </Button>
-                ) : null} */}
+                {showDeviceSelect ? (
+                    <FormControl size="small" sx={{ minWidth: 240 }} disabled={isRecordingActive}>
+                        <InputLabel id="system-audio-device-label">{'Output device'}</InputLabel>
+                        <Select
+                            labelId="system-audio-device-label"
+                            value={selectedDeviceId}
+                            label="Output device"
+                            onChange={handleDeviceChange}
+                        >
+                            {devices.map((device) => {
+                                const value = device.id || (device.index !== undefined ? String(device.index) : '');
+
+                                if (!value) return null;
+
+                                return (
+                                    <MenuItem key={value} value={value}>
+                                        {formatDeviceLabel(device)}
+                                    </MenuItem>
+                                );
+                            })}
+                        </Select>
+                    </FormControl>
+                ) : null}
             </Stack>
             {recordingState === 'recording' ? (
                 <LinearProgress
@@ -253,6 +300,11 @@ export const SystemAudioRecorder: React.FC = () => {
             {recordingError ? (
                 <Typography variant="body2" sx={{ color: 'error.main' }}>
                     {recordingError}
+                </Typography>
+            ) : null}
+            {deviceError ? (
+                <Typography variant="body2" sx={{ color: 'warning.main' }}>
+                    {`Failed to load devices: ${deviceError}`}
                 </Typography>
             ) : null}
             {!isRecordingAvailable ? (

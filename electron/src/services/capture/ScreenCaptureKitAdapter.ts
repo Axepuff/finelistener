@@ -3,8 +3,11 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
 import { app, systemPreferences, shell } from 'electron';
+import type { CaptureAdapter, CaptureAdapterEvents, CaptureAdapterStartOptions } from 'electron/src/services/capture/CaptureAdapter';
 import type { WavFormat } from '../AudioPreprocessor';
-import type { CaptureAdapter, CaptureAdapterEvents, CaptureAdapterStartOptions, RecordingResult } from '../RecordingService';
+import type { RecordingResult } from '../RecordingService';
+
+// own swift helper instead AudioTee
 
 export type ScreenRecordingPermissionStatus =
     | 'granted'
