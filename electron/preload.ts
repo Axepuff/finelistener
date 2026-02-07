@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('api', {
+    runtime: {
+        platform: process.platform,
+    },
     pickAudio: (lang: string) => ipcRenderer.invoke('pickAudio', lang),
     convertAudio: (args: any) => ipcRenderer.invoke('convertAudio', args),
     saveText: (content: string) => ipcRenderer.invoke('saveText', content),
@@ -11,6 +14,7 @@ contextBridge.exposeInMainWorld('api', {
     openRecordingPreferences: () => ipcRenderer.invoke('recording:open-permission-preferences'),
     isRecordingAvailable: () => ipcRenderer.invoke('recording:is-available'),
     listRecordingDevices: () => ipcRenderer.invoke('recording:list-devices'),
+    revealDevAppInFinder: () => ipcRenderer.invoke('recording:reveal-dev-app'),
     transcribeStream: (audioPath: string, opts: any) => ipcRenderer.invoke('transcribeStream', audioPath, opts),
     stopTranscription: () => ipcRenderer.invoke('stop-transcription'),
     getWhisperModels: () => ipcRenderer.invoke('whisper-models:list'),

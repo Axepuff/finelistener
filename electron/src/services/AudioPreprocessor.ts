@@ -133,7 +133,7 @@ export class AudioPreprocessor {
             await this.removeDirSafe(tmpDir);
             const message = error instanceof Error ? error.message : String(error);
 
-            throw new Error(`Не удалось подготовить фрагмент аудио: ${message}`);
+            throw new Error(`Failed to prepare audio segment: ${message}`);
         }
 
         const cleanup = async () => {
@@ -167,7 +167,7 @@ export class AudioPreprocessor {
             await this.removeDirSafe(tmpDir);
             const message = error instanceof Error ? error.message : String(error);
 
-            throw new Error(`Не удалось конвертировать аудио в WAV: ${message}`);
+            throw new Error(`Failed to convert audio to WAV: ${message}`);
         }
 
         const cleanup = async () => {

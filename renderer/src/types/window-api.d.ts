@@ -12,9 +12,14 @@ import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capt
 import type { TranscribeOpts } from 'electron/src/types/transcription';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
 
+type RuntimePlatform = 'darwin' | 'win32' | 'linux';
+
 declare global {
     interface Window {
         api?: {
+            runtime: {
+                platform: RuntimePlatform;
+            };
             pickAudio: () => Promise<string | null>;
             transcribeStream: (audioPath: string, opts: TranscribeOpts) => Promise<string>;
             convertAudio: (args: ConvertAudioOptions) => Promise<{ path: string }>;
@@ -26,6 +31,7 @@ declare global {
             openRecordingPreferences: () => Promise<boolean>;
             isRecordingAvailable: () => Promise<boolean>;
             listRecordingDevices: () => Promise<RecordingDevice[]>;
+            revealDevAppInFinder: () => Promise<boolean>;
             onTranscribeText: (cb: (chunk: string) => void) => () => void;
             onTranscribeProgressValue: (cb: (value: number) => void) => () => void;
             onTranscribeLog: (cb: (line: string) => void) => () => void;

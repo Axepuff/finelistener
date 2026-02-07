@@ -32,10 +32,15 @@ const formatLevel = (level: RecordingLevel | null): string => {
     if (!level) return 'N/A';
 
     const peak = Math.round(level.peak * 100);
+    const rms = Math.round(level.rms * 100);
     const clipped = level.clipped ? ' (clip)' : '';
 
-    return `${peak}%${clipped}`;
+    return `${peak}% peak, ${rms}% rms${clipped}`;
 };
+
+const SILENCE_PEAK_THRESHOLD = 0.0005;
+const SILENCE_RMS_THRESHOLD = 0.0005;
+const SILENCE_WARNING_AFTER_MS = 2000;
 
 // TODO refactor
 export const SystemAudioRecorder: React.FC = () => {
@@ -44,7 +49,9 @@ export const SystemAudioRecorder: React.FC = () => {
     const setLog = useSetAtom(atoms.transcription.log);
     const [recordingState, setRecordingState] = useState<RecordingState>('idle');
     const [recordingDurationMs, setRecordingDurationMs] = useState(0);
+    const [recordingBytesWritten, setRecordingBytesWritten] = useState<number | null>(null);
     const [recordingLevel, setRecordingLevel] = useState<RecordingLevel | null>(null);
+    const [showSilenceWarning, setShowSilenceWarning] = useState(false);
     const [recordingError, setRecordingError] = useState<string | null>(null);
     const [permissionStatus, setPermissionStatus] = useState<ScreenRecordingPermissionStatus>('unknown');
     const [isRecordingAvailable, setIsRecordingAvailable] = useState(true);
@@ -54,6 +61,8 @@ export const SystemAudioRecorder: React.FC = () => {
     const [isProcessingRecording, setIsProcessingRecording] = useState(false);
     const recordingStartRef = useRef<number | null>(null);
     const lastProgressAtRef = useRef<number | null>(null);
+    const silenceStartedAtRef = useRef<number | null>(null);
+    const silenceLoggedRef = useRef(false);
 
     const appendLog = useCallback((message: string) => {
         setLog((prev) => {
@@ -101,10 +110,46 @@ export const SystemAudioRecorder: React.FC = () => {
         const offState = window.api?.onRecordingState?.((state) => setRecordingState(state));
         const offProgress = window.api?.onRecordingProgress?.((progress: RecordingProgress) => {
             setRecordingDurationMs(progress.durationMs);
+            setRecordingBytesWritten(typeof progress.bytesWritten === 'number' ? progress.bytesWritten : null);
             lastProgressAtRef.current = Date.now();
         });
         const offLevel = window.api?.onRecordingLevel?.((level: RecordingLevel) => {
             setRecordingLevel(level);
+
+            const isSilent = level.peak <= SILENCE_PEAK_THRESHOLD && level.rms <= SILENCE_RMS_THRESHOLD;
+
+            if (!isSilent) {
+                silenceStartedAtRef.current = null;
+                silenceLoggedRef.current = false;
+                setShowSilenceWarning(false);
+
+                return;
+            }
+
+            if (!silenceStartedAtRef.current) {
+                silenceStartedAtRef.current = Date.now();
+
+                return;
+            }
+
+            if (Date.now() - silenceStartedAtRef.current < SILENCE_WARNING_AFTER_MS) {
+                return;
+            }
+
+            setShowSilenceWarning(true);
+
+            if (!silenceLoggedRef.current) {
+                silenceLoggedRef.current = true;
+                const platform = window.api?.runtime?.platform;
+
+                if (platform === 'darwin') {
+                    appendLog(
+                        "No system audio detected. On macOS you may need to grant 'System Audio Recording' permission in System Settings > Privacy & Security > Screen & System Audio Recording (System Audio Recording Only). In dev mode (`npm run dev`), the entry may show up as 'FineListener Dev' or 'Electron'. If you're running from an IDE terminal, add that terminal app there as well.",
+                    );
+                } else {
+                    appendLog('No system audio detected. Check that audio is playing and the correct output device is selected.');
+                }
+            }
         });
         const offError = window.api?.onRecordingError?.((payload) => {
             setRecordingError(payload.message);
@@ -130,6 +175,9 @@ export const SystemAudioRecorder: React.FC = () => {
 
         recordingStartRef.current = null;
         lastProgressAtRef.current = null;
+        silenceStartedAtRef.current = null;
+        silenceLoggedRef.current = false;
+        setShowSilenceWarning(false);
     }, [recordingState]);
 
     useEffect(() => {
@@ -153,7 +201,11 @@ export const SystemAudioRecorder: React.FC = () => {
         setRecordingError(null);
         setRecordingLevel(null);
         setRecordingDurationMs(0);
+        setRecordingBytesWritten(null);
         lastProgressAtRef.current = null;
+        silenceStartedAtRef.current = null;
+        silenceLoggedRef.current = false;
+        setShowSilenceWarning(false);
 
         try {
             const status = await window.api!.getRecordingPermissionStatus();
@@ -244,6 +296,33 @@ export const SystemAudioRecorder: React.FC = () => {
         return device.isDefault ? `${device.name} (Default)` : device.name;
     };
 
+    const runtimePlatform = isElectron ? window.api?.runtime?.platform : null;
+    const isMacOS = runtimePlatform === 'darwin';
+
+    const handleOpenRecordingPreferences = async () => {
+        if (!isElectron) return;
+
+        try {
+            await window.api?.openRecordingPreferences?.();
+        } catch (error: unknown) {
+            console.error('Failed to open recording preferences', error);
+        }
+    };
+
+    const handleRevealDevApp = async () => {
+        if (!isElectron) return;
+
+        try {
+            const ok = await window.api?.revealDevAppInFinder?.();
+
+            if (!ok) {
+                appendLog("Couldn't reveal the dev app bundle. Make sure you're running via `npm run dev`.");
+            }
+        } catch (error: unknown) {
+            console.error('Failed to reveal dev app bundle', error);
+        }
+    };
+
     return (
         <Stack spacing={2}>
             <Stack direction="row" spacing={2} alignItems="center">
@@ -265,6 +344,9 @@ export const SystemAudioRecorder: React.FC = () => {
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
                     {`Level: ${formatLevel(recordingLevel)}`}
+                </Typography>
+                <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                    {recordingBytesWritten !== null ? `Written: ${Math.round(recordingBytesWritten / 1024)} KB` : 'Written: N/A'}
                 </Typography>
                 {showDeviceSelect ? (
                     <FormControl size="small" sx={{ minWidth: 240 }} disabled={isRecordingActive}>
@@ -301,6 +383,28 @@ export const SystemAudioRecorder: React.FC = () => {
                 <Typography variant="body2" sx={{ color: 'error.main' }}>
                     {recordingError}
                 </Typography>
+            ) : null}
+            {showSilenceWarning ? (
+                <Stack spacing={1}>
+                    <Typography variant="body2" sx={{ color: 'warning.main' }}>
+                        {isMacOS
+                            ? "No system audio detected. On macOS, check that 'System Audio Recording' permission is enabled."
+                            : 'No system audio detected. Check that audio is playing.'}
+                    </Typography>
+                    {isMacOS ? (
+                        <Stack direction="row" spacing={1} alignItems="center">
+                            <Button size="small" variant="outlined" color="warning" onClick={handleOpenRecordingPreferences}>
+                                {'Open privacy settings'}
+                            </Button>
+                            <Button size="small" variant="outlined" color="warning" onClick={handleRevealDevApp}>
+                                {'Reveal dev app'}
+                            </Button>
+                            <Typography variant="body2" sx={{ opacity: 0.7 }}>
+                                {"If the app doesn't show up, click '+' and add 'out/dev/FineListener Dev.app' manually."}
+                            </Typography>
+                        </Stack>
+                    ) : null}
+                </Stack>
             ) : null}
             {deviceError ? (
                 <Typography variant="body2" sx={{ color: 'warning.main' }}>

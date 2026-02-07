@@ -3,6 +3,7 @@ import type { FileHandle } from 'fs/promises';
 import fsp from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { shell } from 'electron';
 import type { CaptureAdapter, CaptureAdapterEvents, CaptureAdapterStartOptions } from 'electron/src/services/capture/CaptureAdapter';
 import type { WavFormat } from '../AudioPreprocessor';
 import type { RecordingResult } from '../RecordingService';
@@ -48,6 +49,15 @@ export class AudioteeAdapter implements CaptureAdapter {
 
     constructor(config: AudioteeAdapterConfig = {}) {
         this.config = config;
+    }
+
+    public openScreenRecordingPreferences(): void {
+        if (process.platform !== 'darwin') return;
+
+        // AudioTee uses the "System Audio Recording" permission which is configured on this pane.
+        void shell.openExternal(
+            'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+        );
     }
 
     public async isAvailable(): Promise<boolean> {
@@ -334,6 +344,11 @@ export class AudioteeAdapter implements CaptureAdapter {
             message = JSON.parse(line) as AudioteeLogMessage;
         } catch {
             return;
+        }
+
+        if (message.message_type === 'debug' || message.message_type === 'info') {
+            // Keep this in main process output for dev debugging (TCC issues are often visible here).
+            console.log(`[audiotee:${message.message_type}]`, message.data?.message ?? '');
         }
 
         if (message.message_type === 'error') {

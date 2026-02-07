@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { app, type BrowserWindow, type IpcMain } from 'electron';
+import { app, shell, type BrowserWindow, type IpcMain } from 'electron';
 import { RecordingService, type RecordingStartOptions } from '../services/RecordingService';
 import { AudioteeAdapter } from '../services/capture/AudioteeAdapter';
 import type { CaptureAdapter } from '../services/capture/CaptureAdapter';
@@ -70,6 +70,22 @@ export function registerRecordingController(ipc: IpcMain, getMainWindow: () => B
         return [];
     });
 
+    ipc.handle('recording:reveal-dev-app', () => {
+        if (process.platform !== 'darwin') return false;
+
+        const devRoot = process.env.FINELISTENER_DEV_ROOT;
+
+        if (!devRoot) return false;
+
+        const devAppPath = path.resolve(devRoot, 'out', 'dev', 'FineListener Dev.app');
+
+        if (!fs.existsSync(devAppPath)) return false;
+
+        shell.showItemInFolder(devAppPath);
+
+        return true;
+    });
+
     ipc.handle('recording:start', async (_event, options?: RecordingStartOptions) => {
         if (adapter.isAvailable && !(await adapter.isAvailable())) {
             throw new Error(`${adapter.label} is not available.`);
@@ -96,6 +112,8 @@ function createRecordingAdapter(): CaptureAdapter {
 
 function resolveAudioteeBinaryPath(): string | undefined {
     const devPath = path.resolve(app.getAppPath(), 'node_modules', 'audiotee', 'bin', 'audiotee');
+    const electronResourcesPath = path.resolve(process.execPath, '..', '..', 'Resources');
+    const devBundledPath = path.resolve(electronResourcesPath, 'audiotee');
     const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath ?? app.getAppPath();
     const packagedPath = path.resolve(
         resourcesPath,
@@ -105,7 +123,9 @@ function resolveAudioteeBinaryPath(): string | undefined {
         'bin',
         'audiotee',
     );
-    const candidates = app.isPackaged ? [packagedPath, devPath] : [devPath, packagedPath];
+    const candidates = app.isPackaged
+        ? [packagedPath, devBundledPath, devPath]
+        : [devBundledPath, devPath, packagedPath];
 
     for (const candidate of candidates) {
         if (fs.existsSync(candidate)) {

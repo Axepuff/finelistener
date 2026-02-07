@@ -9,8 +9,11 @@ export default ts_eslint.config({
     ignores: [
         'node_modules',
         'dist',
+        'out',
         'coverage',
         'whisper.cpp',
+        'eslint.config.*',
+        'scripts',
         '**/*.config.{js,ts,mts}',
     ],
 }, {
