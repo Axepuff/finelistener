@@ -1,13 +1,16 @@
 import { Earbuds, Stop } from '@mui/icons-material';
 import {
     Button,
+    Checkbox,
     CircularProgress,
     FormControl,
+    FormControlLabel,
     IconButton,
     InputLabel,
     MenuItem,
     Select,
     Stack,
+    Typography,
 } from '@mui/material';
 import type { WhisperModelName } from 'electron/src/types/whisper';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
@@ -20,12 +23,12 @@ import { WhisperModelSelect } from '../WhisperModelSelect/WhisperModelSelect';
 const { appState, transcription } = atoms;
 
 const LANGS = [
-    { code: 'auto', label: 'Авто' },
-    { code: 'en', label: 'Английский' },
-    { code: 'ru', label: 'Русский' },
-    { code: 'es', label: 'Испанский' },
-    { code: 'de', label: 'Немецкий' },
-    { code: 'fr', label: 'Французский' },
+    { code: 'auto', label: 'Auto' },
+    { code: 'en', label: 'English' },
+    { code: 'ru', label: 'Russian' },
+    { code: 'es', label: 'Spanish' },
+    { code: 'de', label: 'German' },
+    { code: 'fr', label: 'French' },
 ];
 
 const formatErrorMessage = (err: unknown): string => {
@@ -35,22 +38,22 @@ const formatErrorMessage = (err: unknown): string => {
 };
 
 const formatDuration = (ms: number): string => {
-    if (!Number.isFinite(ms) || ms < 0) return '0 с';
+    if (!Number.isFinite(ms) || ms < 0) return '0 s';
 
     const totalSeconds = ms / 1000;
 
-    if (totalSeconds < 60) return `${totalSeconds.toFixed(1)} с`;
+    if (totalSeconds < 60) return `${totalSeconds.toFixed(1)} s`;
 
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds - minutes * 60;
 
-    return `${minutes} мин ${seconds.toFixed(1)} с`;
+    return `${minutes} min ${seconds.toFixed(1)} s`;
 };
 
 const formatSeconds = (seconds: number): string => {
-    if (!Number.isFinite(seconds) || seconds < 0) return '0 с';
+    if (!Number.isFinite(seconds) || seconds < 0) return '0 s';
 
-    return `${seconds.toFixed(2)} с`;
+    return `${seconds.toFixed(2)} s`;
 };
 
 const getShortFileName = (target: string) => target.split(/[/\\]/).pop() || target;
@@ -69,6 +72,9 @@ const TranscribeControl: React.FC<Props> = ({
     const [model, setModel] = useState<WhisperModelName>('large');
     const [isModelDownloaded, setIsModelDownloaded] = useState(false);
     const [isModelDownloadActive, setIsModelDownloadActive] = useState(false);
+    const [useCustomModelFile, setUseCustomModelFile] = useState(false);
+    const [customModelFile, setCustomModelFile] = useState<{ path: string; fileName: string } | null>(null);
+    const [isCustomModelImporting, setIsCustomModelImporting] = useState(false);
     const [maxContext, setMaxContext] = useState<number | null>(null);
     const [maxLen, setMaxLen] = useState<number | null>(null);
     const [splitOnWord, setSplitOnWord] = useState<boolean>(true);
@@ -78,14 +84,14 @@ const TranscribeControl: React.FC<Props> = ({
     const audioToTranscribe = useAtomValue(transcription.audioToTranscribe);
     const trimRange = useAtomValue(transcription.trimRange);
 
-    const appendLog = (message: string) => {
+    const appendLog = useCallback((message: string) => {
         setLog((prev) => {
             const prefix = prev ? '\n' : '';
             const timestamp = new Date().toLocaleTimeString();
 
             return `${prev}${prefix}[${timestamp}] ${message}`;
         });
-    };
+    }, [setLog]);
 
     const handleModelStatusChange = useCallback(
         (status: { isModelDownloaded: boolean; isDownloadActive: boolean }) => {
@@ -95,10 +101,45 @@ const TranscribeControl: React.FC<Props> = ({
         [],
     );
 
+    const handleImportCustomModel = useCallback(async () => {
+        if (!window.api?.importWhisperModelFromFile) {
+            appendLog('Custom model import is not available in this build.');
+
+            return;
+        }
+
+        setIsCustomModelImporting(true);
+
+        try {
+            const result = await window.api.importWhisperModelFromFile();
+
+            if (!result) return;
+
+            if (!result.ok) {
+                appendLog(`Failed to import model: ${result.error}`);
+
+                return;
+            }
+
+            setCustomModelFile({ path: result.path, fileName: result.fileName });
+            appendLog(`Imported model file: ${result.fileName}`);
+        } catch (err) {
+            console.error('Failed to import custom model', err);
+            appendLog(`Failed to import model: ${formatErrorMessage(err)}`);
+        } finally {
+            setIsCustomModelImporting(false);
+        }
+    }, [appendLog]);
+
     const handleStart = async () => {
         if (!isElectron || !canStart) return;
+        if (useCustomModelFile && !customModelFile) {
+            appendLog('No custom model file selected.');
+
+            return;
+        }
         if (audioToTranscribe.length === 0) {
-            appendLog('Не выбрано ни одного аудиофайла для распознавания.');
+            appendLog('No audio files selected for transcription.');
 
             return;
         }
@@ -111,7 +152,7 @@ const TranscribeControl: React.FC<Props> = ({
                 : undefined;
 
         if (trimRange && !segment) {
-            appendLog('Диапазон для обрезки задан некорректно. Отметьте начало и конец на плеере.');
+            appendLog('Invalid trim range. Please set the start and end positions in the player.');
 
             return;
         }
@@ -128,10 +169,10 @@ const TranscribeControl: React.FC<Props> = ({
 
                 if (segment) {
                     appendLog(
-                        `Распознаю фрагмент ${formatSeconds(segment.start)} — ${formatSeconds(segment.end)} файла ${fileName}`,
+                        `Transcribing segment ${formatSeconds(segment.start)} — ${formatSeconds(segment.end)} of ${fileName}`,
                     );
                 } else {
-                    appendLog(`Запускаю распознавание Whisper для ${fileName}`);
+                    appendLog(`Starting Whisper transcription for ${fileName}`);
                 }
 
                 const startedAt = performance.now();
@@ -139,6 +180,7 @@ const TranscribeControl: React.FC<Props> = ({
                 await window.api!.transcribeStream(p, {
                     language: lang,
                     model,
+                    modelPath: useCustomModelFile ? customModelFile?.path : undefined,
                     maxContext: maxContext ?? -1,
                     maxLen: maxLen ?? 0,
                     splitOnWord,
@@ -147,12 +189,12 @@ const TranscribeControl: React.FC<Props> = ({
                 });
                 const durationMs = performance.now() - startedAt;
 
-                appendLog(`Распознавание Whisper завершено для ${fileName}`);
-                appendLog(`Обработано ${fileName}: ${formatDuration(durationMs)}.`);
+                appendLog(`Whisper transcription finished for ${fileName}`);
+                appendLog(`Processed ${fileName}: ${formatDuration(durationMs)}.`);
             }
             completed = true;
         } catch (err) {
-            appendLog(`Whisper завершился с ошибкой: ${formatErrorMessage(err)}`);
+            appendLog(`Whisper failed: ${formatErrorMessage(err)}`);
         } finally {
             onTranscribeEnd(completed ? segment : undefined);
             setUiState('ready');
@@ -164,12 +206,12 @@ const TranscribeControl: React.FC<Props> = ({
             const stopped = await window.api!.stopTranscription();
 
             if (stopped) {
-                appendLog('Распознавание остановлено по запросу пользователя.');
+                appendLog('Transcription stopped.');
             } else {
-                appendLog('Сейчас ничего не распознается.');
+                appendLog('No transcription is running.');
             }
         } catch (err: unknown) {
-            appendLog(`Не удалось остановить Whisper: ${formatErrorMessage(err)}`);
+            appendLog(`Failed to stop Whisper: ${formatErrorMessage(err)}`);
         } finally {
             setUiState('ready');
         }
@@ -182,15 +224,15 @@ const TranscribeControl: React.FC<Props> = ({
     };
 
     const loading = uiState === 'transcribing';
-    const canStart = isModelDownloaded && !isModelDownloadActive;
+    const canStart = !isModelDownloadActive && (useCustomModelFile ? Boolean(customModelFile) : isModelDownloaded);
 
     return (
         <Stack spacing={2}>
             <FormControl size="small" sx={{ minWidth: 160 }}>
-                <InputLabel id="lang-label">{'Язык'}</InputLabel>
+                <InputLabel id="lang-label">{'Language'}</InputLabel>
                 <Select
                     labelId="lang-label"
-                    label="Язык"
+                    label="Talking language"
                     value={lang}
                     onChange={(e) => setLang(e.target.value)}
                 >
@@ -210,12 +252,12 @@ const TranscribeControl: React.FC<Props> = ({
                     color="primary"
                     startIcon={loading ? <CircularProgress size={8} /> : <Earbuds />}
                 >
-                    {'Распознать'}
+                    {'Transcribe'}
                 </Button>
                 <IconButton onClick={handleStop} color="error" disabled={uiState !== 'transcribing'}>
                     <Stop />
                 </IconButton>
-                <Button variant="outlined" onClick={handleClear}>{'Сброс'}</Button>
+                <Button variant="outlined" onClick={handleClear}>{'Reset'}</Button>
             </Stack>
 
             <WhisperModelSelect
@@ -223,7 +265,49 @@ const TranscribeControl: React.FC<Props> = ({
                 onChange={setModel}
                 onStatusChange={handleModelStatusChange}
                 onDownloadError={appendLog}
+                disabled={useCustomModelFile}
             />
+
+            <Stack spacing={0.75}>
+                <FormControlLabel
+                    control={(
+                        <Checkbox
+                            checked={useCustomModelFile}
+                            onChange={(e) => setUseCustomModelFile(e.target.checked)}
+                        />
+                    )}
+                    label="Use a local model file"
+                />
+                {useCustomModelFile ? (
+                    <Stack direction="row" spacing={1} alignItems="center">
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={handleImportCustomModel}
+                            disabled={loading || isCustomModelImporting}
+                        >
+                            {'Choose file…'}
+                        </Button>
+                        <Typography
+                            variant="caption"
+                            color={customModelFile ? 'text.secondary' : 'error'}
+                            sx={{ flexGrow: 1 }}
+                        >
+                            {customModelFile?.fileName ?? 'No file selected'}
+                        </Typography>
+                        {customModelFile ? (
+                            <Button
+                                variant="text"
+                                size="small"
+                                onClick={() => setCustomModelFile(null)}
+                                disabled={loading || isCustomModelImporting}
+                            >
+                                {'Clear'}
+                            </Button>
+                        ) : null}
+                    </Stack>
+                ) : null}
+            </Stack>
 
             <TranscribeAdvancedSettings
                 maxContext={maxContext}

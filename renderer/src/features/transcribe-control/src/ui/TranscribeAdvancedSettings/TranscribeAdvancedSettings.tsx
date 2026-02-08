@@ -36,14 +36,14 @@ export const TranscribeAdvancedSettings: React.FC<Props> = ({
         <>
             <FormControlLabel
                 control={<Switch checked={isOpen} onChange={() => setIsOpen((prev) => !prev)} />}
-                label="Расширенные настройки"
+                label="Advanced settings"
             />
             <Grow in={isOpen}>
                 <Stack spacing={1.5}>
                     <TextField
                         type="number"
                         size="small"
-                        label="Максимальный контекст"
+                        label="Max context"
                         helperText="--max-context"
                         value={maxContext}
                         onChange={(e) => onChangeMaxContext(e.target.value ? Number(e.target.value) : null)}
@@ -51,7 +51,7 @@ export const TranscribeAdvancedSettings: React.FC<Props> = ({
                     <TextField
                         type="number"
                         size="small"
-                        label="Максимальная длина сегмента"
+                        label="Max segment length"
                         helperText="--max-len"
                         value={maxLen}
                         onChange={(e) => onChangeMaxLen(e.target.value ? Number(e.target.value) : null)}
@@ -63,13 +63,13 @@ export const TranscribeAdvancedSettings: React.FC<Props> = ({
                                 onChange={(e) => onChangeSplitOnWord(e.target.checked)}
                             />
                         )}
-                        label="Делить по словам"
+                        label="Split on words"
                     />
                     <FormControlLabel
                         control={(
                             <Checkbox checked={useVad} onChange={(e) => onChangeUseVad(e.target.checked)} />
                         )}
-                        label="Использовать определение тишины"
+                        label="Use voice activity detection"
                     />
                 </Stack>
             </Grow>

@@ -96,7 +96,10 @@ export const resolveModelPath = (model: WhisperModelName): string => {
 /**
  * Ищем бинарники/модели whisper внутри ресурсов приложения.
  */
-export function resolveWhisperPaths(model: WhisperModelName = DEFAULT_MODEL_NAME): ResolvedWhisperPaths {
+export function resolveWhisperPaths(
+    model: WhisperModelName = DEFAULT_MODEL_NAME,
+    modelPathOverride?: string,
+): ResolvedWhisperPaths {
     const appPath = app.getAppPath();
     const baseCandidates = IS_DEV
         ? [
@@ -115,7 +118,9 @@ export function resolveWhisperPaths(model: WhisperModelName = DEFAULT_MODEL_NAME
         ],
         'whisper-server binary is missing. Did you run the native build?',
     );
-    const modelPath = resolveModelPath(model);
+    const modelPath = modelPathOverride
+        ? resolveUserModelOverridePath(modelPathOverride)
+        : resolveModelPath(model);
     const vadModelPath = pickExistingPath(
         getBundledModelsCandidates().map((baseDir) => path.join(baseDir, VAD_MODEL_FILE)),
         'VAD model file is missing',
@@ -163,4 +168,21 @@ function pickExistingPath(candidates: string[], errorMessage: string): string {
     }
 
     throw new Error(`${errorMessage}: ${candidates.join(', ')}`);
+}
+
+function resolveUserModelOverridePath(modelPathOverride: string): string {
+    const resolved = path.resolve(modelPathOverride);
+    const userModelsDir = getUserModelsDir();
+
+    if (!isPathInsideDir(resolved, userModelsDir)) {
+        throw new Error('Custom model path must be inside user models directory');
+    }
+
+    return pickExistingPath([resolved], 'Custom Whisper model file is missing');
+}
+
+function isPathInsideDir(candidatePath: string, baseDir: string): boolean {
+    const relative = path.relative(baseDir, candidatePath);
+
+    return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative);
 }

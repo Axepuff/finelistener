@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+type WhisperModelDownloadProgressPayload = {
+    name: string;
+    percent: number | null;
+    downloadedBytes: number;
+    totalBytes: number | null;
+};
+
 contextBridge.exposeInMainWorld('api', {
     runtime: {
         platform: process.platform,
@@ -19,6 +26,7 @@ contextBridge.exposeInMainWorld('api', {
     stopTranscription: () => ipcRenderer.invoke('stop-transcription'),
     getWhisperModels: () => ipcRenderer.invoke('whisper-models:list'),
     downloadWhisperModel: (modelName: string) => ipcRenderer.invoke('whisper-models:download', modelName),
+    importWhisperModelFromFile: () => ipcRenderer.invoke('whisper-models:import-from-file'),
     openDevTools: () => ipcRenderer.invoke('debug:open-devtools'),
     onTranscribeText: (cb: (chunk: string) => void) => {
         const handler = (_e: unknown, chunk: string) => cb(chunk);
@@ -69,10 +77,12 @@ contextBridge.exposeInMainWorld('api', {
 
         return () => ipcRenderer.removeListener('recording:error', handler);
     },
-    onWhisperModelDownloadProgress: (cb: (payload: { name: string; percent: number | null; downloadedBytes: number; totalBytes: number | null }) => void) => {
+    onWhisperModelDownloadProgress: (
+        cb: (payload: WhisperModelDownloadProgressPayload) => void,
+    ) => {
         const handler = (
             _e: unknown,
-            payload: { name: string; percent: number | null; downloadedBytes: number; totalBytes: number | null },
+            payload: WhisperModelDownloadProgressPayload,
         ) => cb(payload);
 
         ipcRenderer.on('whisper-models:download-progress', handler);

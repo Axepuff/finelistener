@@ -180,10 +180,10 @@ export const WhisperModelSelect: React.FC<Props> = ({
     return (
         <>
             <FormControl size="small">
-                <InputLabel id="transcribe-model-label">{'Модель'}</InputLabel>
+                <InputLabel id="transcribe-model-label">{'Model'}</InputLabel>
                 <Select
                     labelId="transcribe-model-label"
-                    label="Модель"
+                    label="Model"
                     value={value}
                     onChange={handleModelChange}
                     renderValue={renderModelValue}

@@ -42,6 +42,11 @@ declare global {
             stopTranscription: () => Promise<boolean>;
             getWhisperModels: () => Promise<WhisperModelInfo[]>;
             downloadWhisperModel: (modelName: WhisperModelName) => Promise<void>;
+            importWhisperModelFromFile: () => Promise<
+                | { ok: true; path: string; fileName: string }
+                | { ok: false; error: string }
+                | null
+            >;
             onWhisperModelDownloadProgress: (cb: (payload: WhisperModelDownloadProgress) => void) => () => void;
             openDevTools: () => Promise<boolean>;
         };
