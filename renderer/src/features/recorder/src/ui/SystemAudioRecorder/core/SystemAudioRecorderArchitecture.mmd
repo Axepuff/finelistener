@@ -1,0 +1,21 @@
+flowchart LR
+    UI["UI + useSystemAudioRecorder"] --> F["SystemAudioRecorderStore (Facade)"]
+
+    F --> A["RecordingAvailabilityStore"]
+    F --> D["RecordingDevicesStore"]
+    F --> S["RecordingSessionStore"]
+    F --> SA["RecordingSupportActionsStore"]
+    F --> L["TranscriptionRecordingLogService"]
+
+    A --> API["window.api"]
+    D --> API
+    S --> API
+    SA --> API
+
+    S -. "reads selected device" .-> D
+    S -. "updates availability state on start" .-> A
+    S -. "writes logs" .-> L
+    SA -. "writes logs" .-> L
+
+    S --> AUDIO["atoms.transcription.audioToTranscribe"]
+    L --> LOG["atoms.transcription.log (via jotaiStore)"]
