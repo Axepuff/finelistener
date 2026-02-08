@@ -1,14 +1,5 @@
-import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
-import StopIcon from '@mui/icons-material/Stop';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import FormControl from '@mui/material/FormControl';
-import IconButton from '@mui/material/IconButton';
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import Select, { type SelectChangeEvent } from '@mui/material/Select';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
+import { ActionIcon, Button, Group, Loader, Select, Text } from '@mantine/core';
+import { IconPlayerRecordFilled, IconPlayerStopFilled } from '@tabler/icons-react';
 import { useSystemAudioRecorder } from '@~/recorder/src/ui/SystemAudioRecorder/core/useSystemAudioRecorder';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import React from 'react';
@@ -42,58 +33,52 @@ export const SystemAudioRecorderControls: React.FC = () => {
     const writtenLabel = recordingBytesWritten !== null
         ? `Written: ${Math.round(recordingBytesWritten / 1024)} KB`
         : 'Written: N/A';
+    const deviceOptions = devices
+        .map((device) => {
+            const value = getRecordingDeviceId(device);
 
-    const handleDeviceChange = (event: SelectChangeEvent<string>) => {
-        onDeviceChange(event.target.value);
-    };
+            if (!value) return null;
+
+            return { value, label: formatDeviceLabel(device) };
+        })
+        .filter((device): device is { value: string; label: string } => device !== null);
 
     return (
-        <Stack direction="row" spacing={2} alignItems="center">
+        <Group gap={12} align="center" wrap="wrap">
             <Button
-                variant="contained"
-                color="error"
-                startIcon={<FiberManualRecordIcon />}
+                color="red"
+                leftSection={<IconPlayerRecordFilled size={16} />}
                 disabled={!canStartRecording}
                 onClick={onStartRecording}
             >
                 {'Record system audio'}
             </Button>
-            <IconButton color="error" onClick={onStopRecording} disabled={!canStopRecording}>
-                <StopIcon />
-            </IconButton>
-            {isProcessingRecording ? <CircularProgress size={18} /> : null}
-            <Typography variant="body2" sx={{ opacity: 0.8 }}>
+            <ActionIcon color="red" onClick={onStopRecording} disabled={!canStopRecording}>
+                <IconPlayerStopFilled size={16} />
+            </ActionIcon>
+            {isProcessingRecording ? <Loader size={18} /> : null}
+            <Text size="sm" c="dimmed">
                 {isRecordingActive ? `Recording: ${durationLabel}` : 'Recording inactive'}
-            </Typography>
-            <Typography variant="body2" sx={{ opacity: 0.8 }}>
+            </Text>
+            <Text size="sm" c="dimmed">
                 {`Level: ${levelLabel}`}
-            </Typography>
-            <Typography variant="body2" sx={{ opacity: 0.8 }}>
+            </Text>
+            <Text size="sm" c="dimmed">
                 {writtenLabel}
-            </Typography>
+            </Text>
             {showDeviceSelect ? (
-                <FormControl size="small" sx={{ minWidth: 240 }} disabled={isRecordingActive}>
-                    <InputLabel id="system-audio-device-label">{'Output device'}</InputLabel>
-                    <Select
-                        labelId="system-audio-device-label"
-                        value={selectedDeviceId}
-                        label="Output device"
-                        onChange={handleDeviceChange}
-                    >
-                        {devices.map((device) => {
-                            const value = getRecordingDeviceId(device);
-
-                            if (!value) return null;
-
-                            return (
-                                <MenuItem key={value} value={value}>
-                                    {formatDeviceLabel(device)}
-                                </MenuItem>
-                            );
-                        })}
-                    </Select>
-                </FormControl>
+                <Select
+                    label="Output device"
+                    data={deviceOptions}
+                    value={selectedDeviceId || null}
+                    onChange={(value) => {
+                        if (!value) return;
+                        onDeviceChange(value);
+                    }}
+                    w={240}
+                    disabled={isRecordingActive}
+                />
             ) : null}
-        </Stack>
+        </Group>
     );
 };

@@ -1,6 +1,5 @@
-import { Pause, PlayArrow } from '@mui/icons-material';
-import { Box, Button, CircularProgress, IconButton, Stack, Typography } from '@mui/material';
-import Paper from '@mui/material/Paper';
+import { ActionIcon, Box, Button, Group, Loader, Paper, Text } from '@mantine/core';
+import { IconPlayerPause, IconPlayerPlay } from '@tabler/icons-react';
 import { WaveSurferAdapter } from '@~/player/src/ui/Player/WavesurfAdapter';
 import { useAtom, useAtomValue } from 'jotai';
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
@@ -103,51 +102,51 @@ export const Player: FC = () => {
 
     const selectionText = useMemo(() => {
         if (isRangeValid && trimRange) {
-            return `Будет распознан фрагмент ${formatPreciseTime(trimRange.start!)} — ${formatPreciseTime(trimRange.end!)}`;
+            return `Selected segment: ${formatPreciseTime(trimRange.start!)} — ${formatPreciseTime(trimRange.end!)}`;
         }
 
         if (trimRange?.start !== undefined || trimRange?.end !== undefined) {
-            return 'Диапазон отмечен некорректно. Конец должен быть позже начала.';
+            return 'Invalid selection range. End must be greater than start.';
         }
 
-        return 'Фрагмент не выбран, будет распознан весь файл.';
+        return 'No selection. The whole file will be transcribed.';
     }, [isRangeValid, trimRange]);
 
     return (
-        <Paper variant="outlined" sx={{ p: 3 }}>
-            <Box sx={{ position: 'relative' }}>
-                {isLoading ? <CircularProgress sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} /> : null}
+        <Paper withBorder={true} style={{ padding: 18 }}>
+            <Box style={{ position: 'relative' }}>
+                {isLoading ? <Loader style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} /> : null}
                 <div ref={containerRef} />
             </Box>
-            <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 2 }}>
-                <IconButton onClick={onPlayPause}>
-                    {isPlaying ? <Pause /> : <PlayArrow />}
-                </IconButton>
-                <Typography variant="body2">
-                    {'Текущая позиция: '}
+            <Group gap={12} align="center" mt={12}>
+                <ActionIcon onClick={onPlayPause} variant="subtle">
+                    {isPlaying ? <IconPlayerPause size={16} /> : <IconPlayerPlay size={16} />}
+                </ActionIcon>
+                <Text size="sm">
+                    {'Current position: '}
                     {formatPreciseTime(currentPosition)}
-                </Typography>
-            </Stack>
+                </Text>
+            </Group>
 
-            <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap' }}>
-                <Button variant="outlined" onClick={handleMarkStart} disabled={!currentAudioPath}>
-                    {'Отметить начало'}
+            <Group gap={8} mt={12} style={{ flexWrap: 'wrap' }}>
+                <Button variant="outline" onClick={handleMarkStart} disabled={!currentAudioPath}>
+                    {'Mark start'}
                 </Button>
                 <Button
-                    variant="outlined"
+                    variant="outline"
                     onClick={handleMarkEnd}
                     disabled={!currentAudioPath || trimRange?.start === undefined}
                 >
-                    {'Отметить конец'}
+                    {'Mark end'}
                 </Button>
-                <Button variant="text" onClick={handleClearRange} disabled={!trimRange}>
-                    {'Сбросить выделение'}
+                <Button variant="subtle" onClick={handleClearRange} disabled={!trimRange}>
+                    {'Clear selection'}
                 </Button>
-            </Stack>
+            </Group>
 
-            <Typography variant="body2" sx={{ mt: 1 }}>
+            <Text size="sm" mt={8}>
                 {selectionText}
-            </Typography>
+            </Text>
         </Paper>
     );
 };

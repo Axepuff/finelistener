@@ -1,7 +1,5 @@
-import AudioFileIcon from '@mui/icons-material/AudioFile';
-import Button from '@mui/material/Button';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
+import { Button, Group, Stack, Text } from '@mantine/core';
+import { IconFileMusic } from '@tabler/icons-react';
 import { SystemAudioRecorder } from '@~/recorder';
 import { useAtom } from 'jotai';
 import { type FC } from 'react';
@@ -11,6 +9,8 @@ import { useApp } from '../../../../../AppContext';
 export const FileSelect: FC = () => {
     const { isElectron } = useApp();
     const [audioToTranscribe, setAudioToTranscribe] = useAtom(atoms.transcription.audioToTranscribe);
+    const [, setRunOutcome] = useAtom(atoms.transcription.runOutcome);
+    const [, setRunErrorMessage] = useAtom(atoms.transcription.runErrorMessage);
 
     const handlePick = async () => {
         if (!isElectron) return;
@@ -24,6 +24,8 @@ export const FileSelect: FC = () => {
             const { path } = await window.api!.convertAudio({ audioPath: file, lowPass: 12000, highPass: 80 });
 
             setAudioToTranscribe([path]);
+            setRunOutcome('none');
+            setRunErrorMessage(null);
         } catch (error) {
             console.error('Failed to convert audio', error);
         }
@@ -31,25 +33,21 @@ export const FileSelect: FC = () => {
 
     const selectedLabel = audioToTranscribe.length > 0
         ? audioToTranscribe.join(', ')
-        : 'Файл не выбран';
+        : 'No file selected';
 
     return (
-        <Stack spacing={2}>
-            <Stack direction="row" spacing={2} alignItems="center">
+        <Stack gap={12}>
+            <Group gap={12} align="center">
                 <Button
-                    component="label"
-                    role={undefined}
-                    variant="contained"
-                    tabIndex={-1}
                     onClick={handlePick}
-                    startIcon={<AudioFileIcon />}
+                    leftSection={<IconFileMusic size={16} />}
                 >
-                    {'Выбрать аудиофайл'}
+                    {'Choose audio file'}
                 </Button>
-                <Typography variant="subtitle2" sx={{ mt: 2, opacity: 0.7 }}>
+                <Text size="sm" c="dimmed">
                     {selectedLabel}
-                </Typography>
-            </Stack>
+                </Text>
+            </Group>
             <SystemAudioRecorder />
         </Stack>
     );

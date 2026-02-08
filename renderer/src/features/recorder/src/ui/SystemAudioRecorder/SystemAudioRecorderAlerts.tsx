@@ -1,6 +1,4 @@
-import Button from '@mui/material/Button';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
+import { Button, Group, Stack, Text } from '@mantine/core';
 import { useSystemAudioRecorder } from '@~/recorder/src/ui/SystemAudioRecorder/core/useSystemAudioRecorder';
 import React from 'react';
 
@@ -8,43 +6,43 @@ export const SystemAudioRecorderAlerts: React.FC = () => {
     const { alerts } = useSystemAudioRecorder();
 
     return (
-        <Stack spacing={2}>
+        <Stack gap={12}>
             {alerts.recordingError ? (
-                <Typography variant="body2" sx={{ color: 'error.main' }}>
+                <Text size="sm" c="red">
                     {alerts.recordingError}
-                </Typography>
+                </Text>
             ) : null}
             {alerts.showSilenceWarning ? (
-                <Stack spacing={1}>
-                    <Typography variant="body2" sx={{ color: 'warning.main' }}>
+                <Stack gap={8}>
+                    <Text size="sm" c="yellow.7">
                         {alerts.isMacOS
                             ? "No system audio detected. On macOS, check that 'System Audio Recording' permission is enabled."
                             : 'No system audio detected. Check that audio is playing.'}
-                    </Typography>
+                    </Text>
                     {alerts.isMacOS ? (
-                        <Stack direction="row" spacing={1} alignItems="center">
-                            <Button size="small" variant="outlined" color="warning" onClick={alerts.onOpenRecordingPreferences}>
+                        <Group gap={8} align="center" wrap="wrap">
+                            <Button size="compact-sm" variant="outline" color="yellow" onClick={alerts.onOpenRecordingPreferences}>
                                 {'Open privacy settings'}
                             </Button>
-                            <Button size="small" variant="outlined" color="warning" onClick={alerts.onRevealDevApp}>
+                            <Button size="compact-sm" variant="outline" color="yellow" onClick={alerts.onRevealDevApp}>
                                 {'Reveal dev app'}
                             </Button>
-                            <Typography variant="body2" sx={{ opacity: 0.7 }}>
+                            <Text size="sm" c="dimmed">
                                 {"If the app doesn't show up, click '+' and add 'out/dev/FineListener Dev.app' manually."}
-                            </Typography>
-                        </Stack>
+                            </Text>
+                        </Group>
                     ) : null}
                 </Stack>
             ) : null}
             {alerts.deviceError ? (
-                <Typography variant="body2" sx={{ color: 'warning.main' }}>
+                <Text size="sm" c="yellow.7">
                     {`Failed to load devices: ${alerts.deviceError}`}
-                </Typography>
+                </Text>
             ) : null}
             {!alerts.isRecordingAvailable ? (
-                <Typography variant="body2" sx={{ color: 'warning.main' }}>
+                <Text size="sm" c="yellow.7">
                     {'System audio recording is unavailable.'}
-                </Typography>
+                </Text>
             ) : null}
         </Stack>
     );

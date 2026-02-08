@@ -123,11 +123,10 @@
     "vitest": "^4.0.16"
   },
   "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
     "@fontsource/roboto": "^5.2.6",
-    "@mui/icons-material": "^7.3.1",
-    "@mui/material": "^7.3.1",
+    "@mantine/core": "^8.3.14",
+    "@mantine/hooks": "^8.3.14",
+    "@tabler/icons-react": "^3.36.1",
     "@wavesurfer/react": "^1.0.11",
     "application-loopback": "^1.2.6",
     "audiotee": "^0.0.7",

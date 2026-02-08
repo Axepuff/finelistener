@@ -1,4 +1,4 @@
-import CircularProgress from '@mui/material/CircularProgress';
+import { Loader } from '@mantine/core';
 import { useAtomValue } from 'jotai';
 import { FC } from 'react';
 import { atoms } from 'renderer/src/atoms';
@@ -9,7 +9,7 @@ export const TranscribeState: FC = () => {
     const state = useAtomValue(appState.uiState);
 
     if (state === 'transcribing') {
-        return <CircularProgress color="success" />;
+        return <Loader color="green" />;
     }
 
     return null;

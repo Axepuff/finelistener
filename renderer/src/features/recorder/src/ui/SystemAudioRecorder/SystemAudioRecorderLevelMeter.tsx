@@ -1,4 +1,4 @@
-import { LinearProgress } from '@mui/material';
+import { Progress } from '@mantine/core';
 import { useSystemAudioRecorder } from '@~/recorder/src/ui/SystemAudioRecorder/core/useSystemAudioRecorder';
 
 export const SystemAudioRecorderLevelMeter: React.FC = () => {
@@ -9,10 +9,10 @@ export const SystemAudioRecorderLevelMeter: React.FC = () => {
     const value = Math.min(100, Math.max(0, (meter.recordingLevel?.peak ?? 0) * 100));
 
     return (
-        <LinearProgress
-            variant="determinate"
-            color={meter.recordingLevel?.clipped ? 'error' : 'primary'}
+        <Progress
+            color={meter.recordingLevel?.clipped ? 'red' : 'gray'}
             value={value}
+            size={4}
         />
     );
 };

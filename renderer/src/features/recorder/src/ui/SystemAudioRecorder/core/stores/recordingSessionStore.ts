@@ -257,6 +257,8 @@ export class RecordingSessionStore {
             });
 
             set(atoms.transcription.audioToTranscribe, [path]);
+            set(atoms.transcription.runOutcome, 'none');
+            set(atoms.transcription.runErrorMessage, null);
             this.dependencies.logService.append('Audio prepared and loaded into the player.');
         } catch (error: unknown) {
             const message = getErrorMessage(error);

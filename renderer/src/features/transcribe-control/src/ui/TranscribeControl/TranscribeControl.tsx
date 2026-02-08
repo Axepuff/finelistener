@@ -1,20 +1,8 @@
-import { Earbuds, Stop } from '@mui/icons-material';
-import {
-    Button,
-    Checkbox,
-    CircularProgress,
-    FormControl,
-    FormControlLabel,
-    IconButton,
-    InputLabel,
-    MenuItem,
-    Select,
-    Stack,
-    Typography,
-} from '@mui/material';
+import { ActionIcon, Button, Checkbox, Group, Loader, Select, Stack, Text } from '@mantine/core';
+import { IconHeadphones, IconPlayerStopFilled, IconBackspaceFilled } from '@tabler/icons-react';
 import type { WhisperModelName } from 'electron/src/types/whisper';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { atoms, type RegionTiming } from 'renderer/src/atoms';
 import { useApp } from '../../../../../AppContext';
 import { TranscribeAdvancedSettings } from '../TranscribeAdvancedSettings/TranscribeAdvancedSettings';
@@ -81,8 +69,14 @@ const TranscribeControl: React.FC<Props> = ({
     const [useVad, setUseVad] = useState<boolean>(true);
     const [uiState, setUiState] = useAtom(appState.uiState);
     const setLog = useSetAtom(transcription.log);
+    const setRunOutcome = useSetAtom(transcription.runOutcome);
+    const setRunErrorMessage = useSetAtom(transcription.runErrorMessage);
     const audioToTranscribe = useAtomValue(transcription.audioToTranscribe);
     const trimRange = useAtomValue(transcription.trimRange);
+    const langData = useMemo(
+        () => LANGS.map((langOption) => ({ value: langOption.code, label: langOption.label })),
+        [],
+    );
 
     const appendLog = useCallback((message: string) => {
         setLog((prev) => {
@@ -159,6 +153,8 @@ const TranscribeControl: React.FC<Props> = ({
 
         onTranscribeStart();
 
+        setRunOutcome('none');
+        setRunErrorMessage(null);
         setUiState('transcribing');
         const targets = audioToTranscribe;
         let completed = false;
@@ -193,8 +189,14 @@ const TranscribeControl: React.FC<Props> = ({
                 appendLog(`Processed ${fileName}: ${formatDuration(durationMs)}.`);
             }
             completed = true;
+            setRunOutcome('success');
+            setRunErrorMessage(null);
         } catch (err) {
-            appendLog(`Whisper failed: ${formatErrorMessage(err)}`);
+            const message = formatErrorMessage(err);
+
+            appendLog(`Whisper failed: ${message}`);
+            setRunOutcome('error');
+            setRunErrorMessage(message);
         } finally {
             onTranscribeEnd(completed ? segment : undefined);
             setUiState('ready');
@@ -213,6 +215,8 @@ const TranscribeControl: React.FC<Props> = ({
         } catch (err: unknown) {
             appendLog(`Failed to stop Whisper: ${formatErrorMessage(err)}`);
         } finally {
+            setRunOutcome('none');
+            setRunErrorMessage(null);
             setUiState('ready');
         }
     };
@@ -227,38 +231,33 @@ const TranscribeControl: React.FC<Props> = ({
     const canStart = !isModelDownloadActive && (useCustomModelFile ? Boolean(customModelFile) : isModelDownloaded);
 
     return (
-        <Stack spacing={2}>
-            <FormControl size="small" sx={{ minWidth: 160 }}>
-                <InputLabel id="lang-label">{'Language'}</InputLabel>
-                <Select
-                    labelId="lang-label"
-                    label="Talking language"
-                    value={lang}
-                    onChange={(e) => setLang(e.target.value)}
-                >
-                    {LANGS.map((l) => (
-                        <MenuItem key={l.code} value={l.code}>
-                            {l.label}
-                        </MenuItem>
-                    ))}
-                </Select>
-            </FormControl>
-            <Stack direction="row" spacing={1}>
+        <Stack gap={12}>
+            <Select
+                w={160}
+                label="Language"
+                data={langData}
+                value={lang}
+                onChange={(value) => {
+                    if (!value) return;
+                    setLang(value);
+                }}
+            />
+            <Group gap={8} wrap="nowrap">
                 <Button
                     fullWidth={true}
-                    variant="contained"
                     onClick={handleStart}
                     disabled={loading || !canStart}
-                    color="primary"
-                    startIcon={loading ? <CircularProgress size={8} /> : <Earbuds />}
+                    leftSection={loading ? <Loader size={12} /> : <IconHeadphones size={16} />}
                 >
                     {'Transcribe'}
                 </Button>
-                <IconButton onClick={handleStop} color="error" disabled={uiState !== 'transcribing'}>
-                    <Stop />
-                </IconButton>
-                <Button variant="outlined" onClick={handleClear}>{'Reset'}</Button>
-            </Stack>
+                <ActionIcon onClick={handleStop} color="red" size={36} disabled={uiState !== 'transcribing'}>
+                    <IconPlayerStopFilled size={20} />
+                </ActionIcon>
+                <ActionIcon onClick={handleClear} color="red" size={36} disabled={uiState !== 'transcribing'}>
+                    <IconBackspaceFilled size={20} />
+                </ActionIcon>
+            </Group>
 
             <WhisperModelSelect
                 value={model}
@@ -268,44 +267,38 @@ const TranscribeControl: React.FC<Props> = ({
                 disabled={useCustomModelFile}
             />
 
-            <Stack spacing={0.75}>
-                <FormControlLabel
-                    control={(
-                        <Checkbox
-                            checked={useCustomModelFile}
-                            onChange={(e) => setUseCustomModelFile(e.target.checked)}
-                        />
-                    )}
+            <Stack gap={8}>
+                <Checkbox
+                    checked={useCustomModelFile}
+                    onChange={(event) => setUseCustomModelFile(event.currentTarget.checked)}
                     label="Use a local model file"
                 />
                 {useCustomModelFile ? (
-                    <Stack direction="row" spacing={1} alignItems="center">
+                    <Group gap={8} align="center" wrap="nowrap">
                         <Button
-                            variant="outlined"
-                            size="small"
+                            variant="outline"
                             onClick={handleImportCustomModel}
                             disabled={loading || isCustomModelImporting}
                         >
-                            {'Choose file…'}
+                            {'Choose file...'}
                         </Button>
-                        <Typography
-                            variant="caption"
-                            color={customModelFile ? 'text.secondary' : 'error'}
-                            sx={{ flexGrow: 1 }}
+                        <Text
+                            size="xs"
+                            c={customModelFile ? 'dimmed' : 'red'}
+                            style={{ flexGrow: 1 }}
                         >
                             {customModelFile?.fileName ?? 'No file selected'}
-                        </Typography>
+                        </Text>
                         {customModelFile ? (
                             <Button
-                                variant="text"
-                                size="small"
+                                variant="subtle"
                                 onClick={() => setCustomModelFile(null)}
                                 disabled={loading || isCustomModelImporting}
                             >
                                 {'Clear'}
                             </Button>
                         ) : null}
-                    </Stack>
+                    </Group>
                 ) : null}
             </Stack>
 

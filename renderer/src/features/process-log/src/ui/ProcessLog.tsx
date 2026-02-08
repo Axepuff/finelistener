@@ -1,4 +1,4 @@
-import { Button, FormControlLabel, Grow, Paper, Stack, Switch, Typography } from '@mui/material';
+import { Button, Collapse, Paper, Stack, Switch, Text } from '@mantine/core';
 import { useAtom } from 'jotai';
 import { FC, useEffect, useState } from 'react';
 import { useApp } from 'renderer/src/AppContext';
@@ -21,47 +21,45 @@ export const ProcessLog: FC = () => {
     }, [isElectron, setLog]);
 
     return (
-        <Stack>
-            <FormControlLabel
-                control={(
-                    <Switch checked={showLog} onChange={() => setShowLog((prev) => !prev)} />
-                )}
-                label="Показать лог"
+        <Stack gap={8}>
+            <Switch
+                checked={showLog}
+                onChange={() => setShowLog((prev) => !prev)}
+                label="Show log"
             />
-            <Grow in={showLog} mountOnEnter={true} unmountOnExit={true}>
+            <Collapse in={showLog}>
                 <Paper
-                    variant="outlined"
-                    sx={{
-                        p: 3,
+                    withBorder={true}
+                    style={{
+                        padding: 18,
                         height: '300px',
                         overflow: 'hidden',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: 2,
+                        gap: 12,
                     }}
                 >
-                    <Stack direction="row" spacing={2}>
-                        <Button variant="contained" onClick={() => setLog('')}>
-                            {'Очистить лог'}
+                    <Stack gap={12}>
+                        <Button onClick={() => setLog('')}>
+                            {'Clear log'}
                         </Button>
                     </Stack>
-                    <Typography
-                        variant="body2"
-                        sx={{
+                    <Text
+                        size="sm"
+                        style={{
                             whiteSpace: 'pre-wrap',
                             overflowY: 'auto',
                             fontFamily: 'monospace',
                             flex: 1,
-                            p: 1,
-                            borderRadius: 1,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                    }}
-                >
-                    {log || 'Лог whisper пока пуст.'}
-                </Typography>
-            </Paper>
-        </Grow>
-    </Stack>
-);
+                            padding: 8,
+                            borderRadius: 6,
+                            border: '1px solid var(--mantine-color-gray-3)',
+                        }}
+                    >
+                        {log || 'Whisper log is empty.'}
+                    </Text>
+                </Paper>
+            </Collapse>
+        </Stack>
+    );
 };

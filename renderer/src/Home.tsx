@@ -1,4 +1,4 @@
-import { Box, Container, Grid, Stack } from '@mui/material';
+import { Box, Container, Grid, Stack } from '@mantine/core';
 import { FileSelect, Player } from '@~/player';
 import { ProcessLog } from '@~/process-log';
 import { TranscribeControl } from '@~/transcribe-control';
@@ -27,27 +27,27 @@ export const Home = () => {
     };
 
     return (
-        <Container maxWidth="xl" sx={{ py: 4 }}>
-            <Stack spacing="16px" sx={{ minHeight: '90vh' }}>
+        <Container size="xl" py={32}>
+            <Stack gap={16} style={{ minHeight: '90vh' }}>
                 <FileSelect />
                 <Player />
                 {/* <TranscribeState /> */}
-                <Grid container={true} spacing="16px">
-                    <Grid size={3}>
+                <Grid gutter={16}>
+                    <Grid.Col span={3}>
                         <TranscribeControl
                             onTranscribeStart={handleTranscribeStart}
                             onTranscribeEnd={handleTranscribeEnd}
                         />
-                    </Grid>
-                    <Grid size={9}>
+                    </Grid.Col>
+                    <Grid.Col span={9}>
                         <TranscribedText
                             onSelectTime={handleSelectTime}
                         />
-                    </Grid>
+                    </Grid.Col>
                 </Grid>
 
             </Stack>
-            <Box component="footer" sx={{ mt: 'auto' }}>
+            <Box component="footer" mt="auto">
                 <ProcessLog />
             </Box>
         </Container>
