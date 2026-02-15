@@ -1,5 +1,5 @@
-import type { TranscribeOpts } from '../types/transcription';
 import { Whisper } from '../services/whisperServer/Whisper';
+import type { TranscribeOpts } from '../types/transcription';
 import { resolveWhisperPaths } from '../utils/whisper';
 import type { TranscriptionCallbacks } from './whisperServer/types';
 

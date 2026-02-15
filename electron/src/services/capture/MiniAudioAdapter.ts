@@ -327,7 +327,9 @@ export class MiniAudioAdapter implements CaptureAdapter {
             proc.on('close', (code, signal) => {
                 if (code !== 0 || signal) {
                     const details = this.formatExitDetails(code, signal, stderr.trim());
+
                     reject(new Error(`MiniAudio helper exited.${details}`));
+
                     return;
                 }
 
@@ -464,6 +466,7 @@ export class MiniAudioAdapter implements CaptureAdapter {
                     durationMs: message.durationMs,
                     bytesWritten: message.bytesWritten,
                 });
+
                 return;
             case 'level':
                 this.events.onLevel?.({
@@ -471,10 +474,12 @@ export class MiniAudioAdapter implements CaptureAdapter {
                     peak: message.peak,
                     clipped: Boolean(message.clipped),
                 });
+
                 return;
             case 'error':
                 this.lastHelperError = message.message;
                 this.events.onError?.(new Error(message.message));
+
                 return;
             case 'format':
                 this.format = {
@@ -483,6 +488,7 @@ export class MiniAudioAdapter implements CaptureAdapter {
                     bitDepth: message.bitDepth,
                     codec: message.codec,
                 };
+
                 return;
             default:
                 return;

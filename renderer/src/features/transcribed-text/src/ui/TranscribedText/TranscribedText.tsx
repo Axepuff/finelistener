@@ -1,9 +1,11 @@
-import { ActionIcon, Box, Button, Group, Notification, Paper, Progress, Stack, Switch, Text } from '@mantine/core';
-import { IconCopy } from '@tabler/icons-react';
+import { Box, Group, Paper, Progress, Stack, Text } from '@mantine/core';
+import { IconFileDescription } from '@tabler/icons-react';
 import { useAtom, useAtomValue } from 'jotai';
-import { useCallback, useEffect, useMemo, useRef, useState, type FC, type MouseEvent } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { atoms } from 'renderer/src/atoms';
 import { useApp } from '../../../../../AppContext';
+import { TranscribedTextContent } from './TranscribedTextContent';
+import { TranscribedTextControls } from './TranscribedTextControls';
 import { buildPlainSegments, escapeHtml, formatSecondsReadable, parseTimeToSeconds, resolveTrimOffset } from './utils';
 
 const { appState, transcription } = atoms;
@@ -12,15 +14,11 @@ type TranscribedTextProps = {
     onSelectTime: (time: number) => void;
 };
 
-const REGION_TEXT_CLASS = 'transcribed-text-content';
-
-export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
+export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }) => {
     const { isElectron } = useApp();
     const [plainText, setPlainText] = useAtom(transcription.plainText);
     const [renderedText, setRenderedText] = useAtom(transcription.renderedText);
     const [progress, setProgress] = useState(0);
-    const [isCopyNotificationOpen, setIsCopyNotificationOpen] = useState(false);
-    const [copyNotificationKey, setCopyNotificationKey] = useState(0);
     const [showRegions, setShowRegions] = useState(true);
     const uiState = useAtomValue(appState.uiState);
     const trimRange = useAtomValue(atoms.transcription.trimRange);
@@ -33,6 +31,7 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
         [plainSegments],
     );
     const currentTextValue = showRegions ? plainText : plainTextValue;
+    const isInitialEmptyState = uiState === 'initial' && currentTextValue.trim().length === 0;
 
     useEffect(() => {
         trimOffsetRef.current = resolveTrimOffset(trimRange);
@@ -93,27 +92,6 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
         return placeholders.reduce((acc, { placeholder, markup }) => acc.split(placeholder).join(markup), escaped);
     }, [formatRegionLabel, formatRegionValue]);
 
-    const handleSave = async () => {
-        if (!currentTextValue) return;
-        await window.api!.saveText(currentTextValue);
-    };
-
-    const handleCopy = async () => {
-        if (!currentTextValue) return;
-
-        try {
-            await navigator.clipboard.writeText(currentTextValue);
-            setCopyNotificationKey((value) => value + 1);
-            setIsCopyNotificationOpen(true);
-        } catch (error) {
-            console.error('Failed to copy transcribed text', error);
-        }
-    };
-
-    const handleCopyNotificationClose = () => {
-        setIsCopyNotificationOpen(false);
-    };
-
     const handleRegionClick = useCallback(
         (event: MouseEvent<HTMLElement>) => {
             const regionElement = (event.target as HTMLElement | null)?.closest('span[data-regions]');
@@ -132,11 +110,13 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
 
     useEffect(() => {
         if (!isElectron) return;
+
         const off1 = window.api!.onTranscribeText((chunk) => {
             console.log(chunk);
             setPlainText((text) => text + chunk);
             setRenderedText((text) => text + enhanceChunk(chunk));
         });
+
         const off2 = window.api!.onTranscribeProgressValue((value) => {
             const next = Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0;
 
@@ -150,18 +130,6 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
     }, [enhanceChunk, isElectron, setPlainText, setRenderedText]);
 
     useEffect(() => {
-        if (!isCopyNotificationOpen) return;
-
-        const timeoutId = window.setTimeout(() => {
-            setIsCopyNotificationOpen(false);
-        }, 2000);
-
-        return () => {
-            window.clearTimeout(timeoutId);
-        };
-    }, [copyNotificationKey, isCopyNotificationOpen]);
-
-    useEffect(() => {
         if (uiState === 'transcribing') {
             setProgress(0);
         } else if (uiState === 'initial') {
@@ -170,87 +138,65 @@ export const TranscribedText: FC<TranscribedTextProps> = ({ onSelectTime }) => {
     }, [uiState]);
 
     return (
-        <Stack gap={16} align="flex-start">
-            <style>
-                {`
-                    .${REGION_TEXT_CLASS} span[data-regions] {
-                        cursor: pointer;
-                        transition: background-color 0.15s ease, color 0.15s ease;
-                    }
-                    .${REGION_TEXT_CLASS} span[data-regions]:hover {
-                        background-color: rgba(28, 77, 5, 0.12);
-                    }
-                    .${REGION_TEXT_CLASS} span[data-regions]:active {
-                        background-color: rgba(28, 77, 5, 0.2);
-                    }
-                `}
-            </style>
-            <Group gap={8} align="center" wrap="wrap">
-                <Button
-                    disabled={currentTextValue.length === 0}
-                    onClick={handleSave}
+        <Stack gap={16} align="stretch" style={{ width: '100%', minHeight: 0, height: '100%', padding: 16 }}>
+            {isInitialEmptyState ? (
+                <Paper
+                    style={{
+                        width: '100%',
+                        minHeight: 0,
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                    }}
                 >
-                    {'Save as .txt'}
-                </Button>
-                <ActionIcon
-                    variant="subtle"
-                    disabled={currentTextValue.length === 0}
-                    onClick={handleCopy}
-                    size={36}
-                >
-                    <IconCopy size={20} />
-                </ActionIcon>
-                <Switch
-                    checked={showRegions}
-                    onChange={() => setShowRegions((prev) => !prev)}
-                    label="Show timecodes"
-                />
-            </Group>
-
-            {uiState === 'transcribing' ? (
-                <Group gap={8} align="center" wrap="nowrap" style={{ width: '100%' }}>
-                    <Progress value={progress} size={4} style={{ flexGrow: 1 }} />
-                    <Text size="sm" style={{ minWidth: 48, textAlign: 'right' }}>
-                        {`${progress.toFixed(0)}%`}
-                    </Text>
-                </Group>
-            ) : null}
-            <Paper withBorder={true} style={{ padding: 18, overflowY: 'auto', maxHeight: 800, width: '100%' }}>
-                {showRegions ? (
-                    <Box
-                        component="div"
-                        className={REGION_TEXT_CLASS}
-                        style={{ whiteSpace: 'pre-wrap' }}
-                        onClick={handleRegionClick}
-                        dangerouslySetInnerHTML={{ __html: renderedText }}
+                    <Stack gap={12} align="center" style={{ maxWidth: 280 }}>
+                        <Box
+                            style={{
+                                width: 64,
+                                height: 64,
+                                borderRadius: 4,
+                                backgroundColor: 'var(--mantine-color-gray-1)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                            }}
+                        >
+                            <IconFileDescription size={30} color="var(--mantine-color-gray-5)" />
+                        </Box>
+                        <Text size="md" fw={600} c="gray.6" ta="center">
+                            {'No transcription available yet'}
+                        </Text>
+                        <Text size="sm" c="gray.5" ta="center">
+                            {'Upload a file and click "Transcribe" to see the result here.'}
+                        </Text>
+                    </Stack>
+                </Paper>
+            ) : (
+                <>
+                    <TranscribedTextControls
+                        currentTextValue={currentTextValue}
+                        showRegions={showRegions}
+                        setShowRegions={setShowRegions}
                     />
-                ) : (
-                    <Box
-                        component="div"
-                        className={REGION_TEXT_CLASS}
-                        style={{ whiteSpace: 'normal' }}
-                        onClick={handleRegionClick}
-                    >
-                        {plainSegments.map((segment, index) => {
-                            const regionValue = segment.startSeconds;
 
-                            return (
-                                <span key={`${index}-${regionValue ?? 'na'}`} data-regions={regionValue?.toString()}>
-                                    {segment.text}
-                                    {index < plainSegments.length - 1 ? ' ' : ''}
-                                </span>
-                            );
-                        })}
-                    </Box>
-                )}
-            </Paper>
-            {isCopyNotificationOpen ? (
-                <Box style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 400 }}>
-                    <Notification key={copyNotificationKey} onClose={handleCopyNotificationClose}>
-                        {'Text copied'}
-                    </Notification>
-                </Box>
-            ) : null}
+                    {uiState === 'transcribing' ? (
+                        <Group gap={8} align="center" wrap="nowrap" style={{ width: '100%' }}>
+                            <Progress value={progress} size={4} style={{ flexGrow: 1 }} />
+                            <Text size="sm" style={{ minWidth: 48, textAlign: 'right' }}>
+                                {`${progress.toFixed(0)}%`}
+                            </Text>
+                        </Group>
+                    ) : null}
+
+                    <TranscribedTextContent
+                        showRegions={showRegions}
+                        renderedText={renderedText}
+                        plainSegments={plainSegments}
+                        onRegionClick={handleRegionClick}
+                    />
+                </>
+            )}
         </Stack>
     );
 };

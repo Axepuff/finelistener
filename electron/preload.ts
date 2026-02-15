@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { UiPreferenceKey, UiPreferenceValueMap } from './src/types/uiPreferences';
 
 type WhisperModelDownloadProgressPayload = {
     name: string;
@@ -28,6 +29,13 @@ contextBridge.exposeInMainWorld('api', {
     downloadWhisperModel: (modelName: string) => ipcRenderer.invoke('whisper-models:download', modelName),
     importWhisperModelFromFile: () => ipcRenderer.invoke('whisper-models:import-from-file'),
     openDevTools: () => ipcRenderer.invoke('debug:open-devtools'),
+    getUiPreference: <K extends UiPreferenceKey>(key: K): Promise<UiPreferenceValueMap[K]> =>
+        ipcRenderer.invoke('ui-preferences:get', key),
+    setUiPreference: <K extends UiPreferenceKey>(
+        key: K,
+        value: UiPreferenceValueMap[K],
+    ): Promise<UiPreferenceValueMap[K]> =>
+        ipcRenderer.invoke('ui-preferences:set', key, value),
     onTranscribeText: (cb: (chunk: string) => void) => {
         const handler = (_e: unknown, chunk: string) => cb(chunk);
 

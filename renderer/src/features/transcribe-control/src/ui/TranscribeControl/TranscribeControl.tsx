@@ -233,7 +233,7 @@ const TranscribeControl: React.FC<Props> = ({
     return (
         <Stack gap={12}>
             <Select
-                w={160}
+                w="100%"
                 label="Language"
                 data={langData}
                 value={lang}
@@ -242,22 +242,6 @@ const TranscribeControl: React.FC<Props> = ({
                     setLang(value);
                 }}
             />
-            <Group gap={8} wrap="nowrap">
-                <Button
-                    fullWidth={true}
-                    onClick={handleStart}
-                    disabled={loading || !canStart}
-                    leftSection={loading ? <Loader size={12} /> : <IconHeadphones size={16} />}
-                >
-                    {'Transcribe'}
-                </Button>
-                <ActionIcon onClick={handleStop} color="red" size={36} disabled={uiState !== 'transcribing'}>
-                    <IconPlayerStopFilled size={20} />
-                </ActionIcon>
-                <ActionIcon onClick={handleClear} color="red" size={36} disabled={uiState !== 'transcribing'}>
-                    <IconBackspaceFilled size={20} />
-                </ActionIcon>
-            </Group>
 
             <WhisperModelSelect
                 value={model}
@@ -312,6 +296,23 @@ const TranscribeControl: React.FC<Props> = ({
                 useVad={useVad}
                 onChangeUseVad={setUseVad}
             />
+
+            <Group gap={8} wrap="nowrap">
+                <Button
+                    fullWidth={true}
+                    onClick={handleStart}
+                    disabled={loading || !canStart}
+                    leftSection={loading ? <Loader size={12} /> : <IconHeadphones size={16} />}
+                >
+                    {'Transcribe'}
+                </Button>
+                <ActionIcon onClick={handleStop} color="red" size={36} disabled={uiState !== 'transcribing'}>
+                    <IconPlayerStopFilled size={20} />
+                </ActionIcon>
+                <ActionIcon onClick={handleClear} variant="light" size={36} disabled={uiState !== 'ready'}>
+                    <IconBackspaceFilled size={20} />
+                </ActionIcon>
+            </Group>
         </Stack>
     );
 };

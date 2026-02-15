@@ -10,6 +10,7 @@ import type {
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
 import type { TranscribeOpts } from 'electron/src/types/transcription';
+import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
 
 type RuntimePlatform = 'darwin' | 'win32' | 'linux';
@@ -49,6 +50,11 @@ declare global {
             >;
             onWhisperModelDownloadProgress: (cb: (payload: WhisperModelDownloadProgress) => void) => () => void;
             openDevTools: () => Promise<boolean>;
+            getUiPreference: <K extends UiPreferenceKey>(key: K) => Promise<UiPreferenceValueMap[K]>;
+            setUiPreference: <K extends UiPreferenceKey>(
+                key: K,
+                value: UiPreferenceValueMap[K],
+            ) => Promise<UiPreferenceValueMap[K]>;
         };
     }
 }

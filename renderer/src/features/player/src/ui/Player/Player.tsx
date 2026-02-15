@@ -113,7 +113,7 @@ export const Player: FC = () => {
     }, [isRangeValid, trimRange]);
 
     return (
-        <Paper withBorder={true} style={{ padding: 18 }}>
+        <Paper style={{ padding: 18 }}>
             <Box style={{ position: 'relative' }}>
                 {isLoading ? <Loader style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} /> : null}
                 <div ref={containerRef} />

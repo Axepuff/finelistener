@@ -21,7 +21,7 @@ import { App } from './App';
 
 const mantineTheme = createMantineTheme({
     primaryColor: 'dark',
-    defaultRadius: 'xs',
+    defaultRadius: 'sm',
     scale: 1,
     components: {
         Button: Button.extend({

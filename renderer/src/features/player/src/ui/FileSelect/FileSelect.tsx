@@ -1,13 +1,23 @@
-import { Button, Group, Stack, Text } from '@mantine/core';
+import { Button, Paper, SegmentedControl, Stack, Text } from '@mantine/core';
 import { IconFileMusic } from '@tabler/icons-react';
 import { SystemAudioRecorder } from '@~/recorder';
 import { useAtom } from 'jotai';
-import { type FC } from 'react';
+import { useMemo, useState, type FC } from 'react';
 import { atoms } from 'renderer/src/atoms';
 import { useApp } from '../../../../../AppContext';
 
+type SourceMode = 'file' | 'record';
+
+const SOURCE_MODE_OPTIONS = [
+    { label: 'File', value: 'file' },
+    { label: 'Record', value: 'record' },
+];
+
+const shortenFileName = (target: string): string => target.split(/[/\\]/).pop() || target;
+
 export const FileSelect: FC = () => {
     const { isElectron } = useApp();
+    const [sourceMode, setSourceMode] = useState<SourceMode>('file');
     const [audioToTranscribe, setAudioToTranscribe] = useAtom(atoms.transcription.audioToTranscribe);
     const [, setRunOutcome] = useAtom(atoms.transcription.runOutcome);
     const [, setRunErrorMessage] = useAtom(atoms.transcription.runErrorMessage);
@@ -31,24 +41,47 @@ export const FileSelect: FC = () => {
         }
     };
 
-    const selectedLabel = audioToTranscribe.length > 0
-        ? audioToTranscribe.join(', ')
-        : 'No file selected';
+    const selectedLabel = useMemo(() => {
+        if (audioToTranscribe.length === 0) {
+            return 'No file selected';
+        }
+
+        return audioToTranscribe.map(shortenFileName).join(', ');
+    }, [audioToTranscribe]);
 
     return (
         <Stack gap={12}>
-            <Group gap={12} align="center">
-                <Button
-                    onClick={handlePick}
-                    leftSection={<IconFileMusic size={16} />}
+            <SegmentedControl
+                fullWidth={true}
+                value={sourceMode}
+                data={SOURCE_MODE_OPTIONS}
+                onChange={(value) => setSourceMode(value as SourceMode)}
+            />
+            {sourceMode === 'file' ? (
+                <Paper
+                    withBorder={true}
+                    style={{
+                        padding: 16,
+                        borderStyle: 'dashed',
+                        borderColor: 'var(--mantine-color-gray-4)',
+                    }}
                 >
-                    {'Choose audio file'}
-                </Button>
-                <Text size="sm" c="dimmed">
-                    {selectedLabel}
-                </Text>
-            </Group>
-            <SystemAudioRecorder />
+                    <Stack gap={8}>
+                        <Button
+                            onClick={handlePick}
+                            leftSection={<IconFileMusic size={16} />}
+                            variant="light"
+                        >
+                            {'Choose audio file'}
+                        </Button>
+                        <Text size="sm" c="dimmed" style={{ wordBreak: 'break-word' }}>
+                            {selectedLabel}
+                        </Text>
+                    </Stack>
+                </Paper>
+            ) : (
+                <SystemAudioRecorder />
+            )}
         </Stack>
     );
 };
