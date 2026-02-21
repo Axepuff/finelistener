@@ -5,6 +5,7 @@ import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
 import Timeline from 'wavesurfer.js/dist/plugins/timeline.esm.js';
 
 const LOCAL_FILE_PROTOCOL = 'local-file';
+const DEFAULT_REGION_LENGTH_SECONDS = 0.01;
 
 const buildLocalFileUrl = (filePath: string): string => {
     if (!filePath) return '';
@@ -20,24 +21,9 @@ export const isPlayingAtom = atom(false);
 export class WaveSurferAdapter extends PlayerAdapter {
     private readonly wavesurfer: WaveSurfer;
     private readonly regions: RegionsPlugin;
-    private hasInitialRegion = false;
     private readonly onPlayingChange: (isPlaying: boolean) => void;
     private readonly onTimeUpdate: (time: number) => void;
     private readonly onReadyChange: (isPlaying: boolean) => void;
-    private readonly handleDecode = (): void => {
-        if (this.hasInitialRegion) return;
-
-        this.regions.addRegion({
-            start: 0,
-            end: 1,
-            color: 'rgba(231, 255, 20, 0.2)',
-            drag: false,
-            resize: true,
-            content: '',
-        });
-
-        this.hasInitialRegion = true;
-    };
     private readonly handlePlay = (): void => {
         this.onPlayingChange(true);
     };
@@ -77,7 +63,6 @@ export class WaveSurferAdapter extends PlayerAdapter {
         });
         this.regions = regions;
 
-        this.wavesurfer.on('decode', this.handleDecode);
         this.wavesurfer.on('play', this.handlePlay);
         this.wavesurfer.on('pause', this.handlePause);
         this.wavesurfer.on('finish', this.handlePause);
@@ -98,7 +83,6 @@ export class WaveSurferAdapter extends PlayerAdapter {
     }
 
     async loadSource(filePath?: string): Promise<void> {
-        this.hasInitialRegion = false;
         this.clearRegions();
         this.onPlayingChange(false);
         this.onTimeUpdate(0);
@@ -130,6 +114,38 @@ export class WaveSurferAdapter extends PlayerAdapter {
 
             return;
         }
+
+        const duration = this.wavesurfer.getDuration();
+
+        if (!Number.isFinite(duration) || duration <= 0) {
+            return;
+        }
+
+        const requestedStart = typeof bounds.start === 'number' ? bounds.start : 0;
+        const requestedEnd = typeof bounds.end === 'number' ? bounds.end : requestedStart;
+        const safeStart = Math.max(0, Math.min(requestedStart, duration));
+        const safeEnd = Math.max(0, Math.min(requestedEnd, duration));
+        const minLength = Math.min(DEFAULT_REGION_LENGTH_SECONDS, duration);
+        let regionStart = safeStart;
+        let regionEnd = safeEnd;
+
+        if (regionEnd <= regionStart) {
+            if (safeStart + minLength <= duration) {
+                regionEnd = safeStart + minLength;
+            } else {
+                regionStart = Math.max(0, safeStart - minLength);
+                regionEnd = safeStart;
+            }
+        }
+
+        this.regions.addRegion({
+            start: regionStart,
+            end: regionEnd,
+            color: 'rgba(231, 255, 20, 0.2)',
+            drag: false,
+            resize: true,
+            content: '',
+        });
     }
 
     clearRegions(): void {
@@ -137,7 +153,6 @@ export class WaveSurferAdapter extends PlayerAdapter {
     }
 
     destroy(): void {
-        this.wavesurfer.un('decode', this.handleDecode);
         this.wavesurfer.un('play', this.handlePlay);
         this.wavesurfer.un('pause', this.handlePause);
         this.wavesurfer.un('finish', this.handlePause);

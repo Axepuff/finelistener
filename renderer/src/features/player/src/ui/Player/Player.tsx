@@ -89,7 +89,7 @@ export const Player: FC = () => {
 
     const handleClearRange = () => {
         setTrimRange(undefined);
-        adapterRef.current?.setRegion({ start: 0, end: 1 });
+        adapterRef.current?.clearRegions();
     };
 
     const isRangeValid = useMemo(() => {
