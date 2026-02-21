@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Checkbox, Group, Loader, Select, Stack, Text } from '@mantine/core';
+import { ActionIcon, Box, Button, Checkbox, Group, Loader, Select, Stack, Text } from '@mantine/core';
 import { IconHeadphones, IconPlayerStopFilled, IconBackspaceFilled } from '@tabler/icons-react';
 import type { WhisperModelName } from 'electron/src/types/whisper';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
@@ -231,88 +231,91 @@ const TranscribeControl: React.FC<Props> = ({
     const canStart = !isModelDownloadActive && (useCustomModelFile ? Boolean(customModelFile) : isModelDownloaded);
 
     return (
-        <Stack gap={12}>
-            <Select
-                w="100%"
-                label="Language"
-                data={langData}
-                value={lang}
-                onChange={(value) => {
-                    if (!value) return;
-                    setLang(value);
-                }}
-            />
-
-            <WhisperModelSelect
-                value={model}
-                onChange={setModel}
-                onStatusChange={handleModelStatusChange}
-                onDownloadError={appendLog}
-                disabled={useCustomModelFile}
-            />
-
-            <Stack gap={8}>
-                <Checkbox
-                    checked={useCustomModelFile}
-                    onChange={(event) => setUseCustomModelFile(event.currentTarget.checked)}
-                    label="Use a local model file"
+        <Stack gap={12} justify="space-between" h="100%">
+            <Stack gap={12}>
+                <Select
+                    w="100%"
+                    label="Language"
+                    data={langData}
+                    value={lang}
+                    onChange={(value) => {
+                        if (!value) return;
+                        setLang(value);
+                    }}
                 />
-                {useCustomModelFile ? (
-                    <Group gap={8} align="center" wrap="nowrap">
-                        <Button
-                            variant="outline"
-                            onClick={handleImportCustomModel}
-                            disabled={loading || isCustomModelImporting}
-                        >
-                            {'Choose file...'}
-                        </Button>
-                        <Text
-                            size="xs"
-                            c={customModelFile ? 'dimmed' : 'red'}
-                            style={{ flexGrow: 1 }}
-                        >
-                            {customModelFile?.fileName ?? 'No file selected'}
-                        </Text>
-                        {customModelFile ? (
+
+                <WhisperModelSelect
+                    value={model}
+                    onChange={setModel}
+                    onStatusChange={handleModelStatusChange}
+                    onDownloadError={appendLog}
+                    disabled={useCustomModelFile}
+                />
+
+                <Stack gap={8}>
+                    <Checkbox
+                        checked={useCustomModelFile}
+                        onChange={(event) => setUseCustomModelFile(event.currentTarget.checked)}
+                        label="Use a local model file"
+                    />
+                    {useCustomModelFile ? (
+                        <Group gap={8} align="center" wrap="nowrap">
                             <Button
-                                variant="subtle"
-                                onClick={() => setCustomModelFile(null)}
+                                variant="outline"
+                                onClick={handleImportCustomModel}
                                 disabled={loading || isCustomModelImporting}
                             >
-                                {'Clear'}
+                                {'Choose file...'}
                             </Button>
-                        ) : null}
-                    </Group>
-                ) : null}
+                            <Text
+                                size="xs"
+                                c={customModelFile ? 'dimmed' : 'red'}
+                                style={{ flexGrow: 1 }}
+                            >
+                                {customModelFile?.fileName ?? 'No file selected'}
+                            </Text>
+                            {customModelFile ? (
+                                <Button
+                                    variant="subtle"
+                                    onClick={() => setCustomModelFile(null)}
+                                    disabled={loading || isCustomModelImporting}
+                                >
+                                    {'Clear'}
+                                </Button>
+                            ) : null}
+                        </Group>
+                    ) : null}
+                </Stack>
+
+                <TranscribeAdvancedSettings
+                    maxContext={maxContext}
+                    onChangeMaxContext={setMaxContext}
+                    maxLen={maxLen}
+                    onChangeMaxLen={setMaxLen}
+                    splitOnWord={splitOnWord}
+                    onChangeSplitOnWord={setSplitOnWord}
+                    useVad={useVad}
+                    onChangeUseVad={setUseVad}
+                />
             </Stack>
-
-            <TranscribeAdvancedSettings
-                maxContext={maxContext}
-                onChangeMaxContext={setMaxContext}
-                maxLen={maxLen}
-                onChangeMaxLen={setMaxLen}
-                splitOnWord={splitOnWord}
-                onChangeSplitOnWord={setSplitOnWord}
-                useVad={useVad}
-                onChangeUseVad={setUseVad}
-            />
-
-            <Group gap={8} wrap="nowrap">
-                <Button
-                    fullWidth={true}
-                    onClick={handleStart}
-                    disabled={loading || !canStart}
-                    leftSection={loading ? <Loader size={12} /> : <IconHeadphones size={16} />}
-                >
-                    {'Transcribe'}
-                </Button>
-                <ActionIcon onClick={handleStop} color="red" size={36} disabled={uiState !== 'transcribing'}>
-                    <IconPlayerStopFilled size={20} />
-                </ActionIcon>
-                <ActionIcon onClick={handleClear} variant="light" size={36} disabled={uiState !== 'ready'}>
-                    <IconBackspaceFilled size={20} />
-                </ActionIcon>
-            </Group>
+            <Box>
+                <Group gap={8} wrap="nowrap">
+                    <Button
+                        fullWidth={true}
+                        onClick={handleStart}
+                        disabled={loading || !canStart}
+                        leftSection={loading ? <Loader size={12} /> : <IconHeadphones size={16} />}
+                    >
+                        {'Transcribe'}
+                    </Button>
+                    <ActionIcon onClick={handleStop} color="red" size={36} disabled={uiState !== 'transcribing'}>
+                        <IconPlayerStopFilled size={20} />
+                    </ActionIcon>
+                    <ActionIcon onClick={handleClear} variant="light" size={36} disabled={uiState !== 'ready'}>
+                        <IconBackspaceFilled size={20} />
+                    </ActionIcon>
+                </Group>
+            </Box>
         </Stack>
     );
 };

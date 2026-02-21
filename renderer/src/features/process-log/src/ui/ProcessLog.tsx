@@ -21,7 +21,7 @@ export const ProcessLog: FC = () => {
     }, [isElectron, setLog]);
 
     return (
-        <Stack gap={8}>
+        <Stack gap={8} p={8}>
             <Switch
                 checked={showLog}
                 onChange={() => setShowLog((prev) => !prev)}

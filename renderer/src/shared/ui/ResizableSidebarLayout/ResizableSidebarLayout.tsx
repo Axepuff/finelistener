@@ -263,6 +263,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
                     position: 'relative',
                     flexShrink: 0,
                     userSelect: 'none',
+                    margin: '0 -5px',
                 }}
             >
                 <Box

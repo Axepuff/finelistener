@@ -1,5 +1,5 @@
-import { ActionIcon, Button, Group, Loader, Select, Text } from '@mantine/core';
-import { IconPlayerRecordFilled, IconPlayerStopFilled } from '@tabler/icons-react';
+import { ActionIcon, Center, Group, Select, Stack, Text } from '@mantine/core';
+import { IconMicrophone, IconPlayerStopFilled } from '@tabler/icons-react';
 import { useSystemAudioRecorder } from '@~/recorder/src/ui/SystemAudioRecorder/core/useSystemAudioRecorder';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import React from 'react';
@@ -15,7 +15,6 @@ export const SystemAudioRecorderControls: React.FC = () => {
             canStartRecording,
             canStopRecording,
             isRecordingActive,
-            isProcessingRecording,
             recordingDurationMs,
             recordingLevel,
             recordingBytesWritten,
@@ -44,28 +43,51 @@ export const SystemAudioRecorderControls: React.FC = () => {
         .filter((device): device is { value: string; label: string } => device !== null);
 
     return (
-        <Group gap={12} align="center" wrap="wrap">
-            <Button
-                color="red"
-                leftSection={<IconPlayerRecordFilled size={16} />}
-                disabled={!canStartRecording}
-                onClick={onStartRecording}
-            >
-                {'Record system audio'}
-            </Button>
-            <ActionIcon color="red" onClick={onStopRecording} disabled={!canStopRecording}>
-                <IconPlayerStopFilled size={16} />
-            </ActionIcon>
-            {isProcessingRecording ? <Loader size={18} /> : null}
-            <Text size="sm" c="dimmed">
-                {isRecordingActive ? `Recording: ${durationLabel}` : 'Recording inactive'}
-            </Text>
-            <Text size="sm" c="dimmed">
-                {`Level: ${levelLabel}`}
-            </Text>
-            <Text size="sm" c="dimmed">
-                {writtenLabel}
-            </Text>
+        <Stack>
+            {isRecordingActive ? (
+                <Center>
+
+                    <ActionIcon
+                        color="red"
+                        radius="xl"
+                        disabled={!canStopRecording}
+                        size={48}
+                        onClick={onStopRecording}
+                    >
+                        <IconPlayerStopFilled />
+                    </ActionIcon>
+                </Center>
+            ) : (
+                <Stack align="center" gap={4}>
+                    <ActionIcon
+                        color="red"
+                        disabled={!canStartRecording}
+                        radius="xl"
+                        size={48}
+                        onClick={onStartRecording}
+                    >
+                        <IconMicrophone />
+                    </ActionIcon>
+                    <Text size="sm">{'Record system audio'}</Text>
+                </Stack>
+            )}
+
+            {isRecordingActive ? (
+                <Group>
+                    <Text size="sm" c="dimmed">
+                        {'`Recording: $'}
+                        {durationLabel}
+                        {'`'}
+                    </Text>
+                    <Text size="sm" c="dimmed">
+                        {`Level: ${levelLabel}`}
+                    </Text>
+                    <Text size="sm" c="dimmed">
+                        {writtenLabel}
+                    </Text>
+                </Group>
+            ) : null}
+
             {showDeviceSelect ? (
                 <Select
                     label="Output device"
@@ -79,6 +101,6 @@ export const SystemAudioRecorderControls: React.FC = () => {
                     disabled={isRecordingActive}
                 />
             ) : null}
-        </Group>
+        </Stack>
     );
 };

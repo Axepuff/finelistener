@@ -1,5 +1,5 @@
-import { Box, Group, Paper, Progress, Stack, Text } from '@mantine/core';
-import { IconFileDescription } from '@tabler/icons-react';
+import { ActionIcon, Group, Paper, Progress, Stack, Text } from '@mantine/core';
+import { IconPlus } from '@tabler/icons-react';
 import { useAtom, useAtomValue } from 'jotai';
 import React, { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { atoms } from 'renderer/src/atoms';
@@ -24,6 +24,9 @@ export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }
     const trimRange = useAtomValue(atoms.transcription.trimRange);
     const trimOffsetRef = useRef<number>(resolveTrimOffset(trimRange));
     const trimOffset = resolveTrimOffset(trimRange);
+    const [, setAudioToTranscribe] = useAtom(atoms.transcription.audioToTranscribe);
+    const [, setRunOutcome] = useAtom(atoms.transcription.runOutcome);
+    const [, setRunErrorMessage] = useAtom(atoms.transcription.runErrorMessage);
 
     const plainSegments = useMemo(() => buildPlainSegments(plainText, trimOffset), [plainText, trimOffset]);
     const plainTextValue = useMemo(
@@ -108,6 +111,25 @@ export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }
         [onSelectTime],
     );
 
+    const handlePick = async () => {
+        if (!isElectron) return;
+        const file = await window.api!.pickAudio();
+
+        if (!file) {
+            return;
+        }
+
+        try {
+            const { path } = await window.api!.convertAudio({ audioPath: file, lowPass: 12000, highPass: 80 });
+
+            setAudioToTranscribe([path]);
+            setRunOutcome('none');
+            setRunErrorMessage(null);
+        } catch (error) {
+            console.error('Failed to convert audio', error);
+        }
+    };
+
     useEffect(() => {
         if (!isElectron) return;
 
@@ -151,19 +173,14 @@ export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }
                     }}
                 >
                     <Stack gap={12} align="center" style={{ maxWidth: 280 }}>
-                        <Box
-                            style={{
-                                width: 64,
-                                height: 64,
-                                borderRadius: 4,
-                                backgroundColor: 'var(--mantine-color-gray-1)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                            }}
+                        <ActionIcon
+                            size={64}
+                            variant="light"
+                            onClick={handlePick}
                         >
-                            <IconFileDescription size={30} color="var(--mantine-color-gray-5)" />
-                        </Box>
+                            <IconPlus size={30} color="var(--mantine-color-gray-5)" />
+                        </ActionIcon>
+
                         <Text size="md" fw={600} c="gray.6" ta="center">
                             {'No transcription available yet'}
                         </Text>

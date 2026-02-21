@@ -1,4 +1,4 @@
-import { Box, Divider, Paper, ScrollArea, Stack, Text } from '@mantine/core';
+import { Box, Divider, Paper, Stack, Text } from '@mantine/core';
 import { FileSelect, Player } from '@~/player';
 import { ProcessLog } from '@~/process-log';
 import { TranscribeControl } from '@~/transcribe-control';
@@ -46,28 +46,21 @@ export const Home: React.FC = () => {
                         node: (
                             <Paper
                                 bg="gray.0"
-                                style={{
-                                    height: '100%',
-                                    overflow: 'hidden',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                }}
+                                h="100%"
                             >
-                                <ScrollArea style={{ height: '100%' }} scrollbarSize={8}>
-                                    <Stack gap={16} p={16}>
-                                        <Text size="xs" fw={700} c="dimmed" style={{ letterSpacing: '0.08em' }}>
-                                            {'SOURCE'}
-                                        </Text>
-                                        <FileSelect />
-                                        <Text size="xs" fw={700} c="dimmed" style={{ letterSpacing: '0.08em' }}>
-                                            {'CONFIGURATION'}
-                                        </Text>
-                                        <TranscribeControl
-                                            onTranscribeStart={handleTranscribeStart}
-                                            onTranscribeEnd={handleTranscribeEnd}
-                                        />
-                                    </Stack>
-                                </ScrollArea>
+                                <Stack gap={16} p={16} h="100%">
+                                    <Text size="xs" fw={700} c="dimmed" style={{ letterSpacing: '0.08em' }}>
+                                        {'SOURCE'}
+                                    </Text>
+                                    <FileSelect />
+                                    <Text size="xs" fw={700} c="dimmed" style={{ letterSpacing: '0.08em' }}>
+                                        {'CONFIGURATION'}
+                                    </Text>
+                                    <TranscribeControl
+                                        onTranscribeStart={handleTranscribeStart}
+                                        onTranscribeEnd={handleTranscribeEnd}
+                                    />
+                                </Stack>
                             </Paper>
                         ),
                     }}
@@ -81,7 +74,7 @@ export const Home: React.FC = () => {
                         </Box>
                     )}
                 />
-
+                <Divider />
                 <Box component="footer">
                     <ProcessLog />
                 </Box>

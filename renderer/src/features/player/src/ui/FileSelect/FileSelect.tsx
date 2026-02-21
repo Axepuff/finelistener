@@ -50,22 +50,21 @@ export const FileSelect: FC = () => {
     }, [audioToTranscribe]);
 
     return (
-        <Stack gap={12}>
-            <SegmentedControl
-                fullWidth={true}
-                value={sourceMode}
-                data={SOURCE_MODE_OPTIONS}
-                onChange={(value) => setSourceMode(value as SourceMode)}
-            />
-            {sourceMode === 'file' ? (
-                <Paper
-                    withBorder={true}
-                    style={{
-                        padding: 16,
-                        borderStyle: 'dashed',
-                        borderColor: 'var(--mantine-color-gray-4)',
-                    }}
-                >
+        <Paper
+            style={{
+                padding: 16,
+                borderColor: 'var(--mantine-color-gray-4)',
+            }}
+        >
+            <Stack gap={12}>
+                <SegmentedControl
+                    fullWidth={true}
+                    value={sourceMode}
+                    data={SOURCE_MODE_OPTIONS}
+                    onChange={(value) => setSourceMode(value as SourceMode)}
+                />
+                {sourceMode === 'file' ? (
+
                     <Stack gap={8}>
                         <Button
                             onClick={handlePick}
@@ -78,10 +77,10 @@ export const FileSelect: FC = () => {
                             {selectedLabel}
                         </Text>
                     </Stack>
-                </Paper>
-            ) : (
-                <SystemAudioRecorder />
-            )}
-        </Stack>
+                ) : (
+                    <SystemAudioRecorder />
+                )}
+            </Stack>
+        </Paper>
     );
 };
