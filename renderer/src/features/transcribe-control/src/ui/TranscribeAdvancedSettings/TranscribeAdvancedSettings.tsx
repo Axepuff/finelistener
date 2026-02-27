@@ -1,11 +1,10 @@
 import {
     Checkbox,
-    FormControlLabel,
-    Grow,
+    Collapse,
+    NumberInput,
     Stack,
     Switch,
-    TextField,
-} from '@mui/material';
+} from '@mantine/core';
 import React, { useState } from 'react';
 
 // TODO rework props to atoms
@@ -19,6 +18,13 @@ interface Props {
     useVad: boolean;
     onChangeUseVad: (value: boolean) => void;
 }
+
+const parseNumberInputValue = (value: string | number): number | null => {
+    if (typeof value !== 'number') return null;
+    if (!Number.isFinite(value)) return null;
+
+    return value;
+};
 
 export const TranscribeAdvancedSettings: React.FC<Props> = ({
     maxContext,
@@ -34,45 +40,37 @@ export const TranscribeAdvancedSettings: React.FC<Props> = ({
 
     return (
         <>
-            <FormControlLabel
-                control={<Switch checked={isOpen} onChange={() => setIsOpen((prev) => !prev)} />}
-                label="Расширенные настройки"
+            <Switch
+                checked={isOpen}
+                onChange={() => setIsOpen((prev) => !prev)}
+                label="Advanced settings"
             />
-            <Grow in={isOpen}>
-                <Stack spacing={1.5}>
-                    <TextField
-                        type="number"
-                        size="small"
-                        label="Максимальный контекст"
-                        helperText="--max-context"
-                        value={maxContext}
-                        onChange={(e) => onChangeMaxContext(e.target.value ? Number(e.target.value) : null)}
+            <Collapse in={isOpen}>
+                <Stack gap={8}>
+                    <NumberInput
+                        label="Max context"
+                        description="--max-context"
+                        value={maxContext ?? ''}
+                        onChange={(value) => onChangeMaxContext(parseNumberInputValue(value))}
                     />
-                    <TextField
-                        type="number"
-                        size="small"
-                        label="Максимальная длина сегмента"
-                        helperText="--max-len"
-                        value={maxLen}
-                        onChange={(e) => onChangeMaxLen(e.target.value ? Number(e.target.value) : null)}
+                    <NumberInput
+                        label="Max segment length"
+                        description="--max-len"
+                        value={maxLen ?? ''}
+                        onChange={(value) => onChangeMaxLen(parseNumberInputValue(value))}
                     />
-                    <FormControlLabel
-                        control={(
-                            <Checkbox
-                                checked={splitOnWord}
-                                onChange={(e) => onChangeSplitOnWord(e.target.checked)}
-                            />
-                        )}
-                        label="Делить по словам"
+                    <Checkbox
+                        checked={splitOnWord}
+                        onChange={(event) => onChangeSplitOnWord(event.currentTarget.checked)}
+                        label="Split on words"
                     />
-                    <FormControlLabel
-                        control={(
-                            <Checkbox checked={useVad} onChange={(e) => onChangeUseVad(e.target.checked)} />
-                        )}
-                        label="Использовать определение тишины"
+                    <Checkbox
+                        checked={useVad}
+                        onChange={(event) => onChangeUseVad(event.currentTarget.checked)}
+                        label="Use voice activity detection"
                     />
                 </Stack>
-            </Grow>
+            </Collapse>
         </>
     );
 };

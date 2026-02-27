@@ -1,6 +1,17 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { UiPreferenceKey, UiPreferenceValueMap } from './src/types/uiPreferences';
+
+type WhisperModelDownloadProgressPayload = {
+    name: string;
+    percent: number | null;
+    downloadedBytes: number;
+    totalBytes: number | null;
+};
 
 contextBridge.exposeInMainWorld('api', {
+    runtime: {
+        platform: process.platform,
+    },
     pickAudio: (lang: string) => ipcRenderer.invoke('pickAudio', lang),
     convertAudio: (args: any) => ipcRenderer.invoke('convertAudio', args),
     saveText: (content: string) => ipcRenderer.invoke('saveText', content),
@@ -11,11 +22,20 @@ contextBridge.exposeInMainWorld('api', {
     openRecordingPreferences: () => ipcRenderer.invoke('recording:open-permission-preferences'),
     isRecordingAvailable: () => ipcRenderer.invoke('recording:is-available'),
     listRecordingDevices: () => ipcRenderer.invoke('recording:list-devices'),
+    revealDevAppInFinder: () => ipcRenderer.invoke('recording:reveal-dev-app'),
     transcribeStream: (audioPath: string, opts: any) => ipcRenderer.invoke('transcribeStream', audioPath, opts),
     stopTranscription: () => ipcRenderer.invoke('stop-transcription'),
     getWhisperModels: () => ipcRenderer.invoke('whisper-models:list'),
     downloadWhisperModel: (modelName: string) => ipcRenderer.invoke('whisper-models:download', modelName),
+    importWhisperModelFromFile: () => ipcRenderer.invoke('whisper-models:import-from-file'),
     openDevTools: () => ipcRenderer.invoke('debug:open-devtools'),
+    getUiPreference: <K extends UiPreferenceKey>(key: K): Promise<UiPreferenceValueMap[K]> =>
+        ipcRenderer.invoke('ui-preferences:get', key),
+    setUiPreference: <K extends UiPreferenceKey>(
+        key: K,
+        value: UiPreferenceValueMap[K],
+    ): Promise<UiPreferenceValueMap[K]> =>
+        ipcRenderer.invoke('ui-preferences:set', key, value),
     onTranscribeText: (cb: (chunk: string) => void) => {
         const handler = (_e: unknown, chunk: string) => cb(chunk);
 
@@ -65,10 +85,12 @@ contextBridge.exposeInMainWorld('api', {
 
         return () => ipcRenderer.removeListener('recording:error', handler);
     },
-    onWhisperModelDownloadProgress: (cb: (payload: { name: string; percent: number | null; downloadedBytes: number; totalBytes: number | null }) => void) => {
+    onWhisperModelDownloadProgress: (
+        cb: (payload: WhisperModelDownloadProgressPayload) => void,
+    ) => {
         const handler = (
             _e: unknown,
-            payload: { name: string; percent: number | null; downloadedBytes: number; totalBytes: number | null },
+            payload: WhisperModelDownloadProgressPayload,
         ) => cb(payload);
 
         ipcRenderer.on('whisper-models:download-progress', handler);

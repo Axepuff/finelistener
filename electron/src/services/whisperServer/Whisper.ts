@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
-import type { TranscribeOpts } from '../../types/transcription';
 import { AudioPreprocessor } from '../../services/AudioPreprocessor';
+import type { TranscribeOpts } from '../../types/transcription';
 import { createWhisperEnv, resolveWhisperPaths } from '../../utils/whisper';
 import { createProgressParser } from '../progress';
 import { TranscriptStreamParser } from './TranscriptStreamParser';
@@ -83,7 +83,7 @@ export class Whisper {
         this.isTranscribing = true;
 
         try {
-            const resolved = resolveWhisperPaths(opts.model);
+            const resolved = resolveWhisperPaths(opts.model, opts.modelPath);
 
             await this.loadModelIfNeeded({
                 serverBinPath: resolved.serverBinPath,

@@ -10,11 +10,17 @@ import type {
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
 import type { TranscribeOpts } from 'electron/src/types/transcription';
+import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
+
+type RuntimePlatform = 'darwin' | 'win32' | 'linux';
 
 declare global {
     interface Window {
         api?: {
+            runtime: {
+                platform: RuntimePlatform;
+            };
             pickAudio: () => Promise<string | null>;
             transcribeStream: (audioPath: string, opts: TranscribeOpts) => Promise<string>;
             convertAudio: (args: ConvertAudioOptions) => Promise<{ path: string }>;
@@ -26,6 +32,7 @@ declare global {
             openRecordingPreferences: () => Promise<boolean>;
             isRecordingAvailable: () => Promise<boolean>;
             listRecordingDevices: () => Promise<RecordingDevice[]>;
+            revealDevAppInFinder: () => Promise<boolean>;
             onTranscribeText: (cb: (chunk: string) => void) => () => void;
             onTranscribeProgressValue: (cb: (value: number) => void) => () => void;
             onTranscribeLog: (cb: (line: string) => void) => () => void;
@@ -36,8 +43,18 @@ declare global {
             stopTranscription: () => Promise<boolean>;
             getWhisperModels: () => Promise<WhisperModelInfo[]>;
             downloadWhisperModel: (modelName: WhisperModelName) => Promise<void>;
+            importWhisperModelFromFile: () => Promise<
+                | { ok: true; path: string; fileName: string }
+                | { ok: false; error: string }
+                | null
+            >;
             onWhisperModelDownloadProgress: (cb: (payload: WhisperModelDownloadProgress) => void) => () => void;
             openDevTools: () => Promise<boolean>;
+            getUiPreference: <K extends UiPreferenceKey>(key: K) => Promise<UiPreferenceValueMap[K]>;
+            setUiPreference: <K extends UiPreferenceKey>(
+                key: K,
+                value: UiPreferenceValueMap[K],
+            ) => Promise<UiPreferenceValueMap[K]>;
         };
     }
 }

@@ -1,0 +1,74 @@
+.regionTextContent span[data-regions] {
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.regionTextContent span[data-regions]:hover {
+    background-color: rgba(28, 77, 5, 0.12);
+}
+
+.regionTextContent span[data-regions]:active {
+    background-color: rgba(28, 77, 5, 0.2);
+}
+
+.regionTextPreWrap {
+    white-space: pre-wrap;
+}
+
+.regionTextNormalWrap {
+    white-space: normal;
+}
+
+.copyNotificationWrapper {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 400;
+}
+
+.controlsRow {
+    width: 100%;
+    min-width: 0;
+}
+
+.viewToggle {
+    flex-shrink: 0;
+}
+
+.actionsGroup {
+    flex: 1;
+    min-width: 0;
+    justify-content: flex-end;
+}
+
+.searchInput {
+    width: 220px;
+}
+
+.saveButton {
+    background-color: #0f172a;
+    color: #ffffff;
+}
+
+.saveButton:hover {
+    background-color: #111f3b;
+}
+
+@media (max-width: 900px) {
+    .controlsRow {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        row-gap: 8px;
+    }
+
+    .actionsGroup {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .searchInput {
+        flex: 1;
+        min-width: 180px;
+        width: auto;
+    }
+}

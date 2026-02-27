@@ -1,20 +1,5 @@
-import { CheckCircle, CloudDownload } from '@mui/icons-material';
-import {
-    Button,
-    CircularProgress,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogContentText,
-    DialogTitle,
-    FormControl,
-    InputLabel,
-    MenuItem,
-    Select,
-    type SelectChangeEvent,
-    Stack,
-    Typography,
-} from '@mui/material';
+import { Button, Group, Loader, Modal, RingProgress, Select, Stack, Text } from '@mantine/core';
+import { IconCircleCheck, IconCloudDownload } from '@tabler/icons-react';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../../../../AppContext';
@@ -90,17 +75,28 @@ export const WhisperModelSelect: React.FC<Props> = ({
         ? `Download the ${pendingModelLabel} model (${pendingModelInfo.sizeLabel})?`
         : `Download the ${pendingModelLabel} model?`;
 
-    const handleModelChange = (event: SelectChangeEvent<WhisperModelName>) => {
-        const nextModel = event.target.value;
-        const nextModelInfo = modelOptions.find((item) => item.name === nextModel);
+    const modelData = useMemo(
+        () => modelOptions.map((item) => ({
+            value: item.name,
+            label: item.name,
+            disabled: isDownloadActive ? downloadProgress?.name !== item.name : false,
+        })),
+        [downloadProgress?.name, isDownloadActive, modelOptions],
+    );
+
+    const handleModelChange = (nextModel: string | null) => {
+        if (!nextModel) return;
+
+        const nextModelName = nextModel as WhisperModelName;
+        const nextModelInfo = modelOptions.find((item) => item.name === nextModelName);
 
         if (!nextModelInfo || nextModelInfo.isDownloaded) {
-            onChange(nextModel);
+            onChange(nextModelName);
 
             return;
         }
 
-        setPendingModel(nextModel);
+        setPendingModel(nextModelName);
         setIsConfirmOpen(true);
     };
 
@@ -144,99 +140,73 @@ export const WhisperModelSelect: React.FC<Props> = ({
         setPendingModel(null);
     };
 
-    const renderModelValue = useCallback(
-        (selected: WhisperModelName) => {
-            const current = modelOptions.find((item) => item.name === selected);
-            const isDownloading = downloadProgress?.name === selected;
-            const progressValue = isDownloading ? downloadProgress?.percent ?? null : null;
+    const getModelStatusNode = (modelName: WhisperModelName) => {
+        const modelInfo = modelOptions.find((item) => item.name === modelName);
+        const isDownloading = downloadProgress?.name === modelName;
+        const progressValue = isDownloading ? downloadProgress?.percent ?? null : null;
+
+        if (isDownloading) {
+            if (progressValue === null) {
+                return <Loader size={14} />;
+            }
 
             return (
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <Typography variant="body2" sx={{ textTransform: 'lowercase' }}>
-                        {selected}
-                    </Typography>
-                    {current?.sizeLabel ? (
-                        <Typography variant="caption" color="text.secondary">
-                            {current.sizeLabel}
-                        </Typography>
-                    ) : null}
-                    {isDownloading ? (
-                        <CircularProgress
-                            size={14}
-                            variant={progressValue === null ? 'indeterminate' : 'determinate'}
-                            value={progressValue === null ? undefined : progressValue}
-                        />
-                    ) : current?.isDownloaded ? (
-                        <CheckCircle color="success" fontSize="small" />
-                    ) : (
-                        <CloudDownload color="action" fontSize="small" />
-                    )}
-                </Stack>
+                <RingProgress
+                    size={14}
+                    thickness={2}
+                    sections={[{ value: progressValue, color: 'gray' }]}
+                />
             );
-        },
-        [downloadProgress, modelOptions],
-    );
+        }
+
+        if (modelInfo?.isDownloaded) {
+            return <IconCircleCheck color="var(--mantine-color-green-6)" size={14} />;
+        }
+
+        return <IconCloudDownload color="var(--mantine-color-gray-6)" size={14} />;
+    };
 
     return (
         <>
-            <FormControl size="small">
-                <InputLabel id="transcribe-model-label">{'Модель'}</InputLabel>
-                <Select
-                    labelId="transcribe-model-label"
-                    label="Модель"
-                    value={value}
-                    onChange={handleModelChange}
-                    renderValue={renderModelValue}
-                    disabled={disabled || isDownloadActive}
-                >
-                    {modelOptions.map((item) => {
-                        const isDownloading = downloadProgress?.name === item.name;
-                        const progressValue = isDownloading ? downloadProgress?.percent ?? null : null;
+            <Select
+                label="Model"
+                value={value}
+                onChange={handleModelChange}
+                data={modelData}
+                rightSection={getModelStatusNode(value)}
+                disabled={disabled || isDownloadActive}
+                renderOption={({ option }) => {
+                    const optionName = option.value as WhisperModelName;
+                    const info = modelOptions.find((item) => item.name === optionName);
 
-                        return (
-                            <MenuItem
-                                key={item.name}
-                                value={item.name}
-                                disabled={isDownloadActive ? !isDownloading : false}
-                            >
-                                <Stack direction="row" spacing={1} alignItems="center" sx={{ width: '100%' }}>
-                                    <Stack spacing={0} sx={{ flexGrow: 1 }}>
-                                        <Typography variant="body2" sx={{ textTransform: 'lowercase' }}>
-                                            {item.name}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                            {item.sizeLabel}
-                                        </Typography>
-                                    </Stack>
-                                    {isDownloading ? (
-                                        <CircularProgress
-                                            size={14}
-                                            variant={progressValue === null ? 'indeterminate' : 'determinate'}
-                                            value={progressValue === null ? undefined : progressValue}
-                                        />
-                                    ) : item.isDownloaded ? (
-                                        <CheckCircle color="success" fontSize="small" />
-                                    ) : (
-                                        <CloudDownload color="action" fontSize="small" />
-                                    )}
-                                </Stack>
-                            </MenuItem>
-                        );
-                    })}
-                </Select>
-            </FormControl>
-            <Dialog open={isConfirmOpen} onClose={handleCancelDownload}>
-                <DialogTitle>{'Download model'}</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>{confirmText}</DialogContentText>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCancelDownload}>{'Cancel'}</Button>
-                    <Button variant="contained" onClick={handleConfirmDownload}>
-                        {'Download'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                    return (
+                        <Group gap={8} justify="space-between" wrap="nowrap">
+                            <Stack gap={0} style={{ flexGrow: 1 }}>
+                                <Text size="sm" style={{ textTransform: 'lowercase' }}>
+                                    {optionName}
+                                </Text>
+                                {info?.sizeLabel ? (
+                                    <Text size="xs" c="dimmed">
+                                        {info.sizeLabel}
+                                    </Text>
+                                ) : null}
+                            </Stack>
+                            {getModelStatusNode(optionName)}
+                        </Group>
+                    );
+                }}
+            />
+            <Modal opened={isConfirmOpen} onClose={handleCancelDownload} title="Download model" centered={true}>
+                <Stack gap={12}>
+                    <Text size="sm">{confirmText}</Text>
+                    <Group justify="flex-end" gap={8}>
+                        <Button variant="outline" onClick={handleCancelDownload}>{'Cancel'}</Button>
+                        <Button onClick={handleConfirmDownload}>
+                            {'Download'}
+                        </Button>
+                    </Group>
+                </Stack>
+            </Modal>
         </>
     );
 };

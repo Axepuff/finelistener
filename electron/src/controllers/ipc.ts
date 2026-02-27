@@ -4,6 +4,7 @@ import { registerDebugController } from './debugController';
 import { registerFileController } from './fileController';
 import { registerRecordingController } from './recordingController';
 import { registerTranscriptionController } from './transcriptionController';
+import { registerUiPreferencesController } from './uiPreferencesController';
 import { registerWhisperModelController } from './whisperModelController';
 
 export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): void {
@@ -12,4 +13,5 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     registerRecordingController(ipcMain, getMainWindow);
     registerDebugController(ipcMain, getMainWindow);
     registerWhisperModelController(ipcMain, getMainWindow);
+    registerUiPreferencesController(ipcMain, getMainWindow);
 }

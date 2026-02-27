@@ -101,7 +101,7 @@ export class ScreenCaptureKitAdapter implements CaptureAdapter {
         const permission = this.getPermissionStatus();
 
         if (permission === 'restricted') {
-            throw new Error('Запись экрана запрещена политикой системы.');
+            throw new Error('Screen recording is restricted by system policy.');
         }
 
         this.events = events;

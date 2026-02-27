@@ -27,6 +27,36 @@ export class WhisperModelService {
         }));
     }
 
+    public async importModelFromFile(sourcePath: string): Promise<{ path: string; fileName: string }> {
+        if (!sourcePath || typeof sourcePath !== 'string') {
+            throw new Error('Invalid model path');
+        }
+
+        const ext = path.extname(sourcePath).toLowerCase();
+
+        if (!['.bin', '.gguf'].includes(ext)) {
+            throw new Error('Unsupported model file. Expected .bin or .gguf');
+        }
+
+        const stat = await fsPromises.stat(sourcePath);
+
+        if (!stat.isFile()) {
+            throw new Error('Selected model path is not a file');
+        }
+
+        const modelsDir = getUserModelsDir();
+
+        await fsPromises.mkdir(modelsDir, { recursive: true });
+
+        const originalBaseName = path.basename(sourcePath);
+        const safeBaseName = originalBaseName || `whisper-model${ext}`;
+        const targetPath = await pickAvailableTargetPath(path.join(modelsDir, safeBaseName));
+
+        await fsPromises.copyFile(sourcePath, targetPath);
+
+        return { path: targetPath, fileName: path.basename(targetPath) };
+    }
+
     public async downloadModel(name: WhisperModelName, onProgress?: ProgressHandler): Promise<void> {
         if (isModelAvailable(name)) {
             return;
@@ -76,15 +106,24 @@ const downloadToFile = async (
         };
 
         const request = https.get(url, (response) => {
-            if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+            if (
+                response.statusCode &&
+                response.statusCode >= 300 &&
+                response.statusCode < 400 &&
+                response.headers.location
+            ) {
                 response.resume();
                 void downloadToFile(response.headers.location, targetPath, onProgress).then(resolve).catch(reject);
+
                 return;
             }
 
             if (response.statusCode !== 200) {
                 response.resume();
-                handleError(new Error(`Failed to download model from ${url} (status ${response.statusCode ?? 'unknown'})`));
+                handleError(
+                    new Error(`Failed to download model from ${url} (status ${response.statusCode ?? 'unknown'})`),
+                );
+
                 return;
             }
 
@@ -127,4 +166,24 @@ const downloadToFile = async (
 
         request.on('error', handleError);
     });
+};
+
+const pickAvailableTargetPath = async (preferredPath: string): Promise<string> => {
+    const dir = path.dirname(preferredPath);
+    const ext = path.extname(preferredPath);
+    const base = path.basename(preferredPath, ext);
+
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+        const candidate = attempt === 0
+            ? preferredPath
+            : path.join(dir, `${base}-${attempt}${ext}`);
+
+        try {
+            await fsPromises.access(candidate, fs.constants.F_OK);
+        } catch {
+            return candidate;
+        }
+    }
+
+    throw new Error('Failed to choose a target file name for the imported model');
 };
