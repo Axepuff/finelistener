@@ -75,9 +75,7 @@ export const SystemAudioRecorderControls: React.FC = () => {
             {isRecordingActive ? (
                 <Group>
                     <Text size="sm" c="dimmed">
-                        {'`Recording: $'}
-                        {durationLabel}
-                        {'`'}
+                        {`Recording: ${durationLabel}`}
                     </Text>
                     <Text size="sm" c="dimmed">
                         {`Level: ${levelLabel}`}
