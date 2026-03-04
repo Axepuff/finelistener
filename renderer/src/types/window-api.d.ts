@@ -9,6 +9,7 @@ import type {
 } from 'electron/src/services/RecordingService';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
+import type { SessionDetails, SessionListItem } from 'electron/src/types/sessions';
 import type { TranscribeOpts } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
@@ -20,6 +21,15 @@ declare global {
         api?: {
             runtime: {
                 platform: RuntimePlatform;
+            };
+            sessions: {
+                list: () => Promise<SessionListItem[]>;
+                get: (sessionId: string) => Promise<SessionDetails>;
+                delete: (sessionId: string) => Promise<boolean>;
+                importAudio: () => Promise<SessionDetails | null>;
+                importRecording: (recordingFilePath: string) => Promise<SessionDetails>;
+                optimizeAudio: (sessionId: string) => Promise<SessionDetails>;
+                revealFolder: () => Promise<boolean>;
             };
             pickAudio: () => Promise<string | null>;
             transcribeStream: (audioPath: string, opts: TranscribeOpts) => Promise<string>;

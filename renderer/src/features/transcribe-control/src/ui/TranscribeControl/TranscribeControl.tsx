@@ -68,11 +68,15 @@ const TranscribeControl: React.FC<Props> = ({
     const [splitOnWord, setSplitOnWord] = useState<boolean>(true);
     const [useVad, setUseVad] = useState<boolean>(true);
     const [uiState, setUiState] = useAtom(appState.uiState);
+    const setPlainText = useSetAtom(transcription.plainText);
+    const setRenderedText = useSetAtom(transcription.renderedText);
     const setLog = useSetAtom(transcription.log);
     const setRunOutcome = useSetAtom(transcription.runOutcome);
     const setRunErrorMessage = useSetAtom(transcription.runErrorMessage);
     const audioToTranscribe = useAtomValue(transcription.audioToTranscribe);
+    const currentSessionId = useAtomValue(atoms.sessions.currentSessionId);
     const trimRange = useAtomValue(transcription.trimRange);
+    const refreshSessions = useSetAtom(atoms.refreshSessions);
     const langData = useMemo(
         () => LANGS.map((langOption) => ({ value: langOption.code, label: langOption.label })),
         [],
@@ -156,7 +160,11 @@ const TranscribeControl: React.FC<Props> = ({
         setRunOutcome('none');
         setRunErrorMessage(null);
         setUiState('transcribing');
+        setPlainText('');
+        setRenderedText('');
+
         const targets = audioToTranscribe;
+        const sessionId = targets.length === 1 ? currentSessionId : null;
         let completed = false;
 
         try {
@@ -176,6 +184,7 @@ const TranscribeControl: React.FC<Props> = ({
                 await window.api!.transcribeStream(p, {
                     language: lang,
                     model,
+                    sessionId: sessionId ?? undefined,
                     modelPath: useCustomModelFile ? customModelFile?.path : undefined,
                     maxContext: maxContext ?? -1,
                     maxLen: maxLen ?? 0,
@@ -200,6 +209,9 @@ const TranscribeControl: React.FC<Props> = ({
         } finally {
             onTranscribeEnd(completed ? segment : undefined);
             setUiState('ready');
+            if (sessionId) {
+                void refreshSessions();
+            }
         }
     };
 

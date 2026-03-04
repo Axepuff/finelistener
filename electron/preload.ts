@@ -12,6 +12,15 @@ contextBridge.exposeInMainWorld('api', {
     runtime: {
         platform: process.platform,
     },
+    sessions: {
+        list: () => ipcRenderer.invoke('sessions:list'),
+        get: (sessionId: string) => ipcRenderer.invoke('sessions:get', sessionId),
+        delete: (sessionId: string) => ipcRenderer.invoke('sessions:delete', sessionId),
+        importAudio: () => ipcRenderer.invoke('sessions:import-audio'),
+        importRecording: (recordingFilePath: string) => ipcRenderer.invoke('sessions:import-recording', recordingFilePath),
+        optimizeAudio: (sessionId: string) => ipcRenderer.invoke('sessions:optimize-audio', sessionId),
+        revealFolder: () => ipcRenderer.invoke('sessions:reveal-root'),
+    },
     pickAudio: (lang: string) => ipcRenderer.invoke('pickAudio', lang),
     convertAudio: (args: any) => ipcRenderer.invoke('convertAudio', args),
     saveText: (content: string) => ipcRenderer.invoke('saveText', content),

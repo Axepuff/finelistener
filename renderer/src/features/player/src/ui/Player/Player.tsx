@@ -1,7 +1,7 @@
-import { ActionIcon, Box, Button, Group, Loader, Paper, Text } from '@mantine/core';
+import { ActionIcon, Box, Button, Group, Loader, Paper, SegmentedControl, Text } from '@mantine/core';
 import { IconPlayerPause, IconPlayerPlay } from '@tabler/icons-react';
 import { WaveSurferAdapter } from '@~/player/src/ui/Player/WavesurfAdapter';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { atoms } from 'renderer/src/atoms';
 import { PlayerAdapter } from './PlayerAdapter';
@@ -15,6 +15,11 @@ const formatPreciseTime = (seconds: number) => {
     return `${String(minutes).padStart(2, '0')}:${secs.toFixed(2).padStart(5, '0')}`;
 };
 
+const AUDIO_MODE_OPTIONS = [
+    { label: 'Original', value: 'original' },
+    { label: 'Optimized', value: 'optimized' },
+];
+
 export const Player: FC = () => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const adapterRef = useRef<PlayerAdapter | null>(null);
@@ -25,6 +30,11 @@ export const Player: FC = () => {
     const [isPlaying, setIsPlaying] = useAtom(atoms.player.isPlaying);
     const [isLoading, setIsLoading] = useState(false);
     const [currentPosition, setCurrentPosition] = useState(0);
+    const currentSessionId = useAtomValue(atoms.sessions.currentSessionId);
+    const [currentSessionDetails, setCurrentSessionDetails] = useAtom(atoms.sessions.currentSessionDetails);
+    const [audioMode, setAudioMode] = useAtom(atoms.sessions.audioMode);
+    const setAudioToTranscribe = useSetAtom(atoms.transcription.audioToTranscribe);
+    const [isOptimizing, setIsOptimizing] = useState(false);
 
     useEffect(() => {
         setUrlIndex((index) => Math.min(index, Math.max(audioToTranscribe.length - 1, 0)));
@@ -92,6 +102,40 @@ export const Player: FC = () => {
         adapterRef.current?.clearRegions();
     };
 
+    const handleAudioModeChange = async (mode: string) => {
+        if (!currentSessionId || !currentSessionDetails) return;
+
+        if (mode === 'original') {
+            setAudioMode('original');
+            setAudioToTranscribe([currentSessionDetails.audioWavPath]);
+
+            return;
+        }
+
+        if (mode === 'optimized') {
+            if (currentSessionDetails.audioOptimizedWavPath) {
+                setAudioMode('optimized');
+                setAudioToTranscribe([currentSessionDetails.audioOptimizedWavPath]);
+
+                return;
+            }
+
+            setIsOptimizing(true);
+
+            try {
+                const updated = await window.api!.sessions.optimizeAudio(currentSessionId);
+
+                setCurrentSessionDetails(updated);
+                setAudioMode('optimized');
+                setAudioToTranscribe([updated.audioOptimizedWavPath!]);
+            } catch (error) {
+                console.error('Failed to optimize audio', error);
+            } finally {
+                setIsOptimizing(false);
+            }
+        }
+    };
+
     const isRangeValid = useMemo(() => {
         if (!trimRange) return false;
 
@@ -118,6 +162,23 @@ export const Player: FC = () => {
                 {isLoading ? <Loader style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} /> : null}
                 <div ref={containerRef} />
             </Box>
+            {currentSessionId !== null ? (
+                <Group gap={8} align="center" mt={12}>
+                    {isOptimizing ? (
+                        <Group gap={8} align="center">
+                            <Loader size={14} />
+                            <Text size="sm" c="dimmed">{'Optimizing audio...'}</Text>
+                        </Group>
+                    ) : (
+                        <SegmentedControl
+                            size="xs"
+                            value={audioMode}
+                            data={AUDIO_MODE_OPTIONS}
+                            onChange={(value) => void handleAudioModeChange(value)}
+                        />
+                    )}
+                </Group>
+            ) : null}
             <Group gap={12} align="center" mt={12}>
                 <ActionIcon onClick={onPlayPause} variant="subtle">
                     {isPlaying ? <IconPlayerPause size={16} /> : <IconPlayerPlay size={16} />}

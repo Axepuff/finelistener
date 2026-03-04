@@ -3,6 +3,7 @@ import type { BrowserWindow } from 'electron';
 import { registerDebugController } from './debugController';
 import { registerFileController } from './fileController';
 import { registerRecordingController } from './recordingController';
+import { registerSessionsController } from './sessionsController';
 import { registerTranscriptionController } from './transcriptionController';
 import { registerUiPreferencesController } from './uiPreferencesController';
 import { registerWhisperModelController } from './whisperModelController';
@@ -11,6 +12,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     registerFileController(ipcMain, getMainWindow);
     registerTranscriptionController(ipcMain, getMainWindow);
     registerRecordingController(ipcMain, getMainWindow);
+    registerSessionsController(ipcMain, getMainWindow);
     registerDebugController(ipcMain, getMainWindow);
     registerWhisperModelController(ipcMain, getMainWindow);
     registerUiPreferencesController(ipcMain, getMainWindow);

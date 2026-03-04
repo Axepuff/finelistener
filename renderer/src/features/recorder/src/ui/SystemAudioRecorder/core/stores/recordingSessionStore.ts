@@ -248,18 +248,13 @@ export class RecordingSessionStore {
             const result = await api.stopSystemRecording();
 
             this.dependencies.logService.append(`Recording finished: ${result.filePath}`);
+            const session = await api.sessions.importRecording(result.filePath);
 
-            const { path } = await api.convertAudio({
-                audioPath: result.filePath,
-                lowPass: 12000,
-                highPass: 80,
-                dynanorm: true,
-            });
-
-            set(atoms.transcription.audioToTranscribe, [path]);
-            set(atoms.transcription.runOutcome, 'none');
-            set(atoms.transcription.runErrorMessage, null);
-            this.dependencies.logService.append('Audio prepared and loaded into the player.');
+            set(atoms.clearTranscriptionOutput);
+            set(atoms.sessions.currentSessionId, session.id);
+            set(atoms.transcription.audioToTranscribe, [session.audioWavPath]);
+            void set(atoms.refreshSessions);
+            this.dependencies.logService.append('Recording was saved as a session and loaded into the player.');
         } catch (error: unknown) {
             const message = getErrorMessage(error);
 

@@ -1,10 +1,12 @@
-import { Box, Divider, Paper, Stack, Text } from '@mantine/core';
+import { Box, Divider, Paper, ScrollArea, Stack } from '@mantine/core';
 import { FileSelect, Player } from '@~/player';
 import { ProcessLog } from '@~/process-log';
+import { SessionsSidebar } from '@~/sessions';
 import { TranscribeControl } from '@~/transcribe-control';
 import { TranscribedText } from '@~/transcribed-text';
+import { useAtomValue } from 'jotai';
 import { useSetAtom } from 'jotai';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { atoms, type RegionTiming } from 'renderer/src/atoms';
 import { ResizableSidebarLayout } from 'renderer/src/shared/lib';
 
@@ -12,11 +14,20 @@ const { transcription, appState } = atoms;
 const SIDEBAR_MIN_WIDTH = 320;
 const SIDEBAR_MAX_WIDTH = 560;
 const SIDEBAR_DEFAULT_WIDTH = 420;
+const RIGHT_SIDEBAR_MIN_WIDTH = 260;
+const RIGHT_SIDEBAR_MAX_WIDTH = 520;
+const RIGHT_SIDEBAR_DEFAULT_WIDTH = 360;
 
 export const Home: React.FC = () => {
+    const sessions = useAtomValue(atoms.sessions.items);
     const setUiState = useSetAtom(appState.uiState);
     const setTranscribedRegions = useSetAtom(transcription.transcribedRegions);
     const setCurrentTime = useSetAtom(transcription.currentTime);
+    const refreshSessions = useSetAtom(atoms.refreshSessions);
+
+    useEffect(() => {
+        void refreshSessions();
+    }, [refreshSessions]);
 
     const handleTranscribeStart = () => {
         setUiState('transcribing');
@@ -32,8 +43,8 @@ export const Home: React.FC = () => {
     };
 
     return (
-        <Box style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <Stack gap={0} style={{ minHeight: 0, display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <Box style={{ height: '100vh', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <Stack gap={0} style={{ minHeight: 0, display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
                 <Player />
                 <Divider />
                 <ResizableSidebarLayout
@@ -47,26 +58,33 @@ export const Home: React.FC = () => {
                             <Paper
                                 bg="gray.0"
                                 h="100%"
+                                style={{ minHeight: 0, overflow: 'hidden' }}
                             >
-                                <Stack gap={16} p={16} h="100%">
-                                    <Text size="xs" fw={700} c="dimmed" style={{ letterSpacing: '0.08em' }}>
-                                        {'SOURCE'}
-                                    </Text>
-                                    <FileSelect />
-                                    <Text size="xs" fw={700} c="dimmed" style={{ letterSpacing: '0.08em' }}>
-                                        {'CONFIGURATION'}
-                                    </Text>
-                                    <TranscribeControl
-                                        onTranscribeStart={handleTranscribeStart}
-                                        onTranscribeEnd={handleTranscribeEnd}
-                                    />
-                                </Stack>
+                                <ScrollArea h="100%" type="auto" style={{ minHeight: 0 }}>
+                                    <Stack gap={16} p={16}>
+                                        <FileSelect />
+                                        <TranscribeControl
+                                            onTranscribeStart={handleTranscribeStart}
+                                            onTranscribeEnd={handleTranscribeEnd}
+                                        />
+                                    </Stack>
+                                </ScrollArea>
                             </Paper>
                         ),
                     }}
+                    rightSidebar={sessions.length ? {
+                        minWidth: RIGHT_SIDEBAR_MIN_WIDTH,
+                        maxWidth: RIGHT_SIDEBAR_MAX_WIDTH,
+                        defaultWidth: RIGHT_SIDEBAR_DEFAULT_WIDTH,
+                        widthPreferenceKey: 'homeRightSidebarWidth',
+                        separatorAriaLabel: 'Resize right sidebar',
+                        node: (
+                            <SessionsSidebar />
+                        ),
+                    } : undefined}
                     content={(
-                        <Box style={{ minWidth: 0, minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                            <Box style={{ minHeight: 0, flex: 1 }}>
+                        <Box style={{ minWidth: 0, minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden' }}>
+                            <Box style={{ minHeight: 0, flex: 1, overflow: 'hidden' }}>
                                 <TranscribedText
                                     onSelectTime={handleSelectTime}
                                 />

@@ -231,7 +231,7 @@ export class AudioPreprocessor {
     }
 
     private resolveFilterOptions(options: { lowPass?: number; highPass?: number }): AudioFilterOptions {
-        const highPass = options.highPass === undefined ? DEFAULT_HIGH_PASS_HZ : options.highPass;
+        const highPass = !('highPass' in options) ? DEFAULT_HIGH_PASS_HZ : options.highPass;
 
         return {
             lowPassHz: this.normalizeFrequency('lowpass', options.lowPass),

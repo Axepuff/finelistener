@@ -215,7 +215,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
     const rightSidebarState = useResizableSidebar(resolvedRightSidebar, 'right');
 
     const contentNode = (
-        <Box style={{ minWidth: 0, minHeight: 0, flex: 1 }}>
+        <Box style={{ minWidth: 0, minHeight: 0, flex: 1, overflow: 'hidden' }}>
             {content}
         </Box>
     );
@@ -284,7 +284,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
     };
 
     return (
-        <Box style={{ display: 'flex', gap: 0, minHeight: 0, flex: 1 }}>
+        <Box style={{ display: 'flex', gap: 0, minHeight: 0, flex: 1, overflow: 'hidden' }}>
             {renderSidebarNode(resolvedLeftSidebar, leftSidebarState)}
             {renderSeparatorNode(resolvedLeftSidebar, leftSidebarState)}
             {contentNode}

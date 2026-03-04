@@ -1,6 +1,6 @@
 import { ActionIcon, Group, Paper, Progress, Stack, Text } from '@mantine/core';
 import { IconPlus } from '@tabler/icons-react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import React, { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { atoms } from 'renderer/src/atoms';
 import { useApp } from '../../../../../AppContext';
@@ -19,14 +19,17 @@ export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }
     const [plainText, setPlainText] = useAtom(transcription.plainText);
     const [renderedText, setRenderedText] = useAtom(transcription.renderedText);
     const [progress, setProgress] = useState(0);
-    const [showRegions, setShowRegions] = useState(true);
+    const [showRegions, setShowRegions] = useState(false);
     const uiState = useAtomValue(appState.uiState);
     const trimRange = useAtomValue(atoms.transcription.trimRange);
     const trimOffsetRef = useRef<number>(resolveTrimOffset(trimRange));
     const trimOffset = resolveTrimOffset(trimRange);
     const [, setAudioToTranscribe] = useAtom(atoms.transcription.audioToTranscribe);
-    const [, setRunOutcome] = useAtom(atoms.transcription.runOutcome);
-    const [, setRunErrorMessage] = useAtom(atoms.transcription.runErrorMessage);
+    const [, setCurrentSessionId] = useAtom(atoms.sessions.currentSessionId);
+    const setCurrentSessionDetails = useSetAtom(atoms.sessions.currentSessionDetails);
+    const setAudioMode = useSetAtom(atoms.sessions.audioMode);
+    const [, clearOutput] = useAtom(atoms.clearTranscriptionOutput);
+    const refreshSessions = useSetAtom(atoms.refreshSessions);
 
     const plainSegments = useMemo(() => buildPlainSegments(plainText, trimOffset), [plainText, trimOffset]);
     const plainTextValue = useMemo(
@@ -70,7 +73,7 @@ export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }
 
         if (!safeStart && !safeEnd) return fallback;
 
-        return `[${safeStart} --> ${safeEnd}]`;
+        return `[${safeStart} - ${safeEnd}]`;
     }, []);
 
     const enhanceChunk = useCallback((chunk: string) => {
@@ -113,20 +116,22 @@ export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }
 
     const handlePick = async () => {
         if (!isElectron) return;
-        const file = await window.api!.pickAudio();
-
-        if (!file) {
-            return;
-        }
 
         try {
-            const { path } = await window.api!.convertAudio({ audioPath: file, lowPass: 12000, highPass: 80 });
+            const session = await window.api!.sessions.importAudio();
 
-            setAudioToTranscribe([path]);
-            setRunOutcome('none');
-            setRunErrorMessage(null);
+            if (!session) {
+                return;
+            }
+
+            clearOutput();
+            setCurrentSessionId(session.id);
+            setCurrentSessionDetails(session);
+            setAudioMode('original');
+            setAudioToTranscribe([session.audioWavPath]);
+            void refreshSessions();
         } catch (error) {
-            console.error('Failed to convert audio', error);
+            console.error('Failed to import audio into a session', error);
         }
     };
 
@@ -134,7 +139,6 @@ export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }
         if (!isElectron) return;
 
         const off1 = window.api!.onTranscribeText((chunk) => {
-            console.log(chunk);
             setPlainText((text) => text + chunk);
             setRenderedText((text) => text + enhanceChunk(chunk));
         });
@@ -160,7 +164,7 @@ export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }
     }, [uiState]);
 
     return (
-        <Stack gap={16} align="stretch" style={{ width: '100%', minHeight: 0, height: '100%', padding: 16 }}>
+        <Stack gap={16} align="stretch" style={{ width: '100%', minWidth: 0, minHeight: 0, height: '100%', padding: 16, overflow: 'hidden' }}>
             {isInitialEmptyState ? (
                 <Paper
                     style={{

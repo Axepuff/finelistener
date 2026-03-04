@@ -1,7 +1,7 @@
 import { Button, Paper, SegmentedControl, Stack, Text } from '@mantine/core';
 import { IconFileMusic } from '@tabler/icons-react';
 import { SystemAudioRecorder } from '@~/recorder';
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { useMemo, useState, type FC } from 'react';
 import { atoms } from 'renderer/src/atoms';
 import { useApp } from '../../../../../AppContext';
@@ -19,31 +19,36 @@ export const FileSelect: FC = () => {
     const { isElectron } = useApp();
     const [sourceMode, setSourceMode] = useState<SourceMode>('file');
     const [audioToTranscribe, setAudioToTranscribe] = useAtom(atoms.transcription.audioToTranscribe);
-    const [, setRunOutcome] = useAtom(atoms.transcription.runOutcome);
-    const [, setRunErrorMessage] = useAtom(atoms.transcription.runErrorMessage);
+    const [, setCurrentSessionId] = useAtom(atoms.sessions.currentSessionId);
+    const setCurrentSessionDetails = useSetAtom(atoms.sessions.currentSessionDetails);
+    const setAudioMode = useSetAtom(atoms.sessions.audioMode);
+    const [, clearOutput] = useAtom(atoms.clearTranscriptionOutput);
+    const refreshSessions = useSetAtom(atoms.refreshSessions);
 
     const handlePick = async () => {
         if (!isElectron) return;
-        const file = await window.api!.pickAudio();
-
-        if (!file) {
-            return;
-        }
 
         try {
-            const { path } = await window.api!.convertAudio({ audioPath: file, lowPass: 12000, highPass: 80 });
+            const session = await window.api!.sessions.importAudio();
 
-            setAudioToTranscribe([path]);
-            setRunOutcome('none');
-            setRunErrorMessage(null);
+            if (!session) {
+                return;
+            }
+
+            clearOutput();
+            setCurrentSessionId(session.id);
+            setCurrentSessionDetails(session);
+            setAudioMode('original');
+            setAudioToTranscribe([session.audioWavPath]);
+            void refreshSessions();
         } catch (error) {
-            console.error('Failed to convert audio', error);
+            console.error('Failed to import audio into a session', error);
         }
     };
 
     const selectedLabel = useMemo(() => {
         if (audioToTranscribe.length === 0) {
-            return 'No file selected';
+            return null;
         }
 
         return audioToTranscribe.map(shortenFileName).join(', ');
@@ -64,7 +69,6 @@ export const FileSelect: FC = () => {
                     onChange={(value) => setSourceMode(value as SourceMode)}
                 />
                 {sourceMode === 'file' ? (
-
                     <Stack gap={8}>
                         <Button
                             onClick={handlePick}

@@ -92,7 +92,11 @@ export class Whisper {
                 useGpu: opts.useGpu,
             });
 
-            const { wavPath, cleanup } = await this.audioPreprocessor.prepareAudioFile(audioPath, opts.segment);
+            const { wavPath, cleanup } = await this.audioPreprocessor.prepareAudioFile(
+                audioPath,
+                opts.segment,
+                { highPass: undefined },
+            );
 
             this.abortController = new AbortController();
             this.hasRealtimeOutput = false;
