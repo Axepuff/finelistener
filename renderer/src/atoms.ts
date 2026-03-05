@@ -6,7 +6,7 @@ import {
 import type { SessionDetails, SessionListItem } from 'electron/src/types/sessions';
 import { atom } from 'jotai';
 
-export type UiState = 'initial' | 'transcribing' | 'ready';
+export type UiState = 'initial' | 'importing' | 'transcribing' | 'ready';
 export type RegionTiming = { start: number; end: number };
 export type TrimRange = { start?: number; end?: number };
 
@@ -95,20 +95,30 @@ class AtomRegistry {
             return null;
         }
 
-        const session = await api.sessions.importAudio();
+        set(this.appState.uiState, 'importing');
 
-        if (!session) {
-            return null;
+        try {
+            const session = await api.sessions.importAudio();
+
+            if (!session) {
+                set(this.appState.uiState, 'initial');
+
+                return null;
+            }
+
+            set(this.clearTranscriptionOutput);
+            set(this.sessions.currentSessionId, session.id);
+            set(this.sessions.currentSessionDetails, session);
+            set(this.sessions.audioMode, 'original');
+            set(this.transcription.audioToTranscribe, [session.audioWavPath]);
+            set(this.appState.uiState, 'ready');
+            void set(this.refreshSessions);
+
+            return session;
+        } catch (error) {
+            set(this.appState.uiState, 'initial');
+            throw error;
         }
-
-        set(this.clearTranscriptionOutput);
-        set(this.sessions.currentSessionId, session.id);
-        set(this.sessions.currentSessionDetails, session);
-        set(this.sessions.audioMode, 'original');
-        set(this.transcription.audioToTranscribe, [session.audioWavPath]);
-        void set(this.refreshSessions);
-
-        return session;
     });
 
     readonly refreshSessions = atom(null, async (_get, set) => {

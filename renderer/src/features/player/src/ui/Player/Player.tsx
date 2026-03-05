@@ -63,8 +63,16 @@ export const Player: FC = () => {
         if (!player) return;
 
         setTrimRange(undefined);
-        setIsLoading(true);
         setCurrentPosition(0);
+
+        if (!currentAudioPath) {
+            setIsLoading(false);
+            void player.loadSource(undefined);
+
+            return;
+        }
+
+        setIsLoading(true);
         void player.loadSource(currentAudioPath);
     }, [currentAudioPath, player, setCurrentPosition, setTrimRange]);
 

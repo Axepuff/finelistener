@@ -1,7 +1,7 @@
 // Deterministic operator-mode workflow for an industrial-style control panel.
 export type TranscriptionWorkflowState = 'empty' | 'loaded' | 'transcribing' | 'done';
 export type TranscriptionRunOutcome = 'none' | 'success' | 'error';
-export type TranscriptionLifecycleState = 'initial' | 'transcribing' | 'ready';
+export type TranscriptionLifecycleState = 'initial' | 'importing' | 'transcribing' | 'ready';
 
 export interface TranscriptionWorkflowInput {
     lifecycleState: TranscriptionLifecycleState;
@@ -72,6 +72,16 @@ export const evaluateTranscriptionWorkflow = ({
     hasRenderedOutput,
     runOutcome,
 }: TranscriptionWorkflowInput): TranscriptionWorkflowSnapshot => {
+    if (lifecycleState === 'importing') {
+        return {
+            state: 'empty',
+            outcome: 'none',
+            hasAudioSource: false,
+            hasRenderedOutput: false,
+            hasError: false,
+        };
+    }
+
     if (lifecycleState === 'transcribing') {
         return {
             state: 'transcribing',

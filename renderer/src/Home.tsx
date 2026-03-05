@@ -1,4 +1,4 @@
-import { Box, Divider, Paper, ScrollArea, Stack } from '@mantine/core';
+import { Box, Divider, LoadingOverlay, Paper, ScrollArea, Stack } from '@mantine/core';
 import { FileSelect, Player } from '@~/player';
 import { ProcessLog } from '@~/process-log';
 import { SessionsSidebar } from '@~/sessions';
@@ -20,6 +20,7 @@ const RIGHT_SIDEBAR_DEFAULT_WIDTH = 360;
 
 export const Home: React.FC = () => {
     const sessions = useAtomValue(atoms.sessions.items);
+    const uiState = useAtomValue(appState.uiState);
     const setUiState = useSetAtom(appState.uiState);
     const setTranscribedRegions = useSetAtom(transcription.transcribedRegions);
     const setCurrentTime = useSetAtom(transcription.currentTime);
@@ -43,7 +44,8 @@ export const Home: React.FC = () => {
     };
 
     return (
-        <Box style={{ height: '100vh', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <Box style={{ height: '100vh', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+            <LoadingOverlay visible={uiState === 'importing'} overlayProps={{ blur: 2 }} />
             <Stack gap={0} style={{ minHeight: 0, display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
                 <Player />
                 <Divider />
