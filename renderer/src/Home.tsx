@@ -11,11 +11,11 @@ import { atoms, type RegionTiming } from 'renderer/src/atoms';
 import { ResizableSidebarLayout } from 'renderer/src/shared/lib';
 
 const { transcription, appState } = atoms;
-const SIDEBAR_MIN_WIDTH = 320;
-const SIDEBAR_MAX_WIDTH = 560;
-const SIDEBAR_DEFAULT_WIDTH = 420;
-const RIGHT_SIDEBAR_MIN_WIDTH = 260;
-const RIGHT_SIDEBAR_MAX_WIDTH = 520;
+const SIDEBAR_MIN_WIDTH = 10;
+const SIDEBAR_MAX_WIDTH = 480;
+const SIDEBAR_DEFAULT_WIDTH = 300;
+const RIGHT_SIDEBAR_MIN_WIDTH = 10;
+const RIGHT_SIDEBAR_MAX_WIDTH = 480;
 const RIGHT_SIDEBAR_DEFAULT_WIDTH = 360;
 
 export const Home: React.FC = () => {

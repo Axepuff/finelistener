@@ -32,7 +32,7 @@ export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }
         [plainSegments],
     );
     const currentTextValue = showRegions ? plainText : plainTextValue;
-    const isInitialEmptyState = uiState === 'initial' && currentTextValue.trim().length === 0;
+    const isInitialEmptyState = (uiState === 'initial' || uiState === 'importing') && currentTextValue.trim().length === 0;
 
     useEffect(() => {
         trimOffsetRef.current = resolveTrimOffset(trimRange);
