@@ -92,7 +92,11 @@ export class Whisper {
                 useGpu: opts.useGpu,
             });
 
-            const { wavPath, cleanup } = await this.audioPreprocessor.prepareAudioFile(audioPath, opts.segment);
+            const { wavPath, cleanup } = await this.audioPreprocessor.prepareAudioFile(
+                audioPath,
+                opts.segment,
+                { highPass: undefined },
+            );
 
             this.abortController = new AbortController();
             this.hasRealtimeOutput = false;
@@ -118,7 +122,7 @@ export class Whisper {
 
                 if (!inferenceResult.ok) {
                     throw new Error(
-                        `whisper-server вернул ${inferenceResult.status}: ${
+                        `whisper-server returned ${inferenceResult.status}: ${
                             inferenceResult.errorText || inferenceResult.statusText
                         }`,
                     );
@@ -134,7 +138,7 @@ export class Whisper {
                 return transcriptText;
             } catch (error) {
                 if (this.abortController === null && error instanceof Error && error.name === 'AbortError') {
-                    throw new Error('Распознавание остановлено пользователем');
+                    throw new Error('Transcription was stopped by the user');
                 }
 
                 throw error instanceof Error ? error : new Error(String(error));

@@ -87,7 +87,11 @@ export class WaveSurferAdapter extends PlayerAdapter {
         this.onPlayingChange(false);
         this.onTimeUpdate(0);
 
-        if (!filePath) return;
+        if (!filePath) {
+            this.wavesurfer.empty();
+
+            return;
+        }
 
         await this.wavesurfer.load(buildLocalFileUrl(filePath));
     }

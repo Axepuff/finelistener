@@ -1,4 +1,3 @@
-import type { ConvertAudioOptions } from 'electron/src/services/AudioPreprocessor';
 import type {
     RecordingLevel,
     RecordingProgress,
@@ -9,6 +8,7 @@ import type {
 } from 'electron/src/services/RecordingService';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
+import type { SessionDetails, SessionListItem } from 'electron/src/types/sessions';
 import type { TranscribeOpts } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
@@ -21,9 +21,16 @@ declare global {
             runtime: {
                 platform: RuntimePlatform;
             };
-            pickAudio: () => Promise<string | null>;
+            sessions: {
+                list: () => Promise<SessionListItem[]>;
+                get: (sessionId: string) => Promise<SessionDetails>;
+                delete: (sessionId: string) => Promise<boolean>;
+                importAudio: () => Promise<SessionDetails | null>;
+                importRecording: (recordingFilePath: string) => Promise<SessionDetails>;
+                optimizeAudio: (sessionId: string) => Promise<SessionDetails>;
+                revealFolder: () => Promise<boolean>;
+            };
             transcribeStream: (audioPath: string, opts: TranscribeOpts) => Promise<string>;
-            convertAudio: (args: ConvertAudioOptions) => Promise<{ path: string }>;
             saveText: (content: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
             startSystemRecording: (options?: RecordingStartOptions) => Promise<RecordingSession>;
             stopSystemRecording: () => Promise<RecordingResult>;

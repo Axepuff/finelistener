@@ -231,7 +231,7 @@ export class AudioPreprocessor {
     }
 
     private resolveFilterOptions(options: { lowPass?: number; highPass?: number }): AudioFilterOptions {
-        const highPass = options.highPass === undefined ? DEFAULT_HIGH_PASS_HZ : options.highPass;
+        const highPass = !('highPass' in options) ? DEFAULT_HIGH_PASS_HZ : options.highPass;
 
         return {
             lowPassHz: this.normalizeFrequency('lowpass', options.lowPass),
@@ -243,9 +243,7 @@ export class AudioPreprocessor {
         if (frequency === undefined) return undefined;
 
         if (!Number.isFinite(frequency) || frequency <= 0) {
-            const label = type === 'lowpass' ? 'низких частот' : 'высоких частот';
-
-            throw new Error(`Некорректное значение фильтра ${label}: ${frequency}`);
+            throw new Error(`Invalid ${type} filter frequency: ${frequency}`);
         }
 
         return frequency;

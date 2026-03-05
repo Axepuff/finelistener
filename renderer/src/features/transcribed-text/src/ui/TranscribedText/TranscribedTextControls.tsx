@@ -63,20 +63,20 @@ export const TranscribedTextControls: React.FC<Props> = ({
                     className={styles.viewToggle}
                     data={[
                         {
-                            value: 'timecodes',
-                            label: (
-                                <Group gap={6} wrap="nowrap">
-                                    <IconClockHour2 size={16} />
-                                    <span>{'Timecodes'}</span>
-                                </Group>
-                            ),
-                        },
-                        {
                             value: 'plain',
                             label: (
                                 <Group gap={6} wrap="nowrap">
                                     <IconTextSize size={16} />
                                     <span>{'Plain Text'}</span>
+                                </Group>
+                            ),
+                        },
+                        {
+                            value: 'timecodes',
+                            label: (
+                                <Group gap={6} wrap="nowrap">
+                                    <IconClockHour2 size={16} />
+                                    <span>{'Timecodes'}</span>
                                 </Group>
                             ),
                         },

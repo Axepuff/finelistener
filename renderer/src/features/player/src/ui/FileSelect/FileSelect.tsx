@@ -1,7 +1,7 @@
 import { Button, Paper, SegmentedControl, Stack, Text } from '@mantine/core';
 import { IconFileMusic } from '@tabler/icons-react';
 import { SystemAudioRecorder } from '@~/recorder';
-import { useAtom } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { useMemo, useState, type FC } from 'react';
 import { atoms } from 'renderer/src/atoms';
 import { useApp } from '../../../../../AppContext';
@@ -18,32 +18,22 @@ const shortenFileName = (target: string): string => target.split(/[/\\]/).pop() 
 export const FileSelect: FC = () => {
     const { isElectron } = useApp();
     const [sourceMode, setSourceMode] = useState<SourceMode>('file');
-    const [audioToTranscribe, setAudioToTranscribe] = useAtom(atoms.transcription.audioToTranscribe);
-    const [, setRunOutcome] = useAtom(atoms.transcription.runOutcome);
-    const [, setRunErrorMessage] = useAtom(atoms.transcription.runErrorMessage);
+    const audioToTranscribe = useAtomValue(atoms.transcription.audioToTranscribe);
+    const importAudioSession = useSetAtom(atoms.importAudioSession);
 
     const handlePick = async () => {
         if (!isElectron) return;
-        const file = await window.api!.pickAudio();
-
-        if (!file) {
-            return;
-        }
 
         try {
-            const { path } = await window.api!.convertAudio({ audioPath: file, lowPass: 12000, highPass: 80 });
-
-            setAudioToTranscribe([path]);
-            setRunOutcome('none');
-            setRunErrorMessage(null);
+            await importAudioSession();
         } catch (error) {
-            console.error('Failed to convert audio', error);
+            console.error('Failed to import audio into a session', error);
         }
     };
 
     const selectedLabel = useMemo(() => {
         if (audioToTranscribe.length === 0) {
-            return 'No file selected';
+            return null;
         }
 
         return audioToTranscribe.map(shortenFileName).join(', ');
@@ -64,7 +54,6 @@ export const FileSelect: FC = () => {
                     onChange={(value) => setSourceMode(value as SourceMode)}
                 />
                 {sourceMode === 'file' ? (
-
                     <Stack gap={8}>
                         <Button
                             onClick={handlePick}

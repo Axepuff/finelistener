@@ -41,6 +41,7 @@ const getDeltaBySidebarPosition = (
     return -rawDelta;
 };
 
+// TODO change it to react-resizable-panels lib
 export const ResizableSidebarLayout: React.FC<Props> = ({
     content,
     leftSidebar,
@@ -66,19 +67,25 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
     const resolvedRightSidebar = rightSidebar ?? (sidebarPosition === 'right' ? legacySidebarConfig : undefined);
 
     const useResizableSidebar = (sidebarConfig: SidebarConfig | undefined, position: SidebarPosition) => {
+        const hasSidebar = sidebarConfig !== undefined;
+        const minWidth = sidebarConfig?.minWidth ?? 0;
+        const maxWidth = sidebarConfig?.maxWidth ?? 0;
+        const defaultWidth = sidebarConfig?.defaultWidth ?? 0;
+        const preferenceKey = sidebarConfig?.widthPreferenceKey;
+
         const clampSidebarWidth = useCallback((value: number): number => {
-            if (!sidebarConfig) return value;
+            if (!hasSidebar) return value;
 
-            return Math.min(Math.max(value, sidebarConfig.minWidth), sidebarConfig.maxWidth);
-        }, [sidebarConfig]);
+            return Math.min(Math.max(value, minWidth), maxWidth);
+        }, [hasSidebar, minWidth, maxWidth]);
 
-        const [sidebarWidth, setSidebarWidth] = useState<number>(clampSidebarWidth(sidebarConfig?.defaultWidth ?? 0));
+        const [sidebarWidth, setSidebarWidth] = useState<number>(clampSidebarWidth(defaultWidth));
         const [isSidebarWidthLoaded, setIsSidebarWidthLoaded] = useState(false);
         const [isSidebarResizing, setIsSidebarResizing] = useState(false);
         const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
         const handleSidebarResizeStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-            if (!sidebarConfig) return;
+            if (!hasSidebar) return;
 
             event.preventDefault();
             resizeStateRef.current = {
@@ -86,10 +93,10 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
                 startWidth: sidebarWidth,
             };
             setIsSidebarResizing(true);
-        }, [sidebarConfig, sidebarWidth]);
+        }, [hasSidebar, sidebarWidth]);
 
         useEffect(() => {
-            if (!sidebarConfig) return;
+            if (!hasSidebar) return;
             if (!isSidebarResizing) return;
 
             const handlePointerMove = (event: PointerEvent) => {
@@ -115,22 +122,22 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
                 window.removeEventListener('pointermove', handlePointerMove);
                 window.removeEventListener('pointerup', handlePointerUp);
             };
-        }, [clampSidebarWidth, isSidebarResizing, position, sidebarConfig]);
+        }, [clampSidebarWidth, isSidebarResizing, position, hasSidebar]);
 
         useEffect(() => {
-            if (!sidebarConfig) {
+            if (!hasSidebar) {
                 setIsSidebarWidthLoaded(true);
 
                 return;
             }
 
-            setSidebarWidth(clampSidebarWidth(sidebarConfig.defaultWidth));
-        }, [clampSidebarWidth, sidebarConfig]);
+            setSidebarWidth(clampSidebarWidth(defaultWidth));
+        }, [clampSidebarWidth, hasSidebar, defaultWidth]);
 
         useEffect(() => {
             let isActive = true;
 
-            if (!sidebarConfig) {
+            if (!hasSidebar) {
                 setIsSidebarWidthLoaded(true);
 
                 return () => {
@@ -141,7 +148,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
             setIsSidebarWidthLoaded(false);
 
             const loadSidebarWidthPreference = async () => {
-                if (!sidebarConfig.widthPreferenceKey || !window.api?.getUiPreference) {
+                if (!preferenceKey || !window.api?.getUiPreference) {
                     if (isActive) {
                         setIsSidebarWidthLoaded(true);
                     }
@@ -150,7 +157,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
                 }
 
                 try {
-                    const storedSidebarWidth = await window.api.getUiPreference(sidebarConfig.widthPreferenceKey);
+                    const storedSidebarWidth = await window.api.getUiPreference(preferenceKey);
 
                     if (!isActive) return;
                     if (typeof storedSidebarWidth !== 'number' || !Number.isFinite(storedSidebarWidth)) {
@@ -172,13 +179,12 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
             return () => {
                 isActive = false;
             };
-        }, [clampSidebarWidth, sidebarConfig]);
+        }, [clampSidebarWidth, hasSidebar, preferenceKey]);
 
         useEffect(() => {
             const api = window.api;
-            const preferenceKey = sidebarConfig?.widthPreferenceKey;
 
-            if (!sidebarConfig) {
+            if (!hasSidebar) {
                 return;
             }
             if (
@@ -202,7 +208,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
             };
 
             void persistSidebarWidthPreference();
-        }, [clampSidebarWidth, isSidebarResizing, isSidebarWidthLoaded, sidebarConfig, sidebarWidth]);
+        }, [clampSidebarWidth, isSidebarResizing, isSidebarWidthLoaded, hasSidebar, preferenceKey, sidebarWidth]);
 
         return {
             sidebarWidth,
@@ -215,7 +221,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
     const rightSidebarState = useResizableSidebar(resolvedRightSidebar, 'right');
 
     const contentNode = (
-        <Box style={{ minWidth: 0, minHeight: 0, flex: 1 }}>
+        <Box style={{ minWidth: 0, minHeight: 0, flex: 1, overflow: 'hidden' }}>
             {content}
         </Box>
     );
@@ -284,7 +290,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
     };
 
     return (
-        <Box style={{ display: 'flex', gap: 0, minHeight: 0, flex: 1 }}>
+        <Box style={{ display: 'flex', gap: 0, minHeight: 0, flex: 1, overflow: 'hidden' }}>
             {renderSidebarNode(resolvedLeftSidebar, leftSidebarState)}
             {renderSeparatorNode(resolvedLeftSidebar, leftSidebarState)}
             {contentNode}
