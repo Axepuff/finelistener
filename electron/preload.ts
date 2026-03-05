@@ -21,8 +21,6 @@ contextBridge.exposeInMainWorld('api', {
         optimizeAudio: (sessionId: string) => ipcRenderer.invoke('sessions:optimize-audio', sessionId),
         revealFolder: () => ipcRenderer.invoke('sessions:reveal-root'),
     },
-    pickAudio: (lang: string) => ipcRenderer.invoke('pickAudio', lang),
-    convertAudio: (args: any) => ipcRenderer.invoke('convertAudio', args),
     saveText: (content: string) => ipcRenderer.invoke('saveText', content),
     startSystemRecording: (options?: { fileName?: string; deviceId?: string }) => ipcRenderer.invoke('recording:start', options),
     stopSystemRecording: () => ipcRenderer.invoke('recording:stop'),

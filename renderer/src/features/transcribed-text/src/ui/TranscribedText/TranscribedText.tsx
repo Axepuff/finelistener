@@ -24,12 +24,7 @@ export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }
     const trimRange = useAtomValue(atoms.transcription.trimRange);
     const trimOffsetRef = useRef<number>(resolveTrimOffset(trimRange));
     const trimOffset = resolveTrimOffset(trimRange);
-    const [, setAudioToTranscribe] = useAtom(atoms.transcription.audioToTranscribe);
-    const [, setCurrentSessionId] = useAtom(atoms.sessions.currentSessionId);
-    const setCurrentSessionDetails = useSetAtom(atoms.sessions.currentSessionDetails);
-    const setAudioMode = useSetAtom(atoms.sessions.audioMode);
-    const [, clearOutput] = useAtom(atoms.clearTranscriptionOutput);
-    const refreshSessions = useSetAtom(atoms.refreshSessions);
+    const importAudioSession = useSetAtom(atoms.importAudioSession);
 
     const plainSegments = useMemo(() => buildPlainSegments(plainText, trimOffset), [plainText, trimOffset]);
     const plainTextValue = useMemo(
@@ -118,18 +113,7 @@ export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }
         if (!isElectron) return;
 
         try {
-            const session = await window.api!.sessions.importAudio();
-
-            if (!session) {
-                return;
-            }
-
-            clearOutput();
-            setCurrentSessionId(session.id);
-            setCurrentSessionDetails(session);
-            setAudioMode('original');
-            setAudioToTranscribe([session.audioWavPath]);
-            void refreshSessions();
+            await importAudioSession();
         } catch (error) {
             console.error('Failed to import audio into a session', error);
         }

@@ -252,6 +252,8 @@ export class RecordingSessionStore {
 
             set(atoms.clearTranscriptionOutput);
             set(atoms.sessions.currentSessionId, session.id);
+            set(atoms.sessions.currentSessionDetails, session);
+            set(atoms.sessions.audioMode, 'original');
             set(atoms.transcription.audioToTranscribe, [session.audioWavPath]);
             void set(atoms.refreshSessions);
             this.dependencies.logService.append('Recording was saved as a session and loaded into the player.');

@@ -1,4 +1,3 @@
-import type { ConvertAudioOptions } from 'electron/src/services/AudioPreprocessor';
 import type {
     RecordingLevel,
     RecordingProgress,
@@ -31,9 +30,7 @@ declare global {
                 optimizeAudio: (sessionId: string) => Promise<SessionDetails>;
                 revealFolder: () => Promise<boolean>;
             };
-            pickAudio: () => Promise<string | null>;
             transcribeStream: (audioPath: string, opts: TranscribeOpts) => Promise<string>;
-            convertAudio: (args: ConvertAudioOptions) => Promise<{ path: string }>;
             saveText: (content: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
             startSystemRecording: (options?: RecordingStartOptions) => Promise<RecordingSession>;
             stopSystemRecording: () => Promise<RecordingResult>;

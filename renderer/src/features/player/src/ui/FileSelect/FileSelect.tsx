@@ -1,7 +1,7 @@
 import { Button, Paper, SegmentedControl, Stack, Text } from '@mantine/core';
 import { IconFileMusic } from '@tabler/icons-react';
 import { SystemAudioRecorder } from '@~/recorder';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { useMemo, useState, type FC } from 'react';
 import { atoms } from 'renderer/src/atoms';
 import { useApp } from '../../../../../AppContext';
@@ -18,29 +18,14 @@ const shortenFileName = (target: string): string => target.split(/[/\\]/).pop() 
 export const FileSelect: FC = () => {
     const { isElectron } = useApp();
     const [sourceMode, setSourceMode] = useState<SourceMode>('file');
-    const [audioToTranscribe, setAudioToTranscribe] = useAtom(atoms.transcription.audioToTranscribe);
-    const [, setCurrentSessionId] = useAtom(atoms.sessions.currentSessionId);
-    const setCurrentSessionDetails = useSetAtom(atoms.sessions.currentSessionDetails);
-    const setAudioMode = useSetAtom(atoms.sessions.audioMode);
-    const [, clearOutput] = useAtom(atoms.clearTranscriptionOutput);
-    const refreshSessions = useSetAtom(atoms.refreshSessions);
+    const audioToTranscribe = useAtomValue(atoms.transcription.audioToTranscribe);
+    const importAudioSession = useSetAtom(atoms.importAudioSession);
 
     const handlePick = async () => {
         if (!isElectron) return;
 
         try {
-            const session = await window.api!.sessions.importAudio();
-
-            if (!session) {
-                return;
-            }
-
-            clearOutput();
-            setCurrentSessionId(session.id);
-            setCurrentSessionDetails(session);
-            setAudioMode('original');
-            setAudioToTranscribe([session.audioWavPath]);
-            void refreshSessions();
+            await importAudioSession();
         } catch (error) {
             console.error('Failed to import audio into a session', error);
         }

@@ -88,6 +88,29 @@ class AtomRegistry {
         set(this.transcription.runErrorMessage, null);
     });
 
+    readonly importAudioSession = atom(null, async (_get, set) => {
+        const api = window.api;
+
+        if (!api?.sessions?.importAudio) {
+            return null;
+        }
+
+        const session = await api.sessions.importAudio();
+
+        if (!session) {
+            return null;
+        }
+
+        set(this.clearTranscriptionOutput);
+        set(this.sessions.currentSessionId, session.id);
+        set(this.sessions.currentSessionDetails, session);
+        set(this.sessions.audioMode, 'original');
+        set(this.transcription.audioToTranscribe, [session.audioWavPath]);
+        void set(this.refreshSessions);
+
+        return session;
+    });
+
     readonly refreshSessions = atom(null, async (_get, set) => {
         const api = window.api;
 

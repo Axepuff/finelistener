@@ -126,8 +126,13 @@ export const Player: FC = () => {
                 const updated = await window.api!.sessions.optimizeAudio(currentSessionId);
 
                 setCurrentSessionDetails(updated);
-                setAudioMode('optimized');
-                setAudioToTranscribe([updated.audioOptimizedWavPath!]);
+
+                if (updated.audioOptimizedWavPath) {
+                    setAudioMode('optimized');
+                    setAudioToTranscribe([updated.audioOptimizedWavPath]);
+                } else {
+                    console.error('Optimization completed but no optimized path returned');
+                }
             } catch (error) {
                 console.error('Failed to optimize audio', error);
             } finally {

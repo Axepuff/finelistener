@@ -89,17 +89,7 @@ export class SessionsService {
         return path.join(app.getPath('userData'), 'sessions');
     }
 
-    public async revealSessionsFolder(): Promise<boolean> {
-        const sessionsRoot = this.getSessionsRootDir();
-
-        await fs.mkdir(sessionsRoot, { recursive: true });
-
-        const result = await shell.openPath(sessionsRoot);
-
-        return result === '';
-    }
-
-    public async deleteSession(sessionId: string): Promise<void> {
+    private resolveSessionDir(sessionId: string): string {
         if (!sessionId || typeof sessionId !== 'string') {
             throw new Error('Invalid session id');
         }
@@ -119,7 +109,23 @@ export class SessionsService {
             throw new Error('Invalid session path');
         }
 
-        await fs.rm(resolvedTarget, { recursive: true, force: true });
+        return resolvedTarget;
+    }
+
+    public async revealSessionsFolder(): Promise<boolean> {
+        const sessionsRoot = this.getSessionsRootDir();
+
+        await fs.mkdir(sessionsRoot, { recursive: true });
+
+        const result = await shell.openPath(sessionsRoot);
+
+        return result === '';
+    }
+
+    public async deleteSession(sessionId: string): Promise<void> {
+        const sessionDir = this.resolveSessionDir(sessionId);
+
+        await fs.rm(sessionDir, { recursive: true, force: true });
     }
 
     public async listSessions(): Promise<SessionListItem[]> {
@@ -158,8 +164,7 @@ export class SessionsService {
     }
 
     public async getSession(sessionId: string): Promise<SessionDetails> {
-        const sessionsRoot = this.getSessionsRootDir();
-        const sessionDir = path.join(sessionsRoot, sessionId);
+        const sessionDir = this.resolveSessionDir(sessionId);
         const sessionFilePath = path.join(sessionDir, SESSION_FILE_NAME);
 
         const session = await readJsonFile<SessionFileV1>(sessionFilePath);
@@ -307,12 +312,7 @@ export class SessionsService {
     }
 
     public async optimizeSessionAudio(sessionId: string): Promise<SessionDetails> {
-        if (!sessionId) {
-            throw new Error('Session id is required');
-        }
-
-        const sessionsRoot = this.getSessionsRootDir();
-        const sessionDir = path.join(sessionsRoot, sessionId);
+        const sessionDir = this.resolveSessionDir(sessionId);
         const sessionFilePath = path.join(sessionDir, SESSION_FILE_NAME);
 
         const session = await readJsonFile<SessionFileV1>(sessionFilePath);
@@ -362,12 +362,7 @@ export class SessionsService {
         transcript: SessionTranscriptV1,
         transcription?: SessionTranscriptionInfo,
     ): Promise<void> {
-        if (!sessionId) {
-            throw new Error('Session id is required');
-        }
-
-        const sessionsRoot = this.getSessionsRootDir();
-        const sessionDir = path.join(sessionsRoot, sessionId);
+        const sessionDir = this.resolveSessionDir(sessionId);
         const sessionFilePath = path.join(sessionDir, SESSION_FILE_NAME);
 
         const session = await readJsonFile<SessionFileV1>(sessionFilePath);
