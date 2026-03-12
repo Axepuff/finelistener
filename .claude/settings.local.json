@@ -3,7 +3,11 @@
     "allow": [
       "Bash(gh pr:*)",
       "Bash(npm run:*)",
-      "Bash(chmod +x:*)"
+      "Bash(chmod +x:*)",
+      "Read",
+      "Glob",
+      "Grep",
+      "LS"
     ]
   }
 }
