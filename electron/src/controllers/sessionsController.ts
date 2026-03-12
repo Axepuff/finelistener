@@ -1,5 +1,6 @@
 import type { BrowserWindow, IpcMain } from 'electron';
 import { dialog } from 'electron';
+import { SUPPORTED_MEDIA_EXTENSIONS } from '../constants';
 import { SessionsService } from '../services/SessionsService';
 
 export function registerSessionsController(ipc: IpcMain, _getMainWindow: () => BrowserWindow | null): void {
@@ -29,7 +30,12 @@ export function registerSessionsController(ipc: IpcMain, _getMainWindow: () => B
 
     ipc.handle('sessions:import-audio', async () => {
         const { canceled, filePaths } = await dialog.showOpenDialog({
-            filters: [{ name: 'Audio', extensions: ['wav', 'mp3', 'm4a', 'flac', 'ogg', 'opus', 'aac'] }],
+            filters: [
+                {
+                    name: 'Audio & Video',
+                    extensions: SUPPORTED_MEDIA_EXTENSIONS,
+                },
+            ],
             properties: ['openFile'],
         });
 

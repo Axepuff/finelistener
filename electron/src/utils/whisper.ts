@@ -33,7 +33,7 @@ const resolveDefaultModelName = (): WhisperModelName => {
         return envValue as WhisperModelName;
     }
 
-    return 'large';
+    return 'base';
 };
 
 export const DEFAULT_MODEL_NAME = resolveDefaultModelName();
@@ -93,9 +93,7 @@ export const resolveModelPath = (model: WhisperModelName): string => {
     return pickExistingPath(candidates, 'Whisper model file is missing');
 };
 
-/**
- * Ищем бинарники/модели whisper внутри ресурсов приложения.
- */
+/** Resolve whisper binary and model paths within application resources. */
 export function resolveWhisperPaths(
     model: WhisperModelName = DEFAULT_MODEL_NAME,
     modelPathOverride?: string,
@@ -106,6 +104,7 @@ export function resolveWhisperPaths(
             path.resolve(appPath, WHISPER_DIR_NAME),
         ]
         : [
+            path.join(process.resourcesPath, 'whisper'),
             path.join(process.resourcesPath, WHISPER_DIR_NAME),
             path.resolve(appPath, WHISPER_DIR_NAME),
         ];
@@ -113,6 +112,7 @@ export function resolveWhisperPaths(
     const base = pickExistingPath(baseCandidates, 'Cannot locate whisper.cpp assets');
     const serverBinPath = pickExistingPath(
         [
+            ...WHISPER_SERVER_BIN_NAMES.map((name) => path.join(base, name)),
             ...WHISPER_SERVER_BIN_NAMES.map((name) => path.join(base, 'build', 'bin', name)),
             ...WHISPER_SERVER_BIN_NAMES.map((name) => path.join(base, 'bin', name)),
         ],
@@ -145,9 +145,7 @@ export function buildTranscribeArgs(
     return args;
 }
 
-/**
- * Собираем переменные окружения, чтобы whisper видел динамические библиотеки рядом с бинарником.
- */
+/** Build environment variables so whisper can find shared libraries next to the binary. */
 export const createWhisperEnv = (binPath: string): NodeJS.ProcessEnv => {
     const env: NodeJS.ProcessEnv = { ...process.env };
     const libDir = path.dirname(binPath);

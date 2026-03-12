@@ -2,7 +2,7 @@ import { ActionIcon, Box, Button, Checkbox, Group, Loader, Select, Stack, Text }
 import { IconHeadphones, IconPlayerStopFilled, IconBackspaceFilled } from '@tabler/icons-react';
 import type { WhisperModelName } from 'electron/src/types/whisper';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { atoms, type RegionTiming } from 'renderer/src/atoms';
 import { useApp } from '../../../../../AppContext';
 import { TranscribeAdvancedSettings } from '../TranscribeAdvancedSettings/TranscribeAdvancedSettings';
@@ -46,6 +46,8 @@ const formatSeconds = (seconds: number): string => {
 
 const getShortFileName = (target: string) => target.split(/[/\\]/).pop() || target;
 
+type TranscribePhase = 'idle' | 'awaiting-download' | 'downloading' | 'transcribing';
+
 interface Props {
     onTranscribeStart: () => void;
     onTranscribeEnd: (regions?: RegionTiming) => void;
@@ -59,7 +61,7 @@ const TranscribeControl: React.FC<Props> = ({
     const [lang, setLang] = useState('ru');
     const [model, setModel] = useState<WhisperModelName>('large');
     const [isModelDownloaded, setIsModelDownloaded] = useState(false);
-    const [isModelDownloadActive, setIsModelDownloadActive] = useState(false);
+    const [phase, setPhase] = useState<TranscribePhase>('idle');
     const [useCustomModelFile, setUseCustomModelFile] = useState(false);
     const [customModelFile, setCustomModelFile] = useState<{ path: string; fileName: string } | null>(null);
     const [isCustomModelImporting, setIsCustomModelImporting] = useState(false);
@@ -94,10 +96,21 @@ const TranscribeControl: React.FC<Props> = ({
     const handleModelStatusChange = useCallback(
         (status: { isModelDownloaded: boolean; isDownloadActive: boolean }) => {
             setIsModelDownloaded(status.isModelDownloaded);
-            setIsModelDownloadActive(status.isDownloadActive);
+            if (status.isDownloadActive) {
+                setPhase((prev) => (prev === 'awaiting-download' ? 'downloading' : prev));
+            } else if (!status.isModelDownloaded) {
+                setPhase((prev) => (prev === 'downloading' ? 'idle' : prev));
+            }
         },
         [],
     );
+
+    useEffect(() => {
+        if (phase === 'downloading' && isModelDownloaded) {
+            setPhase('idle');
+            handleStartRef.current?.();
+        }
+    }, [phase, isModelDownloaded]);
 
     const handleImportCustomModel = useCallback(async () => {
         if (!window.api?.importWhisperModelFromFile) {
@@ -129,8 +142,10 @@ const TranscribeControl: React.FC<Props> = ({
         }
     }, [appendLog]);
 
+    const handleStartRef = useRef<(() => void) | undefined>(undefined);
+
     const handleStart = async () => {
-        if (!isElectron || !canStart) return;
+        if (!isElectron) return;
         if (useCustomModelFile && !customModelFile) {
             appendLog('No custom model file selected.');
 
@@ -138,6 +153,12 @@ const TranscribeControl: React.FC<Props> = ({
         }
         if (audioToTranscribe.length === 0) {
             appendLog('No audio files selected for transcription.');
+
+            return;
+        }
+
+        if (!useCustomModelFile && !isModelDownloaded) {
+            setPhase('awaiting-download');
 
             return;
         }
@@ -159,6 +180,7 @@ const TranscribeControl: React.FC<Props> = ({
 
         setRunOutcome('none');
         setRunErrorMessage(null);
+        setPhase('transcribing');
         setUiState('transcribing');
         setPlainText('');
         setRenderedText('');
@@ -207,6 +229,7 @@ const TranscribeControl: React.FC<Props> = ({
             setRunOutcome('error');
             setRunErrorMessage(message);
         } finally {
+            setPhase('idle');
             onTranscribeEnd(completed ? segment : undefined);
             setUiState('ready');
             if (sessionId) {
@@ -214,6 +237,16 @@ const TranscribeControl: React.FC<Props> = ({
             }
         }
     };
+
+    handleStartRef.current = handleStart;
+
+    const handleDownloadComplete = useCallback(() => {
+        // Phase transition and auto-start handled by handleModelStatusChange + effect
+    }, []);
+
+    const handleDownloadCancelled = useCallback(() => {
+        setPhase('idle');
+    }, []);
 
     const handleStop = async () => {
         try {
@@ -227,6 +260,7 @@ const TranscribeControl: React.FC<Props> = ({
         } catch (err: unknown) {
             appendLog(`Failed to stop Whisper: ${formatErrorMessage(err)}`);
         } finally {
+            setPhase('idle');
             setRunOutcome('none');
             setRunErrorMessage(null);
             setUiState('ready');
@@ -239,8 +273,8 @@ const TranscribeControl: React.FC<Props> = ({
         resetTranscriptionState();
     };
 
-    const loading = uiState === 'transcribing';
-    const canStart = !isModelDownloadActive && (useCustomModelFile ? Boolean(customModelFile) : isModelDownloaded);
+    const loading = phase === 'transcribing' || phase === 'downloading';
+    const canStart = phase === 'idle' && (useCustomModelFile ? Boolean(customModelFile) : true);
 
     return (
         <Stack gap={12} justify="space-between" h="100%">
@@ -262,6 +296,9 @@ const TranscribeControl: React.FC<Props> = ({
                     onStatusChange={handleModelStatusChange}
                     onDownloadError={appendLog}
                     disabled={useCustomModelFile}
+                    requestDownload={phase === 'awaiting-download'}
+                    onDownloadComplete={handleDownloadComplete}
+                    onDownloadCancelled={handleDownloadCancelled}
                 />
 
                 <Stack gap={8}>
@@ -320,7 +357,7 @@ const TranscribeControl: React.FC<Props> = ({
                     >
                         {'Transcribe'}
                     </Button>
-                    <ActionIcon onClick={handleStop} color="red" size={36} disabled={uiState !== 'transcribing'}>
+                    <ActionIcon onClick={handleStop} color="red" size={36} disabled={phase !== 'transcribing'}>
                         <IconPlayerStopFilled size={20} />
                     </ActionIcon>
                     <ActionIcon onClick={handleClear} variant="light" size={36} disabled={uiState !== 'ready'}>

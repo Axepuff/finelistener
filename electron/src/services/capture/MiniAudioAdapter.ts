@@ -287,8 +287,8 @@ export class MiniAudioAdapter implements CaptureAdapter {
             path.resolve(appPath, '..', '..', 'miniaudio-loopback', 'bin', exeName),
         ];
         const packagedCandidates = [
-            path.resolve(resourcesPath, 'miniaudio-loopback', 'bin', exeName),
             path.resolve(resourcesPath, 'miniaudio-loopback', exeName),
+            path.resolve(resourcesPath, 'miniaudio-loopback', 'bin', exeName),
         ];
         const candidates = app.isPackaged
             ? packagedCandidates.concat(devCandidates)
