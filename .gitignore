@@ -7,6 +7,7 @@ models
 out/
 resources/screencapturekit-helper/.build
 resources/ScreenCaptureKitHelper
+build-assets/
 miniaudio-loopback/bin/
 miniaudio-loopback/build/
 miniaudio-loopback/*.sln

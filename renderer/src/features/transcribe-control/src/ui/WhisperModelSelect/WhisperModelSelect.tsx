@@ -10,6 +10,9 @@ interface Props {
     onStatusChange?: (status: { isModelDownloaded: boolean; isDownloadActive: boolean }) => void;
     onDownloadError?: (message: string) => void;
     disabled?: boolean;
+    requestDownload?: boolean;
+    onDownloadComplete?: () => void;
+    onDownloadCancelled?: () => void;
 }
 
 export const WhisperModelSelect: React.FC<Props> = ({
@@ -18,12 +21,16 @@ export const WhisperModelSelect: React.FC<Props> = ({
     onStatusChange,
     onDownloadError,
     disabled = false,
+    requestDownload = false,
+    onDownloadComplete,
+    onDownloadCancelled,
 }) => {
     const { isElectron } = useApp();
     const [modelOptions, setModelOptions] = useState<WhisperModelInfo[]>([]);
     const [pendingModel, setPendingModel] = useState<WhisperModelName | null>(null);
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState<WhisperModelDownloadProgress | null>(null);
+    const [downloadCancelled, setDownloadCancelled] = useState(false);
 
     const loadWhisperModels = useCallback(async () => {
         if (!window.api?.getWhisperModels) return;
@@ -69,6 +76,20 @@ export const WhisperModelSelect: React.FC<Props> = ({
     useEffect(() => {
         onStatusChange?.({ isModelDownloaded, isDownloadActive });
     }, [isDownloadActive, isModelDownloaded, onStatusChange]);
+
+    useEffect(() => {
+        if (requestDownload && !isModelDownloaded && !isConfirmOpen && !downloadCancelled) {
+            setPendingModel(value);
+            setIsConfirmOpen(true);
+        }
+    }, [requestDownload, isModelDownloaded, value, isConfirmOpen, downloadCancelled]);
+
+    // Reset cancelled guard when requestDownload is toggled off
+    useEffect(() => {
+        if (!requestDownload) {
+            setDownloadCancelled(false);
+        }
+    }, [requestDownload]);
 
     const pendingModelLabel = pendingModel ?? 'selected';
     const confirmText = pendingModelInfo?.sizeLabel
@@ -126,9 +147,11 @@ export const WhisperModelSelect: React.FC<Props> = ({
         try {
             await window.api.downloadWhisperModel(pendingModel);
             await loadWhisperModels();
+            onDownloadComplete?.();
         } catch (error) {
             console.error('Failed to download whisper model', error);
             onDownloadError?.('Failed to download the model. Please try again.');
+            onDownloadCancelled?.();
         } finally {
             setDownloadProgress(null);
             setPendingModel(null);
@@ -138,6 +161,8 @@ export const WhisperModelSelect: React.FC<Props> = ({
     const handleCancelDownload = () => {
         setIsConfirmOpen(false);
         setPendingModel(null);
+        setDownloadCancelled(true);
+        onDownloadCancelled?.();
     };
 
     const getModelStatusNode = (modelName: WhisperModelName) => {

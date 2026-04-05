@@ -1,0 +1,143 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.4.0)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+
+  build-mac:
+    needs: lint-and-typecheck
+    runs-on: macos-14  # Apple Silicon (arm64)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build whisper.cpp (Metal) and prepare models
+        run: npm run prebuild:assets:mac
+
+      - name: Build and package
+        run: npm run make:mac
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: finelistener-mac-arm64
+          path: out/make/**/*
+          if-no-files-found: error
+
+  build-win-gpu:
+    needs: lint-and-typecheck
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install CUDA toolkit
+        uses: Jimver/cuda-toolkit@v0.2.16
+        with:
+          cuda: '12.4.0'
+          method: network
+
+      - name: Install Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.0
+        with:
+          vulkan-query-version: 1.3.290.0
+          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-use-cache: true
+
+      - run: npm ci
+
+      - name: Build whisper.cpp (CUDA+Vulkan), miniaudio, and prepare models
+        shell: bash
+        run: npm run prebuild:assets:win-gpu
+
+      - name: Build and package
+        shell: bash
+        run: npm run make:win-gpu
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: finelistener-win-x64-gpu
+          path: out/make/**/*
+          if-no-files-found: error
+
+  build-win-cpu:
+    needs: lint-and-typecheck
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build whisper.cpp (CPU), miniaudio, and prepare models
+        shell: bash
+        run: npm run prebuild:assets:win-cpu
+
+      - name: Build and package
+        shell: bash
+        run: npm run make:win-cpu
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: finelistener-win-x64-cpu
+          path: out/make/**/*
+          if-no-files-found: error
+
+  release:
+    needs: [build-mac, build-win-gpu, build-win-cpu]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true

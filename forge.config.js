@@ -4,22 +4,132 @@ const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 
-const whisperResourceDir = path.resolve(__dirname, 'whisper.cpp');
-const miniaudioLoopbackResourceDir = path.resolve(__dirname, 'miniaudio-loopback');
-const modelsResourceDir = path.resolve(__dirname, 'models');
-// Оставляем бинарные зависимости вне asar, чтобы можно было запускать их напрямую
-const asarUnpackPatterns = [
-    '**/node_modules/ffmpeg-static/**',
-    '**/node_modules/audiotee/**',
-    '**/node_modules/application-loopback/**',
-];
+// ---------------------------------------------------------------------------
+// Build variant configuration
+// ---------------------------------------------------------------------------
 
-// Не кладём whisper.cpp и другие тяжёлые артефакты внутрь app.asar, чтобы не дублировать ресурсы
-const packagerIgnore = [
-    /[\\/](?:whisper\.cpp)(?:[\\/]|$)/,
-    /[\\/](?:models)(?:[\\/]|$)/,
-    /[\\/]out(?:[\\/]|$)/,
-];
+const BUILD_VARIANT = process.env.BUILD_VARIANT || '';
+
+// Build-assets layout (basenames become resource folder names):
+//   build-assets/<variant>/whisper/            → resources/whisper
+//   build-assets/<variant>/miniaudio-loopback/ → resources/miniaudio-loopback
+//   build-assets/models/                       → resources/models
+const buildAssetsDir = (variant, subdir) => path.resolve(__dirname, 'build-assets', variant, subdir);
+
+const VARIANT_CONFIG = {
+    'mac-arm64': {
+        extraResource: [
+            buildAssetsDir('mac-arm64', 'whisper'),
+            path.resolve(__dirname, 'build-assets/models'),
+        ],
+        asarUnpack: [
+            '**/node_modules/ffmpeg-static/**',
+            '**/node_modules/audiotee/**',
+        ],
+        ignore: [
+            /[\\/](?:whisper\.cpp)(?:[\\/]|$)/,
+            /[\\/](?:models)(?:[\\/]|$)/,
+            /[\\/](?:miniaudio-loopback)(?:[\\/]|$)/,
+            /[\\/]out(?:[\\/]|$)/,
+            /[\\/]build-assets(?:[\\/]|$)/,
+            /[\\/]node_modules[\\/]application-loopback(?:[\\/]|$)/,
+        ],
+        makers: [
+            { name: '@electron-forge/maker-dmg', config: {} },
+            { name: '@electron-forge/maker-zip', platforms: ['darwin'] },
+        ],
+    },
+    'win-x64-gpu': {
+        extraResource: [
+            buildAssetsDir('win-x64-gpu', 'whisper'),
+            path.resolve(__dirname, 'build-assets/models'),
+            buildAssetsDir('win-x64-gpu', 'miniaudio-loopback'),
+        ],
+        asarUnpack: [
+            '**/node_modules/ffmpeg-static/**',
+            '**/node_modules/application-loopback/**',
+        ],
+        ignore: [
+            /[\\/](?:whisper\.cpp)(?:[\\/]|$)/,
+            /[\\/](?:models)(?:[\\/]|$)/,
+            /[\\/](?:miniaudio-loopback)(?:[\\/]|$)/,
+            /[\\/]out(?:[\\/]|$)/,
+            /[\\/]build-assets(?:[\\/]|$)/,
+            /[\\/]node_modules[\\/]audiotee(?:[\\/]|$)/,
+        ],
+        makers: [
+            { name: '@electron-forge/maker-squirrel', config: {} },
+            { name: '@electron-forge/maker-zip', platforms: ['win32'] },
+        ],
+    },
+    'win-x64-cpu': {
+        extraResource: [
+            buildAssetsDir('win-x64-cpu', 'whisper'),
+            path.resolve(__dirname, 'build-assets/models'),
+            buildAssetsDir('win-x64-cpu', 'miniaudio-loopback'),
+        ],
+        asarUnpack: [
+            '**/node_modules/ffmpeg-static/**',
+            '**/node_modules/application-loopback/**',
+        ],
+        ignore: [
+            /[\\/](?:whisper\.cpp)(?:[\\/]|$)/,
+            /[\\/](?:models)(?:[\\/]|$)/,
+            /[\\/](?:miniaudio-loopback)(?:[\\/]|$)/,
+            /[\\/]out(?:[\\/]|$)/,
+            /[\\/]build-assets(?:[\\/]|$)/,
+            /[\\/]node_modules[\\/]audiotee(?:[\\/]|$)/,
+        ],
+        makers: [
+            { name: '@electron-forge/maker-squirrel', config: {} },
+            { name: '@electron-forge/maker-zip', platforms: ['win32'] },
+        ],
+    },
+};
+
+// Fall back to original dev-friendly config when no BUILD_VARIANT is set
+const variantCfg = VARIANT_CONFIG[BUILD_VARIANT] || null;
+
+const extraResource = variantCfg
+    ? variantCfg.extraResource
+    : [
+        path.resolve(__dirname, 'whisper.cpp'),
+        path.resolve(__dirname, 'miniaudio-loopback'),
+        path.resolve(__dirname, 'models'),
+    ];
+
+const asarUnpackPatterns = variantCfg
+    ? variantCfg.asarUnpack
+    : [
+        '**/node_modules/ffmpeg-static/**',
+        '**/node_modules/audiotee/**',
+        '**/node_modules/application-loopback/**',
+    ];
+
+const packagerIgnore = variantCfg
+    ? variantCfg.ignore
+    : [
+        /[\\/](?:whisper\.cpp)(?:[\\/]|$)/,
+        /[\\/](?:models)(?:[\\/]|$)/,
+        /[\\/]out(?:[\\/]|$)/,
+    ];
+
+const makers = variantCfg
+    ? variantCfg.makers
+    : [
+        { name: '@electron-forge/maker-squirrel', config: {} },
+        { name: '@electron-forge/maker-zip', platforms: ['darwin', 'win32'] },
+        { name: '@electron-forge/maker-deb', config: {} },
+        { name: '@electron-forge/maker-rpm', config: {} },
+    ];
+
+if (BUILD_VARIANT) {
+    console.log(`[forge config] BUILD_VARIANT=${BUILD_VARIANT}`);
+}
+
+// ---------------------------------------------------------------------------
+// Code signing helpers (macOS)
+// ---------------------------------------------------------------------------
 
 const signTarget = (targetPath, args = []) => {
     const result = spawnSync('codesign', ['--force', '--sign', '-', ...args, targetPath], { encoding: 'utf8' });
@@ -31,25 +141,72 @@ const signTarget = (targetPath, args = []) => {
     }
 };
 
+/**
+ * Find all Mach-O binaries inside a directory using the `file` command.
+ * Returns paths sorted deepest-first so inner binaries are signed before outer ones.
+ */
+const findMachOFiles = (dir) => {
+    const result = spawnSync('find', [dir, '-type', 'f'], { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+
+    if (result.status !== 0) return [];
+
+    const files = result.stdout.trim().split('\n').filter(Boolean);
+    const machOFiles = [];
+
+    for (const filePath of files) {
+        // Check known binary extensions first (fast path)
+        if (/\.(dylib|so|node)$/.test(filePath)) {
+            machOFiles.push(filePath);
+            continue;
+        }
+
+        // For files without extension or executable files, use `file` command
+        const ext = path.extname(filePath);
+
+        if (!ext || ext === '.bin') {
+            const fileResult = spawnSync('file', ['--brief', filePath], { encoding: 'utf8' });
+
+            if (fileResult.stdout && fileResult.stdout.includes('Mach-O')) {
+                machOFiles.push(filePath);
+            }
+        }
+    }
+
+    // Sort deepest paths first so we sign inside-out
+    return machOFiles.sort((a, b) => b.split('/').length - a.split('/').length);
+};
+
 const signAppBundle = (appPath) => {
     if (!appPath || !fs.existsSync(appPath)) return;
 
-    signTarget(appPath, ['--deep']);
+    console.log('[forge postPackage] Signing app bundle:', appPath);
 
-    const audioteePath = path.resolve(
-        appPath,
-        'Contents',
-        'Resources',
-        'app.asar.unpacked',
-        'node_modules',
-        'audiotee',
-        'bin',
-        'audiotee',
-    );
+    // 1. Find and sign all Mach-O binaries inside the bundle (inside-out)
+    const binaries = findMachOFiles(appPath);
 
-    if (fs.existsSync(audioteePath)) {
-        signTarget(audioteePath);
+    console.log(`[forge postPackage] Found ${binaries.length} Mach-O binaries to sign`);
+
+    for (const bin of binaries) {
+        signTarget(bin);
     }
+
+    // 2. Sign any .framework bundles
+    const frameworksDir = path.join(appPath, 'Contents', 'Frameworks');
+
+    if (fs.existsSync(frameworksDir)) {
+        const entries = fs.readdirSync(frameworksDir);
+
+        for (const entry of entries) {
+            const frameworkPath = path.join(frameworksDir, entry);
+
+            if (entry.endsWith('.framework') || entry.endsWith('.app')) {
+                signTarget(frameworkPath);
+            }
+        }
+    }
+
+    // 3. Sign the main app bundle last
+    signTarget(appPath);
 };
 
 const findAppBundles = (rootPath, depth = 4) => {
@@ -69,39 +226,25 @@ const findAppBundles = (rootPath, depth = 4) => {
     return [];
 };
 
+// ---------------------------------------------------------------------------
+// Forge config
+// ---------------------------------------------------------------------------
+
 module.exports = {
-  packagerConfig: {
-    appBundleId: 'com.axepuff.finelistener',
-    name: 'Finelistener',
-    asar: {
-      unpack: asarUnpackPatterns,
+    packagerConfig: {
+        appBundleId: 'com.axepuff.finelistener',
+        name: 'Finelistener',
+        asar: {
+            unpack: asarUnpackPatterns,
+        },
+        extendInfo: {
+            NSAudioCaptureUsageDescription: 'This app records system audio for transcription.',
+        },
+        extraResource,
+        ignore: packagerIgnore,
     },
-    extendInfo: {
-      NSAudioCaptureUsageDescription: 'This app records system audio for transcription.',
-    },
-    // Ship whisper.cpp binaries/models alongside the packaged app
-    extraResource: [whisperResourceDir, miniaudioLoopbackResourceDir, modelsResourceDir],
-    ignore: packagerIgnore,
-  },
-  rebuildConfig: {},
-    makers: [
-        {
-            name: '@electron-forge/maker-squirrel',
-            config: {},
-        },
-        {
-            name: '@electron-forge/maker-zip',
-            platforms: ['darwin', 'win32'],
-        },
-        {
-            name: '@electron-forge/maker-deb',
-            config: {},
-        },
-        {
-            name: '@electron-forge/maker-rpm',
-            config: {},
-        },
-    ],
+    rebuildConfig: {},
+    makers,
     plugins: [
         {
             name: '@electron-forge/plugin-auto-unpack-natives',
@@ -112,7 +255,7 @@ module.exports = {
         new FusesPlugin({
             version: FuseVersion.V1,
             [FuseV1Options.RunAsNode]: false,
-            [FuseV1Options.EnableCookieEncryption]: true,
+            [FuseV1Options.EnableCookieEncryption]: false,
             [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
             [FuseV1Options.EnableNodeCliInspectArguments]: false,
             [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,

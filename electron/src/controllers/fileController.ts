@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import type { IpcMain, BrowserWindow } from 'electron';
 import { dialog } from 'electron';
+import { SUPPORTED_MEDIA_EXTENSIONS } from '../constants';
 import { AudioPreprocessor, type ConvertAudioOptions } from '../services/AudioPreprocessor';
 
 export function registerFileController(ipc: IpcMain, _getMainWindow: () => BrowserWindow | null): void {
@@ -8,7 +9,9 @@ export function registerFileController(ipc: IpcMain, _getMainWindow: () => Brows
 
     ipc.handle('pickAudio', async () => {
         const { canceled, filePaths } = await dialog.showOpenDialog({
-            filters: [{ name: 'Audio', extensions: ['wav', 'mp3', 'm4a', 'flac', 'ogg', 'opus', 'aac'] }],
+            filters: [
+                { name: 'Audio & Video', extensions: SUPPORTED_MEDIA_EXTENSIONS },
+            ],
             properties: ['openFile'],
         });
 

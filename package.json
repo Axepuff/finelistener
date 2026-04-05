@@ -15,10 +15,14 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "eslint . --ext .ts,.tsx --fix",
     "test": "vitest",
+    "prebuild:assets:mac": "bash scripts/build-whisper.sh mac-arm64 && bash scripts/prepare-models.sh",
+    "prebuild:assets:win-gpu": "bash scripts/build-whisper.sh win-x64-gpu && bash scripts/build-miniaudio.sh win-x64-gpu && bash scripts/prepare-models.sh",
+    "prebuild:assets:win-cpu": "bash scripts/build-whisper.sh win-x64-cpu && bash scripts/build-miniaudio.sh win-x64-cpu && bash scripts/prepare-models.sh",
     "make": "electron-forge make",
-    "make:mac": "npm run build && electron-forge make --platform=darwin --arch=arm64",
-    "make:win64": "npm run build && electron-forge make --platform=win32 --arch=x64",
-    "make:win64-zip": "npm run build && electron-forge make --platform=win32 --arch=x64 --targets=@electron-forge/maker-zip"
+    "make:mac": "npm run build && BUILD_VARIANT=mac-arm64 electron-forge make --platform=darwin --arch=arm64",
+    "make:win-gpu": "npm run build && BUILD_VARIANT=win-x64-gpu electron-forge make --platform=win32 --arch=x64",
+    "make:win-cpu": "npm run build && BUILD_VARIANT=win-x64-cpu electron-forge make --platform=win32 --arch=x64",
+    "make:mac-dev": "npm run build && electron-forge make --platform=darwin --arch=arm64"
   },
   "build": {
     "appId": "com.axepuff.finelistener",
@@ -97,6 +101,7 @@
   "devDependencies": {
     "@electron-forge/cli": "^7.8.3",
     "@electron-forge/maker-deb": "^7.8.3",
+    "@electron-forge/maker-dmg": "^7.11.1",
     "@electron-forge/maker-rpm": "^7.8.3",
     "@electron-forge/maker-squirrel": "^7.8.3",
     "@electron-forge/maker-zip": "^7.8.3",
