@@ -19,9 +19,9 @@
     "prebuild:assets:win-gpu": "bash scripts/build-whisper.sh win-x64-gpu && bash scripts/build-miniaudio.sh win-x64-gpu && bash scripts/prepare-models.sh",
     "prebuild:assets:win-cpu": "bash scripts/build-whisper.sh win-x64-cpu && bash scripts/build-miniaudio.sh win-x64-cpu && bash scripts/prepare-models.sh",
     "make": "electron-forge make",
-    "make:mac": "npm run build && BUILD_VARIANT=mac-arm64 electron-forge make --platform=darwin --arch=arm64",
-    "make:win-gpu": "npm run build && BUILD_VARIANT=win-x64-gpu electron-forge make --platform=win32 --arch=x64",
-    "make:win-cpu": "npm run build && BUILD_VARIANT=win-x64-cpu electron-forge make --platform=win32 --arch=x64",
+    "make:mac": "npm run build && cross-env BUILD_VARIANT=mac-arm64 electron-forge make --platform=darwin --arch=arm64",
+    "make:win-gpu": "npm run build && cross-env BUILD_VARIANT=win-x64-gpu electron-forge make --platform=win32 --arch=x64",
+    "make:win-cpu": "npm run build && cross-env BUILD_VARIANT=win-x64-cpu electron-forge make --platform=win32 --arch=x64",
     "make:mac-dev": "npm run build && electron-forge make --platform=darwin --arch=arm64"
   },
   "build": {
@@ -115,6 +115,7 @@
     "@typescript-eslint/parser": "^8.38.0",
     "@vitejs/plugin-react": "^5.0.0",
     "concurrently": "^9.2.0",
+    "cross-env": "^10.1.0",
     "electron": "^37.2.4",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.8",

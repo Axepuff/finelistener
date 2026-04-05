@@ -9,7 +9,8 @@
       "Grep",
       "LS",
       "Bash(chmod +x:*)",
-      "LS"
+      "LS",
+      "Bash(tasklist)"
     ]
   }
 }
