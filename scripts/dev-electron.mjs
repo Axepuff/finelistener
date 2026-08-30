@@ -4,8 +4,10 @@ import path from 'node:path';
 
 const DEV_BUNDLE_ID = 'com.axepuff.finelistener.dev';
 
+const isWindows = process.platform === 'win32';
+
 const runSync = (cmd, args) => {
-    const result = spawnSync(cmd, args, { stdio: 'inherit' });
+    const result = spawnSync(cmd, args, { stdio: 'inherit', shell: isWindows });
 
     if (result.error) {
         // eslint-disable-next-line no-console

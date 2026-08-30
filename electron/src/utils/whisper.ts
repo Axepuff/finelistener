@@ -7,6 +7,9 @@ import type { WhisperModelName } from '../types/whisper';
 const IS_DEV = !app.isPackaged;
 const WHISPER_DIR_NAME = 'whisper.cpp';
 const WHISPER_SERVER_BIN_NAMES = process.platform === 'win32' ? ['whisper-server.exe', 'whisper-server'] : ['whisper-server'];
+const BUILD_ASSETS_VARIANTS = process.platform === 'win32'
+    ? ['win-x64-gpu', 'win-x64-cpu']
+    : ['mac-arm64'];
 const VAD_MODEL_FILE = 'ggml-silero-v5.1.2.bin';
 const MODEL_METADATA: Record<WhisperModelName, { fileName: string; sizeLabel: string; downloadUrl: string }> = {
     large: {
@@ -99,8 +102,12 @@ export function resolveWhisperPaths(
     modelPathOverride?: string,
 ): ResolvedWhisperPaths {
     const appPath = app.getAppPath();
+    const buildAssetsCandidates = BUILD_ASSETS_VARIANTS.map((variant) =>
+        path.resolve(appPath, 'build-assets', variant, 'whisper'),
+    );
     const baseCandidates = IS_DEV
         ? [
+            ...buildAssetsCandidates,
             path.resolve(appPath, WHISPER_DIR_NAME),
         ]
         : [

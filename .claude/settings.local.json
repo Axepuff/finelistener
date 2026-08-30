@@ -7,7 +7,10 @@
       "Read",
       "Glob",
       "Grep",
-      "LS"
+      "LS",
+      "Bash(chmod +x:*)",
+      "LS",
+      "Bash(tasklist)"
     ]
   }
 }
