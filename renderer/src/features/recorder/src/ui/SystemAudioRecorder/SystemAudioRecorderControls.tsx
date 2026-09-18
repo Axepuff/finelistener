@@ -2,6 +2,7 @@ import { ActionIcon, Center, Group, Select, Stack, Text } from '@mantine/core';
 import { IconMicrophone, IconPlayerStopFilled } from '@tabler/icons-react';
 import { useSystemAudioRecorder } from '@~/recorder/src/ui/SystemAudioRecorder/core/useSystemAudioRecorder';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
+import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { formatDuration, formatLevel, getRecordingDeviceId } from './core/recordingUtils';
 
@@ -9,7 +10,7 @@ const formatDeviceLabel = (device: RecordingDevice): string => {
     return device.isDefault ? `${device.name} (Default)` : device.name;
 };
 
-export const SystemAudioRecorderControls: React.FC = () => {
+export const SystemAudioRecorderControls: React.FC = observer(() => {
     const {
         controls: {
             canStartRecording,
@@ -101,4 +102,4 @@ export const SystemAudioRecorderControls: React.FC = () => {
             ) : null}
         </Stack>
     );
-};
+});

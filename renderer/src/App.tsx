@@ -1,10 +1,20 @@
 import React, { useEffect } from 'react';
-import { AppContext } from './AppContext';
+import { useAppStore } from './AppContext';
 import { Home } from './Home';
 
 export const App: React.FC = () => {
+    const store = useAppStore();
+
     useEffect(() => {
-        if (!window.api?.openDevTools) {
+        store.initialize();
+
+        return () => {
+            store.dispose();
+        };
+    }, [store]);
+
+    useEffect(() => {
+        if (!store.isElectron) {
             return;
         }
 
@@ -23,9 +33,7 @@ export const App: React.FC = () => {
             buffer = (buffer + key).slice(-targetSequence.length);
 
             if (buffer === targetSequence) {
-                window.api
-                    ?.openDevTools?.()
-                    .catch((error: unknown) => console.error('Failed to open devtools', error));
+                void store.openDevTools();
                 buffer = '';
             }
         };
@@ -35,11 +43,7 @@ export const App: React.FC = () => {
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
         };
-    }, []);
+    }, [store]);
 
-    return (
-        <AppContext value={{ isElectron: !!window.api }}>
-            <Home />
-        </AppContext>
-    );
+    return <Home />;
 };

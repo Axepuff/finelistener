@@ -3,6 +3,7 @@ import type { WhisperModelName } from './whisper';
 export type Segment = { start: number; end: number };
 
 export interface TranscribeOpts {
+    runId: number;
     language: string;
     model?: WhisperModelName;
     /**
@@ -21,4 +22,14 @@ export interface TranscribeOpts {
     useGpu?: boolean;
     vadModelPath?: string;
     segment?: Segment;
+}
+
+export interface TranscriptionTextEvent {
+    runId: number;
+    chunk: string;
+}
+
+export interface TranscriptionProgressEvent {
+    runId: number;
+    value: number;
 }

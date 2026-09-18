@@ -7,7 +7,6 @@ import {
 } from '@mantine/core';
 import React, { useState } from 'react';
 
-// TODO rework props to atoms
 interface Props {
     maxContext: number | null;
     onChangeMaxContext: (value: number | null) => void;

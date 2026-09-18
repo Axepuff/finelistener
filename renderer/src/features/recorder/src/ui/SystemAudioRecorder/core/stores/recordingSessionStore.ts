@@ -3,14 +3,21 @@ import type {
     RecordingProgress,
     RecordingState,
 } from 'electron/src/services/RecordingService';
-import { atom, type PrimitiveAtom } from 'jotai';
-import { atoms } from 'renderer/src/atoms';
+import type { SessionDetails } from 'electron/src/types/sessions';
+import { makeAutoObservable, runInAction } from 'mobx';
+import type { ForegroundOperationStore } from 'renderer/src/stores/foregroundOperationStore';
+import {
+    commandFailure,
+    commandSuccess,
+    type CommandResult,
+    type ForegroundOperation,
+} from 'renderer/src/stores/types';
 import { getErrorMessage } from '../recordingUtils';
+import type { RecordingAvailabilityStore } from './recordingAvailabilityStore';
+import type { RecordingDevicesStore } from './recordingDevicesStore';
 import type { RecordingLogService } from './recordingLogService';
 import {
-    type RecordingAvailabilityState,
     type RecordingDependencies,
-    type RecordingDevicesState,
     type RecordingSessionState,
     initialSessionState,
 } from './recordingStoreTypes';
@@ -21,8 +28,10 @@ const SILENCE_WARNING_AFTER_MS = 2000;
 
 interface RecordingSessionDependencies extends RecordingDependencies {
     logService: RecordingLogService;
-    availabilityAtom: PrimitiveAtom<RecordingAvailabilityState>;
-    devicesAtom: PrimitiveAtom<RecordingDevicesState>;
+    availabilityStore: RecordingAvailabilityStore;
+    devicesStore: RecordingDevicesStore;
+    operations: ForegroundOperationStore;
+    onSessionImported: (session: SessionDetails) => void;
 }
 
 interface LevelProcessingResult {
@@ -30,28 +39,23 @@ interface LevelProcessingResult {
     logMessage: string | null;
 }
 
-const clearSessionBeforeStart = (prev: RecordingSessionState): RecordingSessionState => {
-    return {
-        ...prev,
-        recordingError: null,
-        recordingLevel: null,
-        showSilenceWarning: false,
-        recordingDurationMs: 0,
-        recordingBytesWritten: null,
-        recordingStartAt: null,
-        lastProgressAt: null,
-        silenceStartedAt: null,
-        silenceLogged: false,
-    };
-};
+const clearSessionBeforeStart = (previous: RecordingSessionState): RecordingSessionState => ({
+    ...previous,
+    recordingError: null,
+    recordingLevel: null,
+    showSilenceWarning: false,
+    recordingDurationMs: 0,
+    recordingBytesWritten: null,
+    recordingStartAt: null,
+    lastProgressAt: null,
+    silenceStartedAt: null,
+    silenceLogged: false,
+});
 
-const applyRecordingState = (prev: RecordingSessionState, state: RecordingState): RecordingSessionState => {
-    const next: RecordingSessionState = {
-        ...prev,
-        recordingState: state,
-    };
+const applyRecordingState = (previous: RecordingSessionState, state: RecordingState): RecordingSessionState => {
+    const next: RecordingSessionState = { ...previous, recordingState: state };
 
-    if (state === 'recording' && !prev.recordingStartAt) {
+    if (state === 'recording' && !previous.recordingStartAt) {
         next.recordingStartAt = Date.now();
     }
 
@@ -67,16 +71,14 @@ const applyRecordingState = (prev: RecordingSessionState, state: RecordingState)
 };
 
 const applyRecordingProgress = (
-    prev: RecordingSessionState,
+    previous: RecordingSessionState,
     progress: RecordingProgress,
-): RecordingSessionState => {
-    return {
-        ...prev,
-        recordingDurationMs: progress.durationMs,
-        recordingBytesWritten: typeof progress.bytesWritten === 'number' ? progress.bytesWritten : null,
-        lastProgressAt: Date.now(),
-    };
-};
+): RecordingSessionState => ({
+    ...previous,
+    recordingDurationMs: progress.durationMs,
+    recordingBytesWritten: typeof progress.bytesWritten === 'number' ? progress.bytesWritten : null,
+    lastProgressAt: Date.now(),
+});
 
 const getSilenceWarningMessage = (platform: string | null): string => {
     if (platform === 'darwin') {
@@ -90,37 +92,35 @@ const getSilenceWarningMessage = (platform: string | null): string => {
 };
 
 const applyRecordingLevel = (
-    prev: RecordingSessionState,
+    previous: RecordingSessionState,
     level: RecordingLevel,
     platform: string | null,
 ): LevelProcessingResult => {
     const now = Date.now();
     const isSilent = level.peak <= SILENCE_PEAK_THRESHOLD && level.rms <= SILENCE_RMS_THRESHOLD;
-    let silenceStartedAt = prev.silenceStartedAt;
-    let silenceLogged = prev.silenceLogged;
-    let showSilenceWarning = prev.showSilenceWarning;
+    let silenceStartedAt = previous.silenceStartedAt;
+    let silenceLogged = previous.silenceLogged;
+    let showSilenceWarning = previous.showSilenceWarning;
     let logMessage: string | null = null;
 
     if (!isSilent) {
         silenceStartedAt = null;
         silenceLogged = false;
         showSilenceWarning = false;
-    } else {
-        if (!silenceStartedAt) {
-            silenceStartedAt = now;
-        } else if (now - silenceStartedAt >= SILENCE_WARNING_AFTER_MS) {
-            showSilenceWarning = true;
+    } else if (!silenceStartedAt) {
+        silenceStartedAt = now;
+    } else if (now - silenceStartedAt >= SILENCE_WARNING_AFTER_MS) {
+        showSilenceWarning = true;
 
-            if (!silenceLogged) {
-                silenceLogged = true;
-                logMessage = getSilenceWarningMessage(platform);
-            }
+        if (!silenceLogged) {
+            silenceLogged = true;
+            logMessage = getSilenceWarningMessage(platform);
         }
     }
 
     return {
         nextState: {
-            ...prev,
+            ...previous,
             recordingLevel: level,
             showSilenceWarning,
             silenceStartedAt,
@@ -130,214 +130,269 @@ const applyRecordingLevel = (
     };
 };
 
-const applyFallbackDuration = (prev: RecordingSessionState): RecordingSessionState => {
-    if (prev.recordingState !== 'recording') {
-        return prev;
-    }
+const applyFallbackDuration = (previous: RecordingSessionState): RecordingSessionState => {
+    if (previous.recordingState !== 'recording') return previous;
 
     const now = Date.now();
-    const hasRecentProgress = Boolean(prev.lastProgressAt && now - prev.lastProgressAt < 800);
+    const hasRecentProgress = Boolean(previous.lastProgressAt && now - previous.lastProgressAt < 800);
 
-    if (hasRecentProgress) {
-        return prev;
-    }
+    if (hasRecentProgress) return previous;
 
-    const recordingStartAt = prev.recordingStartAt ?? now;
+    const recordingStartAt = previous.recordingStartAt ?? now;
     const recordingDurationMs = now - recordingStartAt;
-    const isDurationFresh = recordingDurationMs === prev.recordingDurationMs
-        && recordingStartAt === prev.recordingStartAt;
 
-    if (isDurationFresh) {
-        return prev;
+    if (recordingDurationMs === previous.recordingDurationMs && recordingStartAt === previous.recordingStartAt) {
+        return previous;
     }
 
-    return {
-        ...prev,
-        recordingStartAt,
-        recordingDurationMs,
-    };
+    return { ...previous, recordingStartAt, recordingDurationMs };
 };
 
 export class RecordingSessionStore {
-    // Represents active recording session state and derived live metrics.
-    readonly sessionAtom = atom<RecordingSessionState>(initialSessionState);
+    private stateValue: RecordingSessionState = initialSessionState;
 
-    readonly startRecordingAtom = atom(null, async (get, set) => {
-        const api = this.dependencies.getApi();
+    private activeOperation: ForegroundOperation | null = null;
 
-        if (!api) {
-            return;
+    private unsubscribeFunctions: Array<() => void> = [];
+
+    private durationTimer: ReturnType<typeof setInterval> | null = null;
+
+    private initialized = false;
+
+    private disposed = false;
+
+    private lifecycleId = 0;
+
+    constructor(private readonly dependencies: RecordingSessionDependencies) {
+        makeAutoObservable<
+            this,
+            'dependencies' | 'unsubscribeFunctions' | 'durationTimer' | 'lifecycleId'
+        >(this, {
+            dependencies: false,
+            unsubscribeFunctions: false,
+            durationTimer: false,
+            lifecycleId: false,
+        }, { autoBind: true });
+    }
+
+    get state(): Readonly<RecordingSessionState> {
+        return this.stateValue;
+    }
+
+    initialize(): void {
+        if (this.initialized) return;
+
+        this.initialized = true;
+        this.disposed = false;
+        const lifecycleId = this.lifecycleId + 1;
+
+        this.lifecycleId = lifecycleId;
+        const api = this.dependencies.adapter;
+
+        if (!api) return;
+
+        // Protect an ongoing capture while its current state is being restored.
+        this.handleRecordingState(this.stateValue.recordingState);
+
+        void api.getRecordingState()
+            .then((state) => {
+                if (this.disposed || lifecycleId !== this.lifecycleId) return;
+
+                runInAction(() => {
+                    this.handleRecordingState(state);
+                });
+            })
+            .catch((error: unknown) => {
+                console.error('Failed to load recording state', error);
+            });
+
+        this.unsubscribeFunctions = [
+            api.onRecordingState((state) => this.handleRecordingState(state)),
+            api.onRecordingProgress((progress) => this.handleRecordingProgress(progress)),
+            api.onRecordingLevel((level) => this.handleRecordingLevel(level)),
+            api.onRecordingError((payload) => this.handleRecordingError(payload)),
+        ];
+        this.durationTimer = globalThis.setInterval(() => this.updateFallbackDuration(), 200);
+    }
+
+    dispose(): void {
+        if (!this.initialized) return;
+
+        this.initialized = false;
+        this.disposed = true;
+        this.lifecycleId += 1;
+        this.unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+        this.unsubscribeFunctions = [];
+
+        if (this.activeOperation) {
+            this.dependencies.operations.finish(this.activeOperation);
+            this.activeOperation = null;
         }
 
-        set(this.sessionAtom, clearSessionBeforeStart);
+        if (this.durationTimer !== null) {
+            globalThis.clearInterval(this.durationTimer);
+            this.durationTimer = null;
+        }
+    }
+
+    async startRecording(): Promise<CommandResult> {
+        const api = this.dependencies.adapter;
+
+        if (!api) return commandFailure('System audio recording is not available.');
+
+        const operation = this.dependencies.operations.begin('recording');
+
+        if (!operation) return commandFailure('Another workspace operation is already running.');
+
+        this.activeOperation = operation;
+        this.stateValue = clearSessionBeforeStart(this.stateValue);
 
         try {
             const permissionStatus = await api.getRecordingPermissionStatus();
             const isRecordingAvailable = await api.isRecordingAvailable();
 
-            const availabilityState: RecordingAvailabilityState = {
-                permissionStatus,
-                isRecordingAvailable,
-            };
-
-            set(this.dependencies.availabilityAtom, (prev) => ({
-                ...prev,
-                ...availabilityState,
-            }));
-
-            if (!availabilityState.isRecordingAvailable) {
-                const message = 'System audio recording is unavailable (helper not found).';
-
-                set(this.sessionAtom, (prev) => ({
-                    ...prev,
-                    recordingError: message,
-                }));
-                this.dependencies.logService.append(message);
-
-                return;
+            if (!this.dependencies.operations.owns(operation) || this.disposed) {
+                return commandFailure('Recording was cancelled.');
             }
 
-            if (availabilityState.permissionStatus === 'restricted') {
-                const message = 'Screen recording is restricted by system policy.';
+            runInAction(() => {
+                this.dependencies.availabilityStore.replaceState({ permissionStatus, isRecordingAvailable });
+            });
 
-                set(this.sessionAtom, (prev) => ({
-                    ...prev,
-                    recordingError: message,
-                }));
-                this.dependencies.logService.append(message);
-
-                return;
+            if (!isRecordingAvailable) {
+                return this.failStart(operation, 'System audio recording is unavailable.');
             }
 
-            if (availabilityState.permissionStatus === 'denied') {
+            if (permissionStatus === 'restricted') {
+                return this.failStart(operation, 'Screen recording is restricted by system policy.');
+            }
+
+            if (permissionStatus === 'denied') {
                 this.dependencies.logService.append(
                     'Screen recording permission is disabled for the app. Trying to request it via the helper.',
                 );
             }
 
-            const { selectedDeviceId } = get(this.dependencies.devicesAtom);
+            const { selectedDeviceId } = this.dependencies.devicesStore.state;
             const session = await api.startSystemRecording({
                 deviceId: selectedDeviceId || undefined,
             });
 
+            if (!this.dependencies.operations.owns(operation) || this.disposed) {
+                return commandFailure('Recording was cancelled.');
+            }
+
             this.dependencies.logService.append(`Recording started: ${session.filePath}`);
+
+            return commandSuccess(undefined);
         } catch (error: unknown) {
             const message = getErrorMessage(error);
 
-            set(this.sessionAtom, (prev) => ({
-                ...prev,
-                recordingError: message,
-            }));
-            this.dependencies.logService.append(`Failed to start recording: ${message}`);
+            return this.failStart(operation, `Failed to start recording: ${message}`, message);
         }
-    });
+    }
 
-    readonly stopRecordingAtom = atom(null, async (_get, set) => {
-        const api = this.dependencies.getApi();
+    async stopRecording(): Promise<CommandResult<SessionDetails>> {
+        const api = this.dependencies.adapter;
+        const operation = this.activeOperation;
 
-        if (!api) {
-            return;
+        if (!api || !operation || !this.dependencies.operations.owns(operation)) {
+            return commandFailure('No recording is running.');
         }
 
-        set(this.sessionAtom, (prev) => ({
-            ...prev,
-            isProcessingRecording: true,
-        }));
+        this.dependencies.operations.transition(operation, 'processing-recording');
+        this.stateValue = { ...this.stateValue, isProcessingRecording: true };
+        let captureStopped = false;
 
         try {
             const result = await api.stopSystemRecording();
 
+            captureStopped = true;
             this.dependencies.logService.append(`Recording finished: ${result.filePath}`);
-            const session = await api.sessions.importRecording(result.filePath);
+            const session = await api.importRecording(result.filePath);
 
-            set(atoms.clearTranscriptionOutput);
-            set(atoms.sessions.currentSessionId, session.id);
-            set(atoms.sessions.currentSessionDetails, session);
-            set(atoms.sessions.audioMode, 'original');
-            set(atoms.transcription.audioToTranscribe, [session.audioWavPath]);
-            void set(atoms.refreshSessions);
+            if (!this.dependencies.operations.owns(operation) || this.disposed) {
+                return commandFailure('The recorded session was replaced before it finished loading.');
+            }
+
+            runInAction(() => {
+                this.dependencies.onSessionImported(session);
+            });
             this.dependencies.logService.append('Recording was saved as a session and loaded into the player.');
+
+            return commandSuccess(session);
         } catch (error: unknown) {
             const message = getErrorMessage(error);
 
-            set(this.sessionAtom, (prev) => ({
-                ...prev,
-                recordingError: message,
-            }));
+            console.error('Failed to stop recording', error);
+            runInAction(() => {
+                this.stateValue = { ...this.stateValue, recordingError: message };
+            });
             this.dependencies.logService.append(`Failed to stop recording: ${message}`);
+
+            return commandFailure('Failed to finish the recording.');
         } finally {
-            set(this.sessionAtom, (prev) => ({
-                ...prev,
-                isProcessingRecording: false,
-            }));
+            runInAction(() => {
+                this.stateValue = { ...this.stateValue, isProcessingRecording: false };
+
+                // Import failure must not retain the lock after capture has stopped.
+                if (captureStopped) {
+                    this.dependencies.operations.finish(operation);
+                    this.activeOperation = null;
+                } else {
+                    this.dependencies.operations.transition(operation, 'recording');
+                }
+            });
         }
-    });
+    }
 
-    constructor(private readonly dependencies: RecordingSessionDependencies) {
-        this.sessionAtom.onMount = (setSelf) => {
-            const api = this.dependencies.getApi();
+    private failStart(
+        operation: ForegroundOperation,
+        logMessage: string,
+        errorMessage = logMessage,
+    ): CommandResult {
+        this.stateValue = { ...this.stateValue, recordingError: errorMessage };
+        this.dependencies.logService.append(logMessage);
+        this.dependencies.operations.finish(operation);
+        this.activeOperation = null;
 
-            if (!api) {
-                return undefined;
-            }
+        return commandFailure(errorMessage);
+    }
 
-            const platform = api.runtime?.platform ?? null;
+    private handleRecordingState(state: RecordingState): void {
+        this.stateValue = applyRecordingState(this.stateValue, state);
 
-            const updateSession = (updater: (prev: RecordingSessionState) => RecordingSessionState) => {
-                setSelf((prev) => updater(prev));
-            };
+        if (state !== 'idle' && !this.activeOperation && !this.dependencies.operations.isBusy) {
+            this.activeOperation = this.dependencies.operations.begin('recording');
+        }
 
-            void api.getRecordingState()
-                .then((state) => {
-                    updateSession((prev) => applyRecordingState(prev, state));
-                })
-                .catch(() => {
-                    updateSession((prev) => ({
-                        ...prev,
-                        recordingState: 'idle',
-                    }));
-                });
+        if (state === 'idle' && !this.stateValue.isProcessingRecording && this.activeOperation) {
+            this.dependencies.operations.finish(this.activeOperation);
+            this.activeOperation = null;
+        }
+    }
 
-            const offState = api.onRecordingState?.((state) => {
-                updateSession((prev) => applyRecordingState(prev, state));
-            });
+    private handleRecordingProgress(progress: RecordingProgress): void {
+        this.stateValue = applyRecordingProgress(this.stateValue, progress);
+    }
 
-            const offProgress = api.onRecordingProgress?.((progress) => {
-                updateSession((prev) => applyRecordingProgress(prev, progress));
-            });
+    private handleRecordingLevel(level: RecordingLevel): void {
+        const platform = this.dependencies.adapter?.runtimePlatform ?? null;
+        const { nextState, logMessage } = applyRecordingLevel(this.stateValue, level, platform);
 
-            const offLevel = api.onRecordingLevel?.((level) => {
-                updateSession((prev) => {
-                    const { nextState, logMessage } = applyRecordingLevel(prev, level, platform);
+        this.stateValue = nextState;
 
-                    if (logMessage) {
-                        this.dependencies.logService.append(logMessage);
-                    }
+        if (logMessage) {
+            this.dependencies.logService.append(logMessage);
+        }
+    }
 
-                    return nextState;
-                });
-            });
+    private handleRecordingError(payload: { message: string }): void {
+        this.stateValue = { ...this.stateValue, recordingError: payload.message };
+        this.dependencies.logService.append(`Recording error: ${payload.message}`);
+    }
 
-            const offError = api.onRecordingError?.((payload) => {
-                updateSession((prev) => ({
-                    ...prev,
-                    recordingError: payload.message,
-                }));
-
-                this.dependencies.logService.append(`Recording error: ${payload.message}`);
-            });
-
-            const timer = window.setInterval(() => {
-                updateSession((prev) => applyFallbackDuration(prev));
-            }, 200);
-
-            return () => {
-                offState?.();
-                offProgress?.();
-                offLevel?.();
-                offError?.();
-                window.clearInterval(timer);
-            };
-        };
+    private updateFallbackDuration(): void {
+        this.stateValue = applyFallbackDuration(this.stateValue);
     }
 }

@@ -1,17 +1,13 @@
-import { atoms } from 'renderer/src/atoms';
-import { jotaiStore } from 'renderer/src/store';
+import type { ActivityLogStore } from 'renderer/src/stores/activityLogStore';
 
 export interface RecordingLogService {
     append: (message: string) => void;
 }
 
 export class TranscriptionRecordingLogService implements RecordingLogService {
-    append(message: string): void {
-        jotaiStore.set(atoms.transcription.log, (prev) => {
-            const prefix = prev ? '\n' : '';
-            const timestamp = new Date().toLocaleTimeString();
+    constructor(private readonly activityLog: ActivityLogStore) {}
 
-            return `${prev}${prefix}[${timestamp}] ${message}`;
-        });
+    append(message: string): void {
+        this.activityLog.appendEvent(message);
     }
 }

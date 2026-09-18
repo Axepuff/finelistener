@@ -1,4 +1,3 @@
-import { atom } from 'jotai';
 import type { RecordingLogService } from './recordingLogService';
 import type { RecordingDependencies } from './recordingStoreTypes';
 
@@ -7,8 +6,10 @@ interface RecordingSupportActionsDependencies extends RecordingDependencies {
 }
 
 export class RecordingSupportActionsStore {
-    readonly openRecordingPreferencesAtom = atom(null, async () => {
-        const api = this.dependencies.getApi();
+    constructor(private readonly dependencies: RecordingSupportActionsDependencies) {}
+
+    async openRecordingPreferences(): Promise<void> {
+        const api = this.dependencies.adapter;
 
         if (!api) {
             return;
@@ -19,10 +20,10 @@ export class RecordingSupportActionsStore {
         } catch (error: unknown) {
             console.error('Failed to open recording preferences', error);
         }
-    });
+    }
 
-    readonly revealDevAppAtom = atom(null, async () => {
-        const api = this.dependencies.getApi();
+    async revealDevApp(): Promise<void> {
+        const api = this.dependencies.adapter;
 
         if (!api) {
             return;
@@ -39,7 +40,5 @@ export class RecordingSupportActionsStore {
         } catch (error: unknown) {
             console.error('Failed to reveal dev app bundle', error);
         }
-    });
-
-    constructor(private readonly dependencies: RecordingSupportActionsDependencies) {}
+    }
 }

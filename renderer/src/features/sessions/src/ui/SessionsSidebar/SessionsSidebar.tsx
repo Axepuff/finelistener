@@ -1,108 +1,31 @@
 import { ActionIcon, Group, Loader, Menu, Paper, ScrollArea, Stack, Text, Tooltip, UnstyledButton } from '@mantine/core';
 import { IconDotsVertical, IconFolder, IconRefresh, IconTrash } from '@tabler/icons-react';
-import type { SessionTranscriptV1 } from 'electron/src/types/sessions';
-import { useAtomValue, useSetAtom } from 'jotai';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { atoms } from 'renderer/src/atoms';
-import { escapeHtml, formatSecondsReadable } from 'renderer/src/shared/lib';
+import { observer } from 'mobx-react-lite';
+import React, { useCallback, useState } from 'react';
+import { useAppStore } from 'renderer/src/AppContext';
 
-const buildTranscriptText = (transcript: SessionTranscriptV1): { plainText: string; renderedText: string } => {
-    const lines: string[] = [];
-    const htmlLines: string[] = [];
-
-    for (const segment of transcript.segments) {
-        const start = typeof segment.startSec === 'number' ? segment.startSec : 0;
-        const end = typeof segment.endSec === 'number' ? segment.endSec : null;
-        const startLabel = formatSecondsReadable(start);
-        const endLabel = end !== null ? formatSecondsReadable(end) : '';
-        const label = end !== null ? `[${startLabel} --> ${endLabel}]` : `[${startLabel}]`;
-        const dataRegion = Number.isFinite(start) ? start.toFixed(3) : '0';
-        const text = segment.text ?? '';
-
-        lines.push(`${label} ${text}`.trimEnd());
-        htmlLines.push(
-            `<span data-regions="${escapeHtml(dataRegion)}">${escapeHtml(label)}</span>${text ? ` ${escapeHtml(text)}` : ''}`,
-        );
-    }
-
-    return {
-        plainText: lines.length > 0 ? `${lines.join('\n')}\n` : '',
-        renderedText: htmlLines.length > 0 ? `${htmlLines.join('\n')}\n` : '',
-    };
-};
-
-export const SessionsSidebar: React.FC = () => {
-    const sessions = useAtomValue(atoms.sessions.items);
-    const isLoading = useAtomValue(atoms.sessions.isLoading);
-    const loadError = useAtomValue(atoms.sessions.loadError);
-    const currentSessionId = useAtomValue(atoms.sessions.currentSessionId);
-    const refreshSessions = useSetAtom(atoms.refreshSessions);
-    const setCurrentSessionId = useSetAtom(atoms.sessions.currentSessionId);
-    const setCurrentSessionDetails = useSetAtom(atoms.sessions.currentSessionDetails);
-    const setAudioMode = useSetAtom(atoms.sessions.audioMode);
-    const setAudioToTranscribe = useSetAtom(atoms.transcription.audioToTranscribe);
-    const clearOutput = useSetAtom(atoms.clearTranscriptionOutput);
-    const setPlainText = useSetAtom(atoms.transcription.plainText);
-    const setRenderedText = useSetAtom(atoms.transcription.renderedText);
-    const setUiState = useSetAtom(atoms.appState.uiState);
+export const SessionsSidebar: React.FC = observer(() => {
+    const store = useAppStore();
+    const { workspace } = store;
     const [openedMenuSessionId, setOpenedMenuSessionId] = useState<string | null>(null);
 
-    useEffect(() => {
-        void refreshSessions();
-    }, [refreshSessions]);
-
     const handleRevealRoot = useCallback(async () => {
-        try {
-            await window.api?.sessions?.revealFolder?.();
-        } catch (error) {
-            console.error('Failed to reveal sessions folder', error);
+        const result = await store.revealSessionsFolder();
+
+        if (!result.ok) {
+            store.activityLog.appendEvent(result.message);
         }
-    }, []);
+    }, [store]);
 
     const handleOpenSession = useCallback(async (sessionId: string) => {
-        try {
-            const api = window.api;
+        const result = await store.openSession(sessionId);
 
-            if (!api?.sessions?.get) {
-                return;
-            }
-
-            const details = await api.sessions.get(sessionId);
-
-            clearOutput();
-            setUiState('ready');
-            setCurrentSessionId(details.id);
-            setCurrentSessionDetails(details);
-            setAudioMode('original');
-            setAudioToTranscribe([details.audioWavPath]);
-
-            if (details.transcript) {
-                const { plainText, renderedText } = buildTranscriptText(details.transcript);
-
-                setPlainText(plainText);
-                setRenderedText(renderedText);
-            }
-        } catch (error) {
-            console.error('Failed to open session', error);
+        if (!result.ok) {
+            store.activityLog.appendEvent(result.message);
         }
-    }, [
-        clearOutput,
-        setAudioMode,
-        setAudioToTranscribe,
-        setCurrentSessionDetails,
-        setCurrentSessionId,
-        setPlainText,
-        setRenderedText,
-        setUiState,
-    ]);
+    }, [store]);
 
     const handleDeleteSession = useCallback(async (sessionId: string, title: string) => {
-        const api = window.api;
-
-        if (!api?.sessions?.delete) {
-            return;
-        }
-
         const confirmed = window.confirm(
             `Delete session "${title}"?\n\nThis will remove its audio and transcript files.`,
         );
@@ -111,39 +34,16 @@ export const SessionsSidebar: React.FC = () => {
             return;
         }
 
-        try {
-            await api.sessions.delete(sessionId);
+        const result = await store.deleteSession(sessionId);
 
-            if (currentSessionId === sessionId) {
-                clearOutput();
-                setUiState('initial');
-                setCurrentSessionId(null);
-                setAudioToTranscribe([]);
-                setPlainText('');
-                setRenderedText('');
-            }
-
-            void refreshSessions();
-        } catch (error) {
-            console.error('Failed to delete session', error);
+        if (!result.ok) {
+            store.activityLog.appendEvent(result.message);
         }
-    }, [
-        clearOutput,
-        currentSessionId,
-        refreshSessions,
-        setAudioToTranscribe,
-        setCurrentSessionId,
-        setPlainText,
-        setRenderedText,
-        setUiState,
-    ]);
+    }, [store]);
 
-    const emptyStateText = useMemo(() => {
-        if (isLoading) return 'Loading sessions...';
-        if (loadError) return 'Failed to load sessions.';
-
-        return 'No sessions yet.';
-    }, [isLoading, loadError]);
+    const emptyStateText = workspace.sessionsLoading
+        ? 'Loading sessions...'
+        : workspace.sessionsLoadError ?? 'No sessions yet.';
 
     return (
         <Paper bg="gray.0" h="100%" style={{ minHeight: 0, overflow: 'hidden' }}>
@@ -155,15 +55,15 @@ export const SessionsSidebar: React.FC = () => {
                     <Tooltip label="Refresh sessions" withArrow={true}>
                         <ActionIcon
                             variant="subtle"
-                            onClick={() => void refreshSessions()}
-                            disabled={isLoading}
+                            onClick={() => void store.refreshSessions()}
+                            disabled={workspace.sessionsLoading}
                         >
                             <IconRefresh size={16} />
                         </ActionIcon>
                     </Tooltip>
                 </Group>
 
-                {isLoading && sessions.length === 0 ? (
+                {workspace.sessionsLoading && workspace.sessions.length === 0 ? (
                     <Group gap={8} align="center">
                         <Loader size={14} />
                         <Text size="sm" c="dimmed">
@@ -172,23 +72,24 @@ export const SessionsSidebar: React.FC = () => {
                     </Group>
                 ) : null}
 
-                {!isLoading && sessions.length === 0 ? (
+                {!workspace.sessionsLoading && workspace.sessions.length === 0 ? (
                     <Text size="sm" c="dimmed">
                         {emptyStateText}
                     </Text>
                 ) : null}
 
-                {sessions.length > 0 ? (
+                {workspace.sessions.length > 0 ? (
                     <ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto">
                         <Stack gap={8}>
-                            {sessions.map((session) => {
-                                const isActive = session.id === currentSessionId;
+                            {workspace.sessions.map((session) => {
+                                const isActive = session.id === workspace.activeSessionId;
                                 const isMenuOpen = openedMenuSessionId === session.id;
                                 const createdLabel = new Date(session.createdAt).toLocaleString();
 
                                 return (
                                     <UnstyledButton
                                         key={session.id}
+                                        disabled={store.operations.isBusy}
                                         onClick={() => {
                                             setOpenedMenuSessionId(null);
                                             void handleOpenSession(session.id);
@@ -256,6 +157,7 @@ export const SessionsSidebar: React.FC = () => {
                                                         <Menu.Item
                                                             color="red"
                                                             leftSection={<IconTrash size={16} />}
+                                                            disabled={store.operations.isBusy}
                                                             onClick={() => {
                                                                 setOpenedMenuSessionId(null);
                                                                 void handleDeleteSession(session.id, session.title);
@@ -274,12 +176,12 @@ export const SessionsSidebar: React.FC = () => {
                     </ScrollArea>
                 ) : null}
 
-                {loadError ? (
+                {workspace.sessionsLoadError ? (
                     <Text size="sm" c="red">
-                        {loadError}
+                        {workspace.sessionsLoadError}
                     </Text>
                 ) : null}
             </Stack>
         </Paper>
     );
-};
+});

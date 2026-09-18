@@ -12,3 +12,5 @@ miniaudio-loopback/bin/
 miniaudio-loopback/build/
 miniaudio-loopback/*.sln
 miniaudio-loopback/*.vcxproj*
+CONTEXT.md
+docs/

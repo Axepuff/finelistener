@@ -1,6 +1,7 @@
 import { Box } from '@mantine/core';
 import type { UiPreferenceKey } from 'electron/src/types/uiPreferences';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useAppStore } from 'renderer/src/AppContext';
 
 type SidebarPosition = 'left' | 'right';
 
@@ -54,6 +55,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
     widthPreferenceKey,
     separatorAriaLabel = 'Resize sidebar',
 }) => {
+    const appStore = useAppStore();
     const legacySidebarConfig = sidebar ? {
         node: sidebar,
         minWidth: minSidebarWidth,
@@ -148,7 +150,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
             setIsSidebarWidthLoaded(false);
 
             const loadSidebarWidthPreference = async () => {
-                if (!preferenceKey || !window.api?.getUiPreference) {
+                if (!preferenceKey || !appStore.isElectron) {
                     if (isActive) {
                         setIsSidebarWidthLoaded(true);
                     }
@@ -157,7 +159,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
                 }
 
                 try {
-                    const storedSidebarWidth = await window.api.getUiPreference(preferenceKey);
+                    const storedSidebarWidth = await appStore.getUiPreference(preferenceKey);
 
                     if (!isActive) return;
                     if (typeof storedSidebarWidth !== 'number' || !Number.isFinite(storedSidebarWidth)) {
@@ -182,8 +184,6 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
         }, [clampSidebarWidth, hasSidebar, preferenceKey]);
 
         useEffect(() => {
-            const api = window.api;
-
             if (!hasSidebar) {
                 return;
             }
@@ -191,14 +191,14 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
                 !preferenceKey
                 || !isSidebarWidthLoaded
                 || isSidebarResizing
-                || !api?.setUiPreference
+                || !appStore.isElectron
             ) {
                 return;
             }
 
             const persistSidebarWidthPreference = async () => {
                 try {
-                    await api.setUiPreference(
+                    await appStore.setUiPreference(
                         preferenceKey,
                         clampSidebarWidth(sidebarWidth),
                     );
@@ -208,7 +208,14 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
             };
 
             void persistSidebarWidthPreference();
-        }, [clampSidebarWidth, isSidebarResizing, isSidebarWidthLoaded, hasSidebar, preferenceKey, sidebarWidth]);
+        }, [
+            clampSidebarWidth,
+            isSidebarResizing,
+            isSidebarWidthLoaded,
+            hasSidebar,
+            preferenceKey,
+            sidebarWidth,
+        ]);
 
         return {
             sidebarWidth,

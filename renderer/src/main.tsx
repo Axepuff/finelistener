@@ -14,10 +14,10 @@ import {
     TextInput,
     createTheme as createMantineTheme,
 } from '@mantine/core';
-import { Provider } from 'jotai';
 import { createRoot } from 'react-dom/client';
-import { jotaiStore } from 'renderer/src/store';
 import { App } from './App';
+import { AppContext } from './AppContext';
+import { appStore } from './store';
 
 const mantineTheme = createMantineTheme({
     primaryColor: 'dark',
@@ -78,9 +78,9 @@ const container = document.getElementById('root')!;
 const root = createRoot(container);
 
 root.render(
-    <Provider store={jotaiStore}>
+    <AppContext value={appStore}>
         <MantineProvider defaultColorScheme="light" theme={mantineTheme}>
             <App />
         </MantineProvider>
-    </Provider>,
+    </AppContext>,
 );

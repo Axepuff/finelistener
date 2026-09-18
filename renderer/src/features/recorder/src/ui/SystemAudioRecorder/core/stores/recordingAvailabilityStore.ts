@@ -1,4 +1,4 @@
-import { atom } from 'jotai';
+import { makeAutoObservable, runInAction } from 'mobx';
 import {
     initialAvailabilityState,
     type RecordingAvailabilityState,
@@ -11,25 +11,36 @@ const FALLBACK_AVAILABILITY_STATE: RecordingAvailabilityState = {
 };
 
 export class RecordingAvailabilityStore {
-    // Reflects recorder permission status and helper availability in the UI.
-    readonly availabilityAtom = atom<RecordingAvailabilityState>(initialAvailabilityState);
+    private stateValue: RecordingAvailabilityState = initialAvailabilityState;
 
     constructor(private readonly dependencies: RecordingDependencies) {
-        this.availabilityAtom.onMount = (setSelf) => {
-            void this.loadAvailabilityState()
-                .then((state) => {
-                    setSelf(state);
-                })
-                .catch(() => {
-                    setSelf(FALLBACK_AVAILABILITY_STATE);
-                });
+        makeAutoObservable<this, 'dependencies'>(this, { dependencies: false }, { autoBind: true });
+    }
 
-            return undefined;
-        };
+    get state(): Readonly<RecordingAvailabilityState> {
+        return this.stateValue;
+    }
+
+    async initialize(): Promise<void> {
+        try {
+            const state = await this.loadAvailabilityState();
+
+            runInAction(() => {
+                this.stateValue = state;
+            });
+        } catch {
+            runInAction(() => {
+                this.stateValue = FALLBACK_AVAILABILITY_STATE;
+            });
+        }
+    }
+
+    replaceState(state: RecordingAvailabilityState): void {
+        this.stateValue = state;
     }
 
     private async loadAvailabilityState(): Promise<RecordingAvailabilityState> {
-        const api = this.dependencies.getApi();
+        const api = this.dependencies.adapter;
 
         if (!api) {
             return initialAvailabilityState;

@@ -1,6 +1,6 @@
 // Deterministic operator-mode workflow for an industrial-style control panel.
 export type TranscriptionWorkflowState = 'empty' | 'loaded' | 'transcribing' | 'done';
-export type TranscriptionRunOutcome = 'none' | 'success' | 'error';
+export type TranscriptionRunOutcome = 'none' | 'success' | 'error' | 'stopped';
 export type TranscriptionLifecycleState = 'initial' | 'importing' | 'transcribing' | 'ready';
 
 export interface TranscriptionWorkflowInput {

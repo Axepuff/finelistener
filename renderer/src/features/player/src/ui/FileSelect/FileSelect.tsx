@@ -1,10 +1,9 @@
 import { Button, Paper, SegmentedControl, Stack, Text } from '@mantine/core';
 import { IconFileMusic } from '@tabler/icons-react';
 import { SystemAudioRecorder } from '@~/recorder';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { observer } from 'mobx-react-lite';
 import { useMemo, useState, type FC } from 'react';
-import { atoms } from 'renderer/src/atoms';
-import { useApp } from '../../../../../AppContext';
+import { useAppStore } from '../../../../../AppContext';
 
 type SourceMode = 'file' | 'record';
 
@@ -15,29 +14,23 @@ const SOURCE_MODE_OPTIONS = [
 
 const shortenFileName = (target: string): string => target.split(/[/\\]/).pop() || target;
 
-export const FileSelect: FC = () => {
-    const { isElectron } = useApp();
+export const FileSelect: FC = observer(() => {
+    const store = useAppStore();
     const [sourceMode, setSourceMode] = useState<SourceMode>('file');
-    const audioToTranscribe = useAtomValue(atoms.transcription.audioToTranscribe);
-    const importAudioSession = useSetAtom(atoms.importAudioSession);
 
     const handlePick = async () => {
-        if (!isElectron) return;
+        const result = await store.importAudio();
 
-        try {
-            await importAudioSession();
-        } catch (error) {
-            console.error('Failed to import audio into a session', error);
+        if (!result.ok) {
+            store.activityLog.appendEvent(result.message);
         }
     };
 
     const selectedLabel = useMemo(() => {
-        if (audioToTranscribe.length === 0) {
-            return null;
-        }
+        if (!store.workspace.audioSourcePath) return null;
 
-        return audioToTranscribe.map(shortenFileName).join(', ');
-    }, [audioToTranscribe]);
+        return shortenFileName(store.workspace.audioSourcePath);
+    }, [store.workspace.audioSourcePath]);
 
     return (
         <Paper
@@ -57,6 +50,7 @@ export const FileSelect: FC = () => {
                     <Stack gap={8}>
                         <Button
                             onClick={handlePick}
+                            disabled={store.operations.isBusy}
                             leftSection={<IconFileMusic size={16} />}
                             variant="light"
                         >
@@ -72,4 +66,4 @@ export const FileSelect: FC = () => {
             </Stack>
         </Paper>
     );
-};
+});

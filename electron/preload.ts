@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { TranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from './src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from './src/types/uiPreferences';
 
 type WhisperModelDownloadProgressPayload = {
@@ -30,7 +31,7 @@ contextBridge.exposeInMainWorld('api', {
     isRecordingAvailable: () => ipcRenderer.invoke('recording:is-available'),
     listRecordingDevices: () => ipcRenderer.invoke('recording:list-devices'),
     revealDevAppInFinder: () => ipcRenderer.invoke('recording:reveal-dev-app'),
-    transcribeStream: (audioPath: string, opts: any) => ipcRenderer.invoke('transcribeStream', audioPath, opts),
+    transcribeStream: (audioPath: string, opts: TranscribeOpts) => ipcRenderer.invoke('transcribeStream', audioPath, opts),
     stopTranscription: () => ipcRenderer.invoke('stop-transcription'),
     getWhisperModels: () => ipcRenderer.invoke('whisper-models:list'),
     downloadWhisperModel: (modelName: string) => ipcRenderer.invoke('whisper-models:download', modelName),
@@ -43,15 +44,15 @@ contextBridge.exposeInMainWorld('api', {
         value: UiPreferenceValueMap[K],
     ): Promise<UiPreferenceValueMap[K]> =>
         ipcRenderer.invoke('ui-preferences:set', key, value),
-    onTranscribeText: (cb: (chunk: string) => void) => {
-        const handler = (_e: unknown, chunk: string) => cb(chunk);
+    onTranscribeText: (cb: (event: TranscriptionTextEvent) => void) => {
+        const handler = (_e: unknown, event: TranscriptionTextEvent) => cb(event);
 
         ipcRenderer.on('transcribe:progress', handler);
 
         return () => ipcRenderer.removeListener('transcribe:progress', handler);
     },
-    onTranscribeProgressValue: (cb: (value: number) => void) => {
-        const handler = (_e: unknown, value: number) => cb(value);
+    onTranscribeProgressValue: (cb: (event: TranscriptionProgressEvent) => void) => {
+        const handler = (_e: unknown, event: TranscriptionProgressEvent) => cb(event);
 
         ipcRenderer.on('transcribe:progress-percent', handler);
 

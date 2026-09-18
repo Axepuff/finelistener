@@ -1,6 +1,7 @@
 import type { RecordingLevel, RecordingState } from 'electron/src/services/RecordingService';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
+import type { RendererAdapter } from 'renderer/src/stores/rendererAdapter';
 
 export interface RecordingAvailabilityState {
     permissionStatus: ScreenRecordingPermissionStatus;
@@ -28,7 +29,7 @@ export interface RecordingSessionState {
 }
 
 export interface RecordingDependencies {
-    getApi: () => Window['api'] | null;
+    adapter: RendererAdapter | null;
 }
 
 export const initialAvailabilityState: RecordingAvailabilityState = {

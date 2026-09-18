@@ -1,8 +1,9 @@
 import { Button, Group, Stack, Text } from '@mantine/core';
 import { useSystemAudioRecorder } from '@~/recorder/src/ui/SystemAudioRecorder/core/useSystemAudioRecorder';
+import { observer } from 'mobx-react-lite';
 import React from 'react';
 
-export const SystemAudioRecorderAlerts: React.FC = () => {
+export const SystemAudioRecorderAlerts: React.FC = observer(() => {
     const { alerts } = useSystemAudioRecorder();
 
     return (
@@ -46,4 +47,4 @@ export const SystemAudioRecorderAlerts: React.FC = () => {
             ) : null}
         </Stack>
     );
-};
+});

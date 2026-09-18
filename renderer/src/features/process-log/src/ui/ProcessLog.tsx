@@ -1,24 +1,11 @@
 import { Button, Collapse, Paper, Stack, Switch, Text } from '@mantine/core';
-import { useAtom } from 'jotai';
-import { FC, useEffect, useState } from 'react';
-import { useApp } from 'renderer/src/AppContext';
-import { atoms } from 'renderer/src/atoms';
+import { observer } from 'mobx-react-lite';
+import { FC, useState } from 'react';
+import { useAppStore } from 'renderer/src/AppContext';
 
-const { transcription } = atoms;
-
-export const ProcessLog: FC = () => {
-    const { isElectron } = useApp();
-    const [log, setLog] = useAtom(transcription.log);
+export const ProcessLog: FC = observer(() => {
+    const { activityLog } = useAppStore();
     const [showLog, setShowLog] = useState(false);
-
-    useEffect(() => {
-        if (!isElectron) return;
-        const off = window.api!.onTranscribeLog((line) => setLog((prev) => prev + line));
-
-        return () => {
-            off?.();
-        };
-    }, [isElectron, setLog]);
 
     return (
         <Stack gap={8} p={8}>
@@ -40,7 +27,7 @@ export const ProcessLog: FC = () => {
                     }}
                 >
                     <Stack gap={12}>
-                        <Button onClick={() => setLog('')}>
+                        <Button onClick={() => activityLog.clear()}>
                             {'Clear log'}
                         </Button>
                     </Stack>
@@ -56,10 +43,10 @@ export const ProcessLog: FC = () => {
                             border: '1px solid var(--mantine-color-gray-3)',
                         }}
                     >
-                        {log || 'Whisper log is empty.'}
+                        {activityLog.content || 'Whisper log is empty.'}
                     </Text>
                 </Paper>
             </Collapse>
         </Stack>
     );
-};
+});

@@ -1,5 +1,4 @@
 import { PlayerAdapter, type RegionBounds } from '@~/player/src/ui/Player/PlayerAdapter';
-import { atom } from 'jotai';
 import WaveSurfer from 'wavesurfer.js';
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
 import Timeline from 'wavesurfer.js/dist/plugins/timeline.esm.js';
@@ -15,8 +14,6 @@ const buildLocalFileUrl = (filePath: string): string => {
 
     return `${LOCAL_FILE_PROTOCOL}://${encodeURI(withLeadingSlash)}`;
 };
-
-export const isPlayingAtom = atom(false);
 
 export class WaveSurferAdapter extends PlayerAdapter {
     private readonly wavesurfer: WaveSurfer;

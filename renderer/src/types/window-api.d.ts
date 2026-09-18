@@ -9,7 +9,7 @@ import type {
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
 import type { SessionDetails, SessionListItem } from 'electron/src/types/sessions';
-import type { TranscribeOpts } from 'electron/src/types/transcription';
+import type { TranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
 
@@ -40,8 +40,8 @@ declare global {
             isRecordingAvailable: () => Promise<boolean>;
             listRecordingDevices: () => Promise<RecordingDevice[]>;
             revealDevAppInFinder: () => Promise<boolean>;
-            onTranscribeText: (cb: (chunk: string) => void) => () => void;
-            onTranscribeProgressValue: (cb: (value: number) => void) => () => void;
+            onTranscribeText: (cb: (event: TranscriptionTextEvent) => void) => () => void;
+            onTranscribeProgressValue: (cb: (event: TranscriptionProgressEvent) => void) => () => void;
             onTranscribeLog: (cb: (line: string) => void) => () => void;
             onRecordingState: (cb: (state: RecordingState) => void) => () => void;
             onRecordingProgress: (cb: (progress: RecordingProgress) => void) => () => void;

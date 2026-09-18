@@ -1,4 +1,4 @@
-import type { TrimRange } from 'renderer/src/atoms';
+import type { SegmentSelection } from 'renderer/src/stores';
 
 const collapseWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
 
@@ -7,7 +7,7 @@ interface TranscribedSegment {
     startSeconds: number | null;
 }
 
-export const resolveTrimOffset = (range?: TrimRange) => {
+export const resolveTrimOffset = (range?: SegmentSelection) => {
     const start = range?.start;
 
     return typeof start === 'number' && Number.isFinite(start) ? start : 0;

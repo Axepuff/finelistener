@@ -1,16 +1,14 @@
 import { Loader } from '@mantine/core';
-import { useAtomValue } from 'jotai';
+import { observer } from 'mobx-react-lite';
 import { FC } from 'react';
-import { atoms } from 'renderer/src/atoms';
+import { useAppStore } from 'renderer/src/AppContext';
 
-const { appState } = atoms;
-
-export const TranscribeState: FC = () => {
-    const state = useAtomValue(appState.uiState);
+export const TranscribeState: FC = observer(() => {
+    const state = useAppStore().lifecycleState;
 
     if (state === 'transcribing') {
         return <Loader color="green" />;
     }
 
     return null;
-};
+});

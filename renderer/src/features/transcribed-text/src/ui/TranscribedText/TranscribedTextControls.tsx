@@ -1,6 +1,7 @@
 import { ActionIcon, Box, Button, Group, Notification, SegmentedControl, TextInput } from '@mantine/core';
 import { IconCopy, IconDownload, IconSearch, IconTextSize, IconClockHour2 } from '@tabler/icons-react';
 import React, { useEffect, useState } from 'react';
+import { useAppStore } from 'renderer/src/AppContext';
 import styles from './TranscribedText.module.css';
 
 interface Props {
@@ -14,6 +15,7 @@ export const TranscribedTextControls: React.FC<Props> = ({
     showRegions,
     setShowRegions,
 }) => {
+    const store = useAppStore();
     const [searchValue, setSearchValue] = useState('');
     const [isCopyNotificationOpen, setIsCopyNotificationOpen] = useState(false);
     const [copyNotificationKey, setCopyNotificationKey] = useState(0);
@@ -21,7 +23,11 @@ export const TranscribedTextControls: React.FC<Props> = ({
     const handleSave = async () => {
         if (!currentTextValue) return;
 
-        await window.api!.saveText(currentTextValue);
+        const result = await store.saveText(currentTextValue);
+
+        if (!result.ok) {
+            store.activityLog.appendEvent(result.message);
+        }
     };
 
     const handleCopy = async () => {

@@ -1,3 +1,3 @@
-import { createStore } from 'jotai';
+import { AppStore, createPreloadAdapter } from './stores';
 
-export const jotaiStore = createStore();
+export const appStore = new AppStore(createPreloadAdapter(window.api));

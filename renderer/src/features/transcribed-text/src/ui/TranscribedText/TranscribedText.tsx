@@ -1,151 +1,46 @@
 import { ActionIcon, Group, Paper, Progress, Stack, Text } from '@mantine/core';
 import { IconPlus } from '@tabler/icons-react';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import React, { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { atoms } from 'renderer/src/atoms';
-import { useApp } from '../../../../../AppContext';
+import { observer } from 'mobx-react-lite';
+import React, { useState, type MouseEvent } from 'react';
+import { useAppStore } from '../../../../../AppContext';
 import { TranscribedTextContent } from './TranscribedTextContent';
 import { TranscribedTextControls } from './TranscribedTextControls';
-import { buildPlainSegments, escapeHtml, formatSecondsReadable, parseTimeToSeconds, resolveTrimOffset } from './utils';
+import { parseTimeToSeconds } from './utils';
 
-const { appState, transcription } = atoms;
-
-type TranscribedTextProps = {
-    onSelectTime: (time: number) => void;
-};
-
-export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }) => {
-    const { isElectron } = useApp();
-    const [plainText, setPlainText] = useAtom(transcription.plainText);
-    const [renderedText, setRenderedText] = useAtom(transcription.renderedText);
-    const [progress, setProgress] = useState(0);
+export const TranscribedText: React.FC = observer(() => {
+    const store = useAppStore();
+    const { transcription } = store;
     const [showRegions, setShowRegions] = useState(false);
-    const uiState = useAtomValue(appState.uiState);
-    const trimRange = useAtomValue(atoms.transcription.trimRange);
-    const trimOffsetRef = useRef<number>(resolveTrimOffset(trimRange));
-    const trimOffset = resolveTrimOffset(trimRange);
-    const importAudioSession = useSetAtom(atoms.importAudioSession);
+    const currentTextValue = showRegions ? transcription.timecodedText : transcription.plainText;
+    const isInitialEmptyState = (
+        store.lifecycleState === 'initial'
+        || store.lifecycleState === 'importing'
+    ) && currentTextValue.trim().length === 0;
+    const plainSegments = transcription.visibleTranscript?.segments.map((segment) => ({
+        text: segment.text,
+        startSeconds: segment.startSec,
+    })) ?? [];
 
-    const plainSegments = useMemo(() => buildPlainSegments(plainText, trimOffset), [plainText, trimOffset]);
-    const plainTextValue = useMemo(
-        () => plainSegments.map((segment) => segment.text).join(' '),
-        [plainSegments],
-    );
-    const currentTextValue = showRegions ? plainText : plainTextValue;
-    const isInitialEmptyState = (uiState === 'initial' || uiState === 'importing') && currentTextValue.trim().length === 0;
+    const handleRegionClick = (event: MouseEvent<HTMLElement>) => {
+        const regionElement = (event.target as HTMLElement | null)?.closest('span[data-regions]');
 
-    useEffect(() => {
-        trimOffsetRef.current = resolveTrimOffset(trimRange);
-    }, [trimRange]);
+        if (!regionElement) return;
 
-    const formatRegionValue = useCallback((rawRegion: string) => {
-        const parsedSeconds = parseTimeToSeconds(rawRegion);
+        const region = regionElement.getAttribute('data-regions');
+        const time = region ? parseTimeToSeconds(region) : null;
 
-        if (parsedSeconds === null) return rawRegion.trim();
+        if (time === null) return;
 
-        const adjustedSeconds = parsedSeconds + trimOffsetRef.current;
-
-        if (!Number.isFinite(adjustedSeconds)) return rawRegion.trim();
-
-        return Number(adjustedSeconds.toFixed(3)).toString();
-    }, []);
-
-    const formatRegionLabel = useCallback((rawContent: string, fallback: string) => {
-        const [rawStart = '', rawEnd] = rawContent.split('-->');
-        const parsedStart = parseTimeToSeconds(rawStart);
-        const adjustedStart = parsedStart === null ? null : parsedStart + trimOffsetRef.current;
-        const startValue = adjustedStart !== null ? formatSecondsReadable(adjustedStart) : '';
-        const safeStart = startValue || rawStart.trim();
-
-        if (rawEnd === undefined) {
-            return safeStart ? `[${safeStart}]` : fallback;
-        }
-
-        const parsedEnd = parseTimeToSeconds(rawEnd);
-        const adjustedEnd = parsedEnd === null ? null : parsedEnd + trimOffsetRef.current;
-        const endValue = adjustedEnd !== null ? formatSecondsReadable(adjustedEnd) : '';
-        const safeEnd = endValue || rawEnd.trim();
-
-        if (!safeStart && !safeEnd) return fallback;
-
-        return `[${safeStart} - ${safeEnd}]`;
-    }, []);
-
-    const enhanceChunk = useCallback((chunk: string) => {
-        const placeholders: Array<{ placeholder: string; markup: string }> = [];
-
-        const withPlaceholders = chunk.replace(/\[([^\]]+)\]/g, (match, content: string) => {
-            const [firstRegion = ''] = content.split('-->');
-            const placeholder = `__REGION_PLACEHOLDER_${placeholders.length}__`;
-            const regionValue = formatRegionValue(firstRegion);
-            const label = formatRegionLabel(content, match);
-
-            placeholders.push({
-                placeholder,
-                markup: `<span data-regions="${escapeHtml(regionValue)}">${escapeHtml(label)}</span>`,
-            });
-
-            return placeholder;
-        });
-
-        const escaped = escapeHtml(withPlaceholders);
-
-        return placeholders.reduce((acc, { placeholder, markup }) => acc.split(placeholder).join(markup), escaped);
-    }, [formatRegionLabel, formatRegionValue]);
-
-    const handleRegionClick = useCallback(
-        (event: MouseEvent<HTMLElement>) => {
-            const regionElement = (event.target as HTMLElement | null)?.closest('span[data-regions]');
-
-            if (!regionElement) return;
-
-            const region = regionElement.getAttribute('data-regions');
-            const time = region ? parseTimeToSeconds(region) : null;
-
-            if (time === null) return;
-
-            onSelectTime(time);
-        },
-        [onSelectTime],
-    );
-
-    const handlePick = async () => {
-        if (!isElectron) return;
-
-        try {
-            await importAudioSession();
-        } catch (error) {
-            console.error('Failed to import audio into a session', error);
-        }
+        store.workspace.requestPlaybackTime(time);
     };
 
-    useEffect(() => {
-        if (!isElectron) return;
+    const handlePick = async () => {
+        const result = await store.importAudio();
 
-        const off1 = window.api!.onTranscribeText((chunk) => {
-            setPlainText((text) => text + chunk);
-            setRenderedText((text) => text + enhanceChunk(chunk));
-        });
-
-        const off2 = window.api!.onTranscribeProgressValue((value) => {
-            const next = Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0;
-
-            setProgress(next);
-        });
-
-        return () => {
-            off1?.();
-            off2?.();
-        };
-    }, [enhanceChunk, isElectron, setPlainText, setRenderedText]);
-
-    useEffect(() => {
-        if (uiState === 'transcribing') {
-            setProgress(0);
-        } else if (uiState === 'initial') {
-            setProgress(0);
+        if (!result.ok) {
+            store.activityLog.appendEvent(result.message);
         }
-    }, [uiState]);
+    };
 
     return (
         <Stack gap={16} align="stretch" style={{ width: '100%', minWidth: 0, minHeight: 0, height: '100%', padding: 16, overflow: 'hidden' }}>
@@ -185,18 +80,18 @@ export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }
                         setShowRegions={setShowRegions}
                     />
 
-                    {uiState === 'transcribing' ? (
+                    {store.lifecycleState === 'transcribing' ? (
                         <Group gap={8} align="center" wrap="nowrap" style={{ width: '100%' }}>
-                            <Progress value={progress} size={4} style={{ flexGrow: 1 }} />
+                            <Progress value={transcription.progress} size={4} style={{ flexGrow: 1 }} />
                             <Text size="sm" style={{ minWidth: 48, textAlign: 'right' }}>
-                                {`${progress.toFixed(0)}%`}
+                                {`${transcription.progress.toFixed(0)}%`}
                             </Text>
                         </Group>
                     ) : null}
 
                     <TranscribedTextContent
                         showRegions={showRegions}
-                        renderedText={renderedText}
+                        renderedText={transcription.renderedHtml}
                         plainSegments={plainSegments}
                         onRegionClick={handleRegionClick}
                     />
@@ -204,4 +99,4 @@ export const TranscribedText: React.FC<TranscribedTextProps> = ({ onSelectTime }
             )}
         </Stack>
     );
-};
+});

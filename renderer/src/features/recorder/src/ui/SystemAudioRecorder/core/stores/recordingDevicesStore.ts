@@ -1,5 +1,5 @@
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
-import { atom } from 'jotai';
+import { makeAutoObservable, runInAction } from 'mobx';
 import { getErrorMessage, getRecordingDeviceId } from '../recordingUtils';
 import {
     initialDevicesState,
@@ -14,32 +14,36 @@ const FALLBACK_DEVICES_STATE: RecordingDevicesState = {
 };
 
 export class RecordingDevicesStore {
-    // Stores output devices list, selected device, and device-loading error state.
-    readonly devicesAtom = atom<RecordingDevicesState>(initialDevicesState);
-
-    readonly selectDeviceAtom = atom(null, (_get, set, deviceId: string) => {
-        set(this.devicesAtom, (prev) => ({
-            ...prev,
-            selectedDeviceId: deviceId,
-        }));
-    });
+    private stateValue: RecordingDevicesState = initialDevicesState;
 
     constructor(private readonly dependencies: RecordingDependencies) {
-        this.devicesAtom.onMount = (setSelf) => {
-            void this.loadDevicesState()
-                .then((state) => {
-                    setSelf(state);
-                })
-                .catch(() => {
-                    setSelf(FALLBACK_DEVICES_STATE);
-                });
+        makeAutoObservable<this, 'dependencies'>(this, { dependencies: false }, { autoBind: true });
+    }
 
-            return undefined;
-        };
+    get state(): Readonly<RecordingDevicesState> {
+        return this.stateValue;
+    }
+
+    selectDevice(deviceId: string): void {
+        this.stateValue = { ...this.stateValue, selectedDeviceId: deviceId };
+    }
+
+    async initialize(): Promise<void> {
+        try {
+            const state = await this.loadDevicesState();
+
+            runInAction(() => {
+                this.stateValue = state;
+            });
+        } catch {
+            runInAction(() => {
+                this.stateValue = FALLBACK_DEVICES_STATE;
+            });
+        }
     }
 
     private async loadDevicesState(): Promise<RecordingDevicesState> {
-        const api = this.dependencies.getApi();
+        const api = this.dependencies.adapter;
 
         if (!api) {
             return initialDevicesState;

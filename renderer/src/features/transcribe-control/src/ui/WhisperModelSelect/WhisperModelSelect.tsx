@@ -1,8 +1,9 @@
 import { Button, Group, Loader, Modal, RingProgress, Select, Stack, Text } from '@mantine/core';
 import { IconCircleCheck, IconCloudDownload } from '@tabler/icons-react';
-import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useApp } from '../../../../../AppContext';
+import type { WhisperModelName } from 'electron/src/types/whisper';
+import { observer } from 'mobx-react-lite';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useAppStore } from '../../../../../AppContext';
 
 interface Props {
     value: WhisperModelName;
@@ -15,7 +16,7 @@ interface Props {
     onDownloadCancelled?: () => void;
 }
 
-export const WhisperModelSelect: React.FC<Props> = ({
+export const WhisperModelSelect: React.FC<Props> = observer(({
     value,
     onChange,
     onStatusChange,
@@ -25,53 +26,16 @@ export const WhisperModelSelect: React.FC<Props> = ({
     onDownloadComplete,
     onDownloadCancelled,
 }) => {
-    const { isElectron } = useApp();
-    const [modelOptions, setModelOptions] = useState<WhisperModelInfo[]>([]);
+    const store = useAppStore();
+    const { whisperModels } = store;
     const [pendingModel, setPendingModel] = useState<WhisperModelName | null>(null);
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-    const [downloadProgress, setDownloadProgress] = useState<WhisperModelDownloadProgress | null>(null);
     const [downloadCancelled, setDownloadCancelled] = useState(false);
 
-    const loadWhisperModels = useCallback(async () => {
-        if (!window.api?.getWhisperModels) return;
-
-        try {
-            const models = await window.api.getWhisperModels();
-
-            setModelOptions(models);
-        } catch (error) {
-            console.error('Failed to load whisper models', error);
-        }
-    }, []);
-
-    useEffect(() => {
-        if (!isElectron) return;
-
-        void loadWhisperModels();
-    }, [isElectron, loadWhisperModels]);
-
-    useEffect(() => {
-        if (!window.api?.onWhisperModelDownloadProgress) return;
-
-        const off = window.api.onWhisperModelDownloadProgress((progress) => {
-            setDownloadProgress(progress);
-        });
-
-        return () => {
-            off?.();
-        };
-    }, []);
-
-    const selectedModelInfo = useMemo(
-        () => modelOptions.find((item) => item.name === value),
-        [modelOptions, value],
-    );
-    const pendingModelInfo = useMemo(
-        () => modelOptions.find((item) => item.name === pendingModel),
-        [modelOptions, pendingModel],
-    );
+    const selectedModelInfo = whisperModels.getModel(value);
+    const pendingModelInfo = pendingModel ? whisperModels.getModel(pendingModel) : undefined;
     const isModelDownloaded = selectedModelInfo?.isDownloaded ?? false;
-    const isDownloadActive = Boolean(downloadProgress);
+    const isDownloadActive = whisperModels.isDownloadActive;
 
     useEffect(() => {
         onStatusChange?.({ isModelDownloaded, isDownloadActive });
@@ -97,19 +61,19 @@ export const WhisperModelSelect: React.FC<Props> = ({
         : `Download the ${pendingModelLabel} model?`;
 
     const modelData = useMemo(
-        () => modelOptions.map((item) => ({
+        () => whisperModels.models.map((item) => ({
             value: item.name,
             label: item.name,
-            disabled: isDownloadActive ? downloadProgress?.name !== item.name : false,
+            disabled: isDownloadActive ? whisperModels.downloadProgress?.name !== item.name : false,
         })),
-        [downloadProgress?.name, isDownloadActive, modelOptions],
+        [isDownloadActive, whisperModels.downloadProgress?.name, whisperModels.models],
     );
 
     const handleModelChange = (nextModel: string | null) => {
         if (!nextModel) return;
 
         const nextModelName = nextModel as WhisperModelName;
-        const nextModelInfo = modelOptions.find((item) => item.name === nextModelName);
+        const nextModelInfo = whisperModels.getModel(nextModelName);
 
         if (!nextModelInfo || nextModelInfo.isDownloaded) {
             onChange(nextModelName);
@@ -128,34 +92,17 @@ export const WhisperModelSelect: React.FC<Props> = ({
             return;
         }
 
-        if (!window.api?.downloadWhisperModel) {
-            setIsConfirmOpen(false);
-            setPendingModel(null);
-
-            return;
-        }
-
         onChange(pendingModel);
         setIsConfirmOpen(false);
-        setDownloadProgress({
-            name: pendingModel,
-            percent: 0,
-            downloadedBytes: 0,
-            totalBytes: null,
-        });
+        const result = await whisperModels.download(pendingModel);
 
-        try {
-            await window.api.downloadWhisperModel(pendingModel);
-            await loadWhisperModels();
+        if (result.ok) {
             onDownloadComplete?.();
-        } catch (error) {
-            console.error('Failed to download whisper model', error);
-            onDownloadError?.('Failed to download the model. Please try again.');
+        } else {
+            onDownloadError?.(result.message);
             onDownloadCancelled?.();
-        } finally {
-            setDownloadProgress(null);
-            setPendingModel(null);
         }
+        setPendingModel(null);
     };
 
     const handleCancelDownload = () => {
@@ -166,9 +113,9 @@ export const WhisperModelSelect: React.FC<Props> = ({
     };
 
     const getModelStatusNode = (modelName: WhisperModelName) => {
-        const modelInfo = modelOptions.find((item) => item.name === modelName);
-        const isDownloading = downloadProgress?.name === modelName;
-        const progressValue = isDownloading ? downloadProgress?.percent ?? null : null;
+        const modelInfo = whisperModels.getModel(modelName);
+        const isDownloading = whisperModels.downloadProgress?.name === modelName;
+        const progressValue = isDownloading ? whisperModels.downloadProgress?.percent ?? null : null;
 
         if (isDownloading) {
             if (progressValue === null) {
@@ -202,7 +149,7 @@ export const WhisperModelSelect: React.FC<Props> = ({
                 disabled={disabled || isDownloadActive}
                 renderOption={({ option }) => {
                     const optionName = option.value as WhisperModelName;
-                    const info = modelOptions.find((item) => item.name === optionName);
+                    const info = whisperModels.getModel(optionName);
 
                     return (
                         <Group gap={8} justify="space-between" wrap="nowrap">
@@ -234,4 +181,4 @@ export const WhisperModelSelect: React.FC<Props> = ({
             </Modal>
         </>
     );
-};
+});

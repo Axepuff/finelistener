@@ -1,7 +1,8 @@
 import { Progress } from '@mantine/core';
 import { useSystemAudioRecorder } from '@~/recorder/src/ui/SystemAudioRecorder/core/useSystemAudioRecorder';
+import { observer } from 'mobx-react-lite';
 
-export const SystemAudioRecorderLevelMeter: React.FC = () => {
+export const SystemAudioRecorderLevelMeter: React.FC = observer(() => {
     const { meter } = useSystemAudioRecorder();
 
     if (meter.recordingState !== 'recording') return null;
@@ -15,4 +16,4 @@ export const SystemAudioRecorderLevelMeter: React.FC = () => {
             size={4}
         />
     );
-};
+});

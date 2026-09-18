@@ -1,17 +1,14 @@
 import { createContext, useContext } from 'react';
+import type { AppStore } from './stores';
 
-type AppState = {
-    isElectron: boolean;
-};
+export const AppContext = createContext<AppStore | null>(null);
 
-export const AppContext = createContext<AppState | null>(null);
+export const useAppStore = (): AppStore => {
+    const store = useContext(AppContext);
 
-export function useApp(): AppState {
-    const context = useContext(AppContext);
-
-    if (!context) {
-        throw new Error('AppContext: useApp should only be used inside an AppContext');
+    if (!store) {
+        throw new Error('useAppStore must be used inside AppContext');
     }
 
-    return context;
-}
+    return store;
+};

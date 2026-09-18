@@ -7,7 +7,7 @@ flowchart LR
     F --> SA["RecordingSupportActionsStore"]
     F --> L["TranscriptionRecordingLogService"]
 
-    A --> API["window.api"]
+    A --> API["RendererAdapter"]
     D --> API
     S --> API
     SA --> API
@@ -17,5 +17,5 @@ flowchart LR
     S -. "writes logs" .-> L
     SA -. "writes logs" .-> L
 
-    S --> AUDIO["atoms.transcription.audioToTranscribe"]
-    L --> LOG["atoms.transcription.log (via jotaiStore)"]
+    S --> AUDIO["AppStore.workspace"]
+    L --> LOG["AppStore.activityLog"]

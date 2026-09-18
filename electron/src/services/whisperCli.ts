@@ -10,7 +10,6 @@ import type { TranscriptionCallbacks } from './whisperServer/types';
  */
 export const createWhisperCliRunner = (callbacks: TranscriptionCallbacks) => {
     let child: ChildProcessWithoutNullStreams | null = null;
-    const parseProgress = createProgressParser(callbacks.onProgressPercent);
     const audioPreprocessor = new AudioPreprocessor();
 
     const stop = (): boolean => {
@@ -27,6 +26,9 @@ export const createWhisperCliRunner = (callbacks: TranscriptionCallbacks) => {
     };
 
     const transcribe = async (audioPath: string, opts: TranscribeOpts): Promise<string> => {
+        const parseProgress = createProgressParser((value) => {
+            callbacks.onProgressPercent?.({ runId: opts.runId, value });
+        });
         const { modelPath, vadModelPath } = resolveWhisperPaths(opts.model);
         const cliBinPath = '';
         const { wavPath, cleanup } = await audioPreprocessor.prepareAudioFile(audioPath, opts.segment);
@@ -46,7 +48,7 @@ export const createWhisperCliRunner = (callbacks: TranscriptionCallbacks) => {
                 child.stdout.on('data', (chunk: unknown) => {
                     if (typeof chunk === 'string') {
                         full += chunk;
-                        callbacks.onStdoutChunk?.(chunk);
+                        callbacks.onStdoutChunk?.({ runId: opts.runId, chunk });
                     }
                 });
 

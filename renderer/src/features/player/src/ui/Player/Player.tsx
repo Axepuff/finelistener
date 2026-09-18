@@ -1,9 +1,9 @@
 import { ActionIcon, Box, Button, Group, Loader, Paper, SegmentedControl, Text } from '@mantine/core';
 import { IconPlayerPause, IconPlayerPlay } from '@tabler/icons-react';
 import { WaveSurferAdapter } from '@~/player/src/ui/Player/WavesurfAdapter';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useEffect, useMemo, useRef, useState, type FC } from 'react';
-import { atoms } from 'renderer/src/atoms';
+import { observer } from 'mobx-react-lite';
+import { useEffect, useRef, type FC } from 'react';
+import { useAppStore } from 'renderer/src/AppContext';
 import { PlayerAdapter } from './PlayerAdapter';
 
 const formatPreciseTime = (seconds: number) => {
@@ -20,34 +20,21 @@ const AUDIO_MODE_OPTIONS = [
     { label: 'Optimized', value: 'optimized' },
 ];
 
-export const Player: FC = () => {
+export const Player: FC = observer(() => {
+    const store = useAppStore();
+    const { workspace } = store;
     const containerRef = useRef<HTMLDivElement | null>(null);
     const adapterRef = useRef<PlayerAdapter | null>(null);
-    const [urlIndex, setUrlIndex] = useState(0);
-    const audioToTranscribe = useAtomValue(atoms.transcription.audioToTranscribe);
-    const selectedTime = useAtomValue(atoms.transcription.currentTime);
-    const [trimRange, setTrimRange] = useAtom(atoms.transcription.trimRange); // TODO в локальные атомы локального стора плеера.
-    const [isPlaying, setIsPlaying] = useAtom(atoms.player.isPlaying);
-    const [isLoading, setIsLoading] = useState(false);
-    const [currentPosition, setCurrentPosition] = useState(0);
-    const currentSessionId = useAtomValue(atoms.sessions.currentSessionId);
-    const [currentSessionDetails, setCurrentSessionDetails] = useAtom(atoms.sessions.currentSessionDetails);
-    const [audioMode, setAudioMode] = useAtom(atoms.sessions.audioMode);
-    const setAudioToTranscribe = useSetAtom(atoms.transcription.audioToTranscribe);
-    const [isOptimizing, setIsOptimizing] = useState(false);
+    const currentAudioPath = workspace.audioSourcePath ?? undefined;
+    const segmentSelection = workspace.segmentSelection;
 
     useEffect(() => {
-        setUrlIndex((index) => Math.min(index, Math.max(audioToTranscribe.length - 1, 0)));
-    }, [audioToTranscribe.length]);
-
-    const currentAudioPath = useMemo(() => {
-        if (audioToTranscribe.length === 0) return undefined;
-
-        return audioToTranscribe[Math.min(urlIndex, audioToTranscribe.length - 1)];
-    }, [audioToTranscribe, urlIndex]);
-
-    useEffect(() => {
-        const adapter = new WaveSurferAdapter(containerRef.current!, setIsPlaying, setIsLoading, setCurrentPosition);
+        const adapter = new WaveSurferAdapter(
+            containerRef.current!,
+            (isPlaying) => workspace.setPlaying(isPlaying),
+            (isLoading) => workspace.setPlayerLoading(isLoading),
+            (position) => workspace.setPlaybackPosition(position),
+        );
 
         adapterRef.current = adapter;
 
@@ -55,35 +42,35 @@ export const Player: FC = () => {
             adapter.destroy();
             adapterRef.current = null;
         };
-    }, [setIsPlaying, setIsLoading, setCurrentPosition]);
+    }, [workspace]);
 
     const player = adapterRef.current;
 
     useEffect(() => {
         if (!player) return;
 
-        setTrimRange(undefined);
-        setCurrentPosition(0);
+        workspace.clearSegment();
+        workspace.setPlaybackPosition(0);
 
         if (!currentAudioPath) {
-            setIsLoading(false);
+            workspace.setPlayerLoading(false);
             void player.loadSource(undefined);
 
             return;
         }
 
-        setIsLoading(true);
+        workspace.setPlayerLoading(true);
         void player.loadSource(currentAudioPath);
-    }, [currentAudioPath, player, setCurrentPosition, setTrimRange]);
+    }, [currentAudioPath, player, workspace]);
 
     useEffect(() => {
         if (!player) return;
 
-        if (!Number.isFinite(selectedTime)) return;
+        if (!Number.isFinite(workspace.requestedPlaybackTime)) return;
 
-        player.seekTo(selectedTime);
-        setCurrentPosition(selectedTime);
-    }, [player, selectedTime, setCurrentPosition]);
+        player.seekTo(workspace.requestedPlaybackTime);
+        workspace.setPlaybackPosition(workspace.requestedPlaybackTime);
+    }, [player, workspace, workspace.requestedPlaybackTime]);
 
     const onPlayPause = async () => {
         if (player) {
@@ -95,89 +82,52 @@ export const Player: FC = () => {
         const safeTime = Math.max(0, player?.currentTime ?? 0);
 
         adapterRef.current?.setRegion({ start: safeTime });
-        setTrimRange((prev) => ({ start: safeTime, end: prev?.end }));
+        workspace.setSegmentStart(safeTime);
     };
 
     const handleMarkEnd = () => {
         const safeTime = Math.max(0, player?.currentTime ?? 0);
 
         adapterRef.current?.setRegion({ end: safeTime });
-        setTrimRange((prev) => ({ start: prev?.start, end: safeTime }));
+        workspace.setSegmentEnd(safeTime);
     };
 
     const handleClearRange = () => {
-        setTrimRange(undefined);
+        workspace.clearSegment();
         adapterRef.current?.clearRegions();
     };
 
     const handleAudioModeChange = async (mode: string) => {
-        if (!currentSessionId || !currentSessionDetails) return;
+        if (mode !== 'original' && mode !== 'optimized') return;
 
-        if (mode === 'original') {
-            setAudioMode('original');
-            setAudioToTranscribe([currentSessionDetails.audioWavPath]);
+        const result = await store.setAudioMode(mode);
 
-            return;
-        }
-
-        if (mode === 'optimized') {
-            if (currentSessionDetails.audioOptimizedWavPath) {
-                setAudioMode('optimized');
-                setAudioToTranscribe([currentSessionDetails.audioOptimizedWavPath]);
-
-                return;
-            }
-
-            setIsOptimizing(true);
-
-            try {
-                const updated = await window.api!.sessions.optimizeAudio(currentSessionId);
-
-                setCurrentSessionDetails(updated);
-
-                if (updated.audioOptimizedWavPath) {
-                    setAudioMode('optimized');
-                    setAudioToTranscribe([updated.audioOptimizedWavPath]);
-                } else {
-                    console.error('Optimization completed but no optimized path returned');
-                }
-            } catch (error) {
-                console.error('Failed to optimize audio', error);
-            } finally {
-                setIsOptimizing(false);
-            }
+        if (!result.ok) {
+            store.activityLog.appendEvent(result.message);
         }
     };
 
-    const isRangeValid = useMemo(() => {
-        if (!trimRange) return false;
-
-        const { start, end } = trimRange;
-
-        return Number.isFinite(start) && Number.isFinite(end) && typeof start === 'number' && typeof end === 'number' && end > start;
-    }, [trimRange]);
-
-    const selectionText = useMemo(() => {
-        if (isRangeValid && trimRange) {
-            return `Selected segment: ${formatPreciseTime(trimRange.start!)} — ${formatPreciseTime(trimRange.end!)}`;
-        }
-
-        if (trimRange?.start !== undefined || trimRange?.end !== undefined) {
-            return 'Invalid selection range. End must be greater than start.';
-        }
-
-        return 'No selection. The whole file will be transcribed.';
-    }, [isRangeValid, trimRange]);
+    const selectedSegment = workspace.selectedSegment;
+    const canMarkSegmentEnd = Boolean(
+        currentAudioPath
+        && segmentSelection?.start !== undefined
+        && !store.operations.isBusy,
+    );
+    const selectionText = selectedSegment
+        ? `Selected segment: ${formatPreciseTime(selectedSegment.start)} — ${formatPreciseTime(selectedSegment.end)}`
+        : workspace.hasIncompleteSegment
+            ? 'Invalid selection range. End must be greater than start.'
+            : 'No selection. The whole file will be transcribed.';
 
     return (
         <Paper style={{ padding: 18 }}>
             <Box style={{ position: 'relative' }}>
-                {isLoading ? <Loader style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} /> : null}
+                {workspace.isPlayerLoading ? <Loader style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} /> : null}
                 <div ref={containerRef} />
             </Box>
-            {currentSessionId !== null ? (
+            {workspace.activeSessionId !== null ? (
                 <Group gap={8} align="center" mt={12}>
-                    {isOptimizing ? (
+                    {store.operations.kind === 'optimizing-audio' ? (
                         <Group gap={8} align="center">
                             <Loader size={14} />
                             <Text size="sm" c="dimmed">{'Optimizing audio...'}</Text>
@@ -185,35 +135,44 @@ export const Player: FC = () => {
                     ) : (
                         <SegmentedControl
                             size="xs"
-                            value={audioMode}
+                            value={workspace.audioMode}
                             data={AUDIO_MODE_OPTIONS}
                             onChange={(value) => void handleAudioModeChange(value)}
+                            disabled={store.operations.isBusy}
                         />
                     )}
                 </Group>
             ) : null}
             <Group gap={12} align="center" mt={12}>
                 <ActionIcon onClick={onPlayPause} variant="subtle">
-                    {isPlaying ? <IconPlayerPause size={16} /> : <IconPlayerPlay size={16} />}
+                    {workspace.isPlaying ? <IconPlayerPause size={16} /> : <IconPlayerPlay size={16} />}
                 </ActionIcon>
                 <Text size="sm">
                     {'Current position: '}
-                    {formatPreciseTime(currentPosition)}
+                    {formatPreciseTime(workspace.playbackPosition)}
                 </Text>
             </Group>
 
             <Group gap={8} mt={12} style={{ flexWrap: 'wrap' }}>
-                <Button variant="outline" onClick={handleMarkStart} disabled={!currentAudioPath}>
+                <Button
+                    variant="outline"
+                    onClick={handleMarkStart}
+                    disabled={!currentAudioPath || store.operations.isBusy}
+                >
                     {'Mark start'}
                 </Button>
                 <Button
                     variant="outline"
                     onClick={handleMarkEnd}
-                    disabled={!currentAudioPath || trimRange?.start === undefined}
+                    disabled={!canMarkSegmentEnd}
                 >
                     {'Mark end'}
                 </Button>
-                <Button variant="subtle" onClick={handleClearRange} disabled={!trimRange}>
+                <Button
+                    variant="subtle"
+                    onClick={handleClearRange}
+                    disabled={!segmentSelection || store.operations.isBusy}
+                >
                     {'Clear selection'}
                 </Button>
             </Group>
@@ -223,4 +182,4 @@ export const Player: FC = () => {
             </Text>
         </Paper>
     );
-};
+});

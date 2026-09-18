@@ -1,14 +1,11 @@
 import { ActionIcon, Box, Button, Checkbox, Group, Loader, Select, Stack, Text } from '@mantine/core';
 import { IconHeadphones, IconPlayerStopFilled, IconBackspaceFilled } from '@tabler/icons-react';
 import type { WhisperModelName } from 'electron/src/types/whisper';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { observer } from 'mobx-react-lite';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { atoms, type RegionTiming } from 'renderer/src/atoms';
-import { useApp } from '../../../../../AppContext';
+import { useAppStore } from '../../../../../AppContext';
 import { TranscribeAdvancedSettings } from '../TranscribeAdvancedSettings/TranscribeAdvancedSettings';
 import { WhisperModelSelect } from '../WhisperModelSelect/WhisperModelSelect';
-
-const { appState, transcription } = atoms;
 
 const LANGS = [
     { code: 'auto', label: 'Auto' },
@@ -19,45 +16,10 @@ const LANGS = [
     { code: 'fr', label: 'French' },
 ];
 
-const formatErrorMessage = (err: unknown): string => {
-    if (err instanceof Error) return `${err.name}: ${err.message}`;
-
-    return String(err);
-};
-
-const formatDuration = (ms: number): string => {
-    if (!Number.isFinite(ms) || ms < 0) return '0 s';
-
-    const totalSeconds = ms / 1000;
-
-    if (totalSeconds < 60) return `${totalSeconds.toFixed(1)} s`;
-
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds - minutes * 60;
-
-    return `${minutes} min ${seconds.toFixed(1)} s`;
-};
-
-const formatSeconds = (seconds: number): string => {
-    if (!Number.isFinite(seconds) || seconds < 0) return '0 s';
-
-    return `${seconds.toFixed(2)} s`;
-};
-
-const getShortFileName = (target: string) => target.split(/[/\\]/).pop() || target;
-
 type TranscribePhase = 'idle' | 'awaiting-download' | 'downloading' | 'transcribing';
 
-interface Props {
-    onTranscribeStart: () => void;
-    onTranscribeEnd: (regions?: RegionTiming) => void;
-}
-
-const TranscribeControl: React.FC<Props> = ({
-    onTranscribeStart,
-    onTranscribeEnd,
-}) => {
-    const { isElectron } = useApp();
+const TranscribeControl: React.FC = observer(() => {
+    const store = useAppStore();
     const [lang, setLang] = useState('ru');
     const [model, setModel] = useState<WhisperModelName>('large');
     const [isModelDownloaded, setIsModelDownloaded] = useState(false);
@@ -69,29 +31,15 @@ const TranscribeControl: React.FC<Props> = ({
     const [maxLen, setMaxLen] = useState<number | null>(null);
     const [splitOnWord, setSplitOnWord] = useState<boolean>(true);
     const [useVad, setUseVad] = useState<boolean>(true);
-    const [uiState, setUiState] = useAtom(appState.uiState);
-    const setPlainText = useSetAtom(transcription.plainText);
-    const setRenderedText = useSetAtom(transcription.renderedText);
-    const setLog = useSetAtom(transcription.log);
-    const setRunOutcome = useSetAtom(transcription.runOutcome);
-    const setRunErrorMessage = useSetAtom(transcription.runErrorMessage);
-    const audioToTranscribe = useAtomValue(transcription.audioToTranscribe);
-    const currentSessionId = useAtomValue(atoms.sessions.currentSessionId);
-    const trimRange = useAtomValue(transcription.trimRange);
-    const refreshSessions = useSetAtom(atoms.refreshSessions);
+    const startAttemptIdRef = useRef(0);
     const langData = useMemo(
         () => LANGS.map((langOption) => ({ value: langOption.code, label: langOption.label })),
         [],
     );
 
     const appendLog = useCallback((message: string) => {
-        setLog((prev) => {
-            const prefix = prev ? '\n' : '';
-            const timestamp = new Date().toLocaleTimeString();
-
-            return `${prev}${prefix}[${timestamp}] ${message}`;
-        });
-    }, [setLog]);
+        store.activityLog.appendEvent(message);
+    }, [store]);
 
     const handleModelStatusChange = useCallback(
         (status: { isModelDownloaded: boolean; isDownloadActive: boolean }) => {
@@ -113,127 +61,59 @@ const TranscribeControl: React.FC<Props> = ({
     }, [phase, isModelDownloaded]);
 
     const handleImportCustomModel = useCallback(async () => {
-        if (!window.api?.importWhisperModelFromFile) {
-            appendLog('Custom model import is not available in this build.');
-
-            return;
-        }
-
         setIsCustomModelImporting(true);
 
         try {
-            const result = await window.api.importWhisperModelFromFile();
-
-            if (!result) return;
+            const result = await store.importCustomModel();
 
             if (!result.ok) {
-                appendLog(`Failed to import model: ${result.error}`);
+                appendLog(result.message);
 
                 return;
             }
 
-            setCustomModelFile({ path: result.path, fileName: result.fileName });
-            appendLog(`Imported model file: ${result.fileName}`);
-        } catch (err) {
-            console.error('Failed to import custom model', err);
-            appendLog(`Failed to import model: ${formatErrorMessage(err)}`);
+            if (result.value) {
+                setCustomModelFile(result.value);
+                appendLog(`Imported model file: ${result.value.fileName}`);
+            }
         } finally {
             setIsCustomModelImporting(false);
         }
-    }, [appendLog]);
+    }, [appendLog, store]);
 
     const handleStartRef = useRef<(() => void) | undefined>(undefined);
 
     const handleStart = async () => {
-        if (!isElectron) return;
         if (useCustomModelFile && !customModelFile) {
             appendLog('No custom model file selected.');
 
             return;
         }
-        if (audioToTranscribe.length === 0) {
-            appendLog('No audio files selected for transcription.');
-
-            return;
-        }
-
         if (!useCustomModelFile && !isModelDownloaded) {
             setPhase('awaiting-download');
 
             return;
         }
 
-        const segment: RegionTiming | undefined =
-            trimRange?.start !== undefined &&
-            trimRange?.end !== undefined &&
-            trimRange.end > trimRange.start
-                ? { start: trimRange.start, end: trimRange.end }
-                : undefined;
-
-        if (trimRange && !segment) {
-            appendLog('Invalid trim range. Please set the start and end positions in the player.');
-
-            return;
-        }
-
-        onTranscribeStart();
-
-        setRunOutcome('none');
-        setRunErrorMessage(null);
         setPhase('transcribing');
-        setUiState('transcribing');
-        setPlainText('');
-        setRenderedText('');
+        const attemptId = startAttemptIdRef.current + 1;
 
-        const targets = audioToTranscribe;
-        const sessionId = targets.length === 1 ? currentSessionId : null;
-        let completed = false;
+        startAttemptIdRef.current = attemptId;
+        const result = await store.startTranscription({
+            language: lang,
+            model,
+            modelPath: useCustomModelFile ? customModelFile?.path : undefined,
+            maxContext: maxContext ?? undefined,
+            maxLen: maxLen ?? undefined,
+            splitOnWord,
+            useVad,
+        });
 
-        try {
-            for (const p of targets) {
-                const fileName = getShortFileName(p);
-
-                if (segment) {
-                    appendLog(
-                        `Transcribing segment ${formatSeconds(segment.start)} — ${formatSeconds(segment.end)} of ${fileName}`,
-                    );
-                } else {
-                    appendLog(`Starting Whisper transcription for ${fileName}`);
-                }
-
-                const startedAt = performance.now();
-
-                await window.api!.transcribeStream(p, {
-                    language: lang,
-                    model,
-                    sessionId: sessionId ?? undefined,
-                    modelPath: useCustomModelFile ? customModelFile?.path : undefined,
-                    maxContext: maxContext ?? -1,
-                    maxLen: maxLen ?? 0,
-                    splitOnWord,
-                    useVad,
-                    segment,
-                });
-                const durationMs = performance.now() - startedAt;
-
-                appendLog(`Whisper transcription finished for ${fileName}`);
-                appendLog(`Processed ${fileName}: ${formatDuration(durationMs)}.`);
-            }
-            completed = true;
-            setRunOutcome('success');
-            setRunErrorMessage(null);
-        } catch (err) {
-            const message = formatErrorMessage(err);
-
-            appendLog(`Whisper failed: ${message}`);
-            setRunOutcome('error');
-            setRunErrorMessage(message);
-        } finally {
+        if (startAttemptIdRef.current === attemptId) {
             setPhase('idle');
-            onTranscribeEnd(completed ? segment : undefined);
-            setUiState('ready');
-            if (sessionId) {
-                void refreshSessions();
+
+            if (!result.ok) {
+                appendLog(result.message);
             }
         }
     };
@@ -249,32 +129,27 @@ const TranscribeControl: React.FC<Props> = ({
     }, []);
 
     const handleStop = async () => {
-        try {
-            const stopped = await window.api!.stopTranscription();
+        startAttemptIdRef.current += 1;
+        const result = await store.stopTranscription();
 
-            if (stopped) {
-                appendLog('Transcription stopped.');
-            } else {
-                appendLog('No transcription is running.');
-            }
-        } catch (err: unknown) {
-            appendLog(`Failed to stop Whisper: ${formatErrorMessage(err)}`);
-        } finally {
-            setPhase('idle');
-            setRunOutcome('none');
-            setRunErrorMessage(null);
-            setUiState('ready');
+        setPhase('idle');
+        if (!result.ok) {
+            appendLog(result.message);
         }
     };
 
-    const resetTranscriptionState = useSetAtom(atoms.reset);
-
     const handleClear = () => {
-        resetTranscriptionState();
+        const result = store.clearWorkspace();
+
+        if (!result.ok) {
+            appendLog(result.message);
+        }
     };
 
     const loading = phase === 'transcribing' || phase === 'downloading';
-    const canStart = phase === 'idle' && (useCustomModelFile ? Boolean(customModelFile) : true);
+    const canStart = phase === 'idle'
+        && !store.operations.isBusy
+        && (useCustomModelFile ? Boolean(customModelFile) : true);
 
     return (
         <Stack gap={12} justify="space-between" h="100%">
@@ -360,13 +235,13 @@ const TranscribeControl: React.FC<Props> = ({
                     <ActionIcon onClick={handleStop} color="red" size={36} disabled={phase !== 'transcribing'}>
                         <IconPlayerStopFilled size={20} />
                     </ActionIcon>
-                    <ActionIcon onClick={handleClear} variant="light" size={36} disabled={uiState !== 'ready'}>
+                    <ActionIcon onClick={handleClear} variant="light" size={36} disabled={store.lifecycleState !== 'ready'}>
                         <IconBackspaceFilled size={20} />
                     </ActionIcon>
                 </Group>
             </Box>
         </Stack>
     );
-};
+});
 
 export { TranscribeControl };

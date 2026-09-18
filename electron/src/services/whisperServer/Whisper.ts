@@ -30,7 +30,8 @@ export class Whisper {
     private abortController: AbortController | null = null;
     private isTranscribing = false;
     private readonly callbacks: TranscriptionCallbacks;
-    private readonly parseProgress: (value: string) => void;
+    private parseProgress: (value: string) => void = () => undefined;
+    private activeRunId: number | null = null;
     private hasRealtimeOutput = false;
     private readonly handleProcessExit = () => {
         this.stopServer();
@@ -42,7 +43,6 @@ export class Whisper {
 
     constructor(callbacks: TranscriptionCallbacks) {
         this.callbacks = callbacks;
-        this.parseProgress = createProgressParser(callbacks.onProgressPercent);
         this.apiClient = new WhisperServerApiClient(this.baseUrl);
         this.audioPreprocessor = new AudioPreprocessor();
         this.serverProcess = new WhisperServerProcess({
@@ -99,10 +99,14 @@ export class Whisper {
             );
 
             this.abortController = new AbortController();
+            this.activeRunId = opts.runId;
+            this.parseProgress = createProgressParser((value) => {
+                this.callbacks.onProgressPercent?.({ runId: opts.runId, value });
+            });
             this.hasRealtimeOutput = false;
             this.streamParser.reset();
 
-            this.callbacks.onProgressPercent?.(0);
+            this.callbacks.onProgressPercent?.({ runId: opts.runId, value: 0 });
 
             try {
                 const fileBuffer = await fs.readFile(wavPath);
@@ -131,9 +135,9 @@ export class Whisper {
                 const transcriptText = inferenceResult.text;
 
                 if (!this.hasRealtimeOutput) {
-                    this.callbacks.onStdoutChunk?.(transcriptText);
+                    this.callbacks.onStdoutChunk?.({ runId: opts.runId, chunk: transcriptText });
                 }
-                this.callbacks.onProgressPercent?.(100);
+                this.callbacks.onProgressPercent?.({ runId: opts.runId, value: 100 });
 
                 return transcriptText;
             } catch (error) {
@@ -149,6 +153,7 @@ export class Whisper {
                 await cleanup().catch(() => void 0);
             }
         } finally {
+            this.activeRunId = null;
             this.isTranscribing = false;
         }
     }
@@ -160,6 +165,9 @@ export class Whisper {
     private abortInference(): boolean {
         if (!this.abortController) return false;
 
+        if (!this.stopServer()) return false;
+
+        this.activeRunId = null;
         this.abortController.abort();
         this.abortController = null;
 
@@ -167,6 +175,10 @@ export class Whisper {
     }
 
     private handleStdoutChunk(text: string) {
+        const runId = this.activeRunId;
+
+        if (runId === null) return;
+
         const lines = this.streamParser.pushChunk(text);
 
         if (lines.length > 0) {
@@ -174,7 +186,7 @@ export class Whisper {
         }
 
         for (const line of lines) {
-            this.callbacks.onStdoutChunk?.(line);
+            this.callbacks.onStdoutChunk?.({ runId, chunk: line });
         }
     }
 
@@ -188,7 +200,9 @@ export class Whisper {
                 this.handleStdoutChunk(text);
             }
             this.callbacks.onStderrChunk?.(`[server:${source}] ${text}`);
-            this.parseProgress(text);
+            if (this.activeRunId !== null) {
+                this.parseProgress(text);
+            }
         };
     }
 
@@ -227,6 +241,7 @@ export class Whisper {
 
     private async loadModelIfNeeded(paths: WhisperServerParams) {
         if (!this.serverProcess.isRunning()) {
+            await this.serverProcess.waitForExit();
             await this.startServer(paths);
 
             return;

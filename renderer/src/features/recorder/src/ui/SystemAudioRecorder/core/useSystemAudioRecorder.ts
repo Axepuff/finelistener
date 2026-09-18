@@ -1,8 +1,6 @@
 import type { RecordingLevel, RecordingState } from 'electron/src/services/RecordingService';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { useApp } from '../../../../../../AppContext';
-import { recordingStore } from './recordingStore';
+import { useAppStore } from '../../../../../../AppContext';
 
 interface ControlsViewModel {
     canStartRecording: boolean;
@@ -42,33 +40,29 @@ export interface SystemAudioRecorderViewModel {
 }
 
 export const useSystemAudioRecorder = (): SystemAudioRecorderViewModel => {
-    const { isElectron } = useApp();
-    const availability = useAtomValue(recordingStore.availabilityAtom);
-    const devicesState = useAtomValue(recordingStore.devicesAtom);
-    const session = useAtomValue(recordingStore.sessionAtom);
-
-    const startRecording = useSetAtom(recordingStore.startRecordingAtom);
-    const stopRecording = useSetAtom(recordingStore.stopRecordingAtom);
-    const selectDevice = useSetAtom(recordingStore.selectDeviceAtom);
-    const openRecordingPreferences = useSetAtom(recordingStore.openRecordingPreferencesAtom);
-    const revealDevApp = useSetAtom(recordingStore.revealDevAppAtom);
-
-    const runtimePlatform = isElectron ? window.api?.runtime?.platform ?? null : null;
+    const appStore = useAppStore();
+    const { recording: recordingStore } = appStore;
+    const availability = recordingStore.availability;
+    const devicesState = recordingStore.devices;
+    const session = recordingStore.session;
+    const runtimePlatform = appStore.runtimePlatform;
     const isMacOS = runtimePlatform === 'darwin';
 
     const isRecordingActive = session.recordingState !== 'idle';
-    const canStartRecording = isElectron
+    const canStartRecording = appStore.isElectron
         && session.recordingState === 'idle'
         && !session.isProcessingRecording
+        && !appStore.operations.isBusy
         && availability.isRecordingAvailable
         && availability.permissionStatus !== 'restricted';
 
-    const canStopRecording = isElectron
+    const canStopRecording = appStore.isElectron
+        && (appStore.operations.kind === 'recording' || appStore.operations.kind === 'processing-recording')
         && (session.recordingState === 'starting'
             || session.recordingState === 'recording'
             || session.recordingState === 'error');
 
-    const showDeviceSelect = isElectron && devicesState.devices.length > 0;
+    const showDeviceSelect = appStore.isElectron && devicesState.devices.length > 0;
 
     return {
         controls: {
@@ -82,9 +76,9 @@ export const useSystemAudioRecorder = (): SystemAudioRecorderViewModel => {
             devices: devicesState.devices,
             selectedDeviceId: devicesState.selectedDeviceId,
             showDeviceSelect,
-            onStartRecording: startRecording,
-            onStopRecording: stopRecording,
-            onDeviceChange: selectDevice,
+            onStartRecording: () => void recordingStore.startRecording(),
+            onStopRecording: () => void recordingStore.stopRecording(),
+            onDeviceChange: (deviceId) => recordingStore.selectDevice(deviceId),
         },
         meter: {
             recordingState: session.recordingState,
@@ -94,8 +88,8 @@ export const useSystemAudioRecorder = (): SystemAudioRecorderViewModel => {
             recordingError: session.recordingError,
             showSilenceWarning: session.showSilenceWarning,
             isMacOS,
-            onOpenRecordingPreferences: openRecordingPreferences,
-            onRevealDevApp: revealDevApp,
+            onOpenRecordingPreferences: () => void recordingStore.openRecordingPreferences(),
+            onRevealDevApp: () => void recordingStore.revealDevApp(),
             deviceError: devicesState.deviceError,
             isRecordingAvailable: availability.isRecordingAvailable,
         },

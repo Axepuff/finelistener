@@ -8,6 +8,7 @@ interface WhisperServerProcessHandlers {
 
 export class WhisperServerProcess {
     private server: ChildProcessWithoutNullStreams | null = null;
+    private serverClosed: Promise<void> = Promise.resolve();
     private readonly handlers: WhisperServerProcessHandlers;
 
     constructor(handlers: WhisperServerProcessHandlers) {
@@ -19,29 +20,49 @@ export class WhisperServerProcess {
     }
 
     public start(serverBinPath: string, args: string[], env: NodeJS.ProcessEnv) {
-        this.server = spawn(serverBinPath, args, { env });
+        const server = spawn(serverBinPath, args, { env });
 
-        this.server.stdout?.setEncoding('utf8');
-        this.server.stdout?.on('data', this.handlers.onStdoutData);
-
-        this.server.stderr?.setEncoding('utf8');
-        this.server.stderr?.on('data', this.handlers.onStderrData);
-
-        this.server.on('close', (code) => {
-            this.server = null;
-            this.handlers.onExit(code);
+        this.server = server;
+        server.stdout?.setEncoding('utf8');
+        server.stdout?.on('data', (chunk: unknown) => {
+            if (this.server === server) this.handlers.onStdoutData(chunk);
         });
+
+        server.stderr?.setEncoding('utf8');
+        server.stderr?.on('data', (chunk: unknown) => {
+            if (this.server === server) this.handlers.onStderrData(chunk);
+        });
+
+        server.on('error', (error) => {
+            console.error('Whisper server process failed', error);
+        });
+        this.serverClosed = new Promise((resolve) => {
+            server.once('close', (code) => {
+                if (this.server === server) {
+                    this.server = null;
+                    this.handlers.onExit(code);
+                }
+                resolve();
+            });
+        });
+    }
+
+    public waitForExit(): Promise<void> {
+        return this.serverClosed;
     }
 
     public stop(): boolean {
         if (!this.server) return false;
 
         try {
-            this.server.kill('SIGINT');
-        } catch {
-            // ignore
-        } finally {
+            if (!this.server.kill('SIGINT')) return false;
+
+            // Drop trailing output immediately; a new server waits for close to release the port.
             this.server = null;
+        } catch (error) {
+            console.error('Failed to stop Whisper server', error);
+
+            return false;
         }
 
         return true;
