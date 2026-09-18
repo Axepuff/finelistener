@@ -10,7 +10,7 @@
         "allowJs": false,
         "allowSyntheticDefaultImports": true,
         "skipLibCheck": true,
-        "esModuleInterop": false,
+        "esModuleInterop": true,
         "strict": true,
         "noFallthroughCasesInSwitch": true,
         "forceConsistentCasingInFileNames": true,
@@ -20,16 +20,16 @@
         "isolatedModules": true,
         "noEmit": true,
         "jsx": "react-jsx",
-        "baseUrl": ".",
+        "types": ["node", "vite/client"],
         "paths": {
             "@~/*": [
-                "renderer/src/features/*"
+                "./renderer/src/features/*"
             ],
             "electron/*": [
-                "electron/*"
+                "./electron/*"
             ],
             "renderer/*": [
-                "renderer/*"
+                "./renderer/*"
             ]
         }
     },
@@ -38,7 +38,6 @@
         "renderer/src",
         "tsconfig.main.json",
         "vite.config.mts",
-        "vite.config.*.ts",
-        ".eslintrc.js"
+        "vite.config.*.ts"
     ]
 }

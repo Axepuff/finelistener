@@ -321,9 +321,9 @@ export class WebAudioWaveformAdapter extends PlayerAdapter {
         const centerY = height / 2;
         const maxAmplitude = centerY;
 
-        // eslint-disable-next-line no-param-reassign
+        // oxlint-disable-next-line no-param-reassign
         context.strokeStyle = this.waveColor;
-        // eslint-disable-next-line no-param-reassign
+        // oxlint-disable-next-line no-param-reassign
         context.lineWidth = 1;
         context.beginPath();
 

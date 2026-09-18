@@ -10,7 +10,6 @@ const runSync = (cmd, args) => {
     const result = spawnSync(cmd, args, { stdio: 'inherit', shell: isWindows });
 
     if (result.error) {
-        // eslint-disable-next-line no-console
         console.error(`[dev-electron] Failed to run ${cmd}:`, result.error);
         process.exit(1);
     }
