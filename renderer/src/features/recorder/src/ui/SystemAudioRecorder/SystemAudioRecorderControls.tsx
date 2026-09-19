@@ -30,9 +30,9 @@ export const SystemAudioRecorderControls: React.FC = observer(() => {
 
     const levelLabel = formatLevel(recordingLevel);
     const durationLabel = formatDuration(recordingDurationMs);
-    const writtenLabel = recordingBytesWritten !== null
-        ? `Written: ${Math.round(recordingBytesWritten / 1024)} KB`
-        : 'Written: N/A';
+    const writtenLabel = recordingBytesWritten !== null ?
+        `Written: ${Math.round(recordingBytesWritten / 1024)} KB` :
+        'Written: N/A';
     const deviceOptions = devices
         .map((device) => {
             const value = getRecordingDeviceId(device);

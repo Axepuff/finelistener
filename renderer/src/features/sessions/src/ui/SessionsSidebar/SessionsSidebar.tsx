@@ -41,9 +41,9 @@ export const SessionsSidebar: React.FC = observer(() => {
         }
     }, [store]);
 
-    const emptyStateText = sessions.isLoading
-        ? 'Loading sessions...'
-        : sessions.error ?? 'No sessions yet.';
+    const emptyStateText = sessions.isLoading ?
+        'Loading sessions...' :
+        sessions.error ?? 'No sessions yet.';
 
     return (
         <Paper bg="gray.0" h="100%" style={{ minHeight: 0, overflow: 'hidden' }}>

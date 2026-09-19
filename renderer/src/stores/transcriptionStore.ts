@@ -86,9 +86,9 @@ export class TranscriptionStore {
     }
 
     get draftTranscript(): DeepReadonly<SessionTranscriptV1> | null {
-        return this.draftSource
-            ? parseTranscript(this.draftSource, this.draftOffsetSeconds, true)
-            : null;
+        return this.draftSource ?
+            parseTranscript(this.draftSource, this.draftOffsetSeconds, true) :
+            null;
     }
 
     get visibleTranscript(): DeepReadonly<SessionTranscriptV1> | null {

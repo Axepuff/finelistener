@@ -148,11 +148,11 @@ export class Loudnorm {
         }
 
         if (
-            !this.isFiniteNumberString(measuredI) ||
-            !this.isFiniteNumberString(measuredTP) ||
-            !this.isFiniteNumberString(measuredLRA) ||
-            !this.isFiniteNumberString(measuredThresh) ||
-            !this.isFiniteNumberString(offset)
+            !this.isFiniteNumberString(measuredI)
+            || !this.isFiniteNumberString(measuredTP)
+            || !this.isFiniteNumberString(measuredLRA)
+            || !this.isFiniteNumberString(measuredThresh)
+            || !this.isFiniteNumberString(offset)
         ) {
             return null;
         }
@@ -170,11 +170,11 @@ export class Loudnorm {
 
             // TODO wtf
             const normalized =
-                typeof value === 'string'
-                    ? value.trim()
-                    : typeof value === 'number' || typeof value === 'boolean'
-                        ? String(value)
-                        : '';
+                typeof value === 'string' ?
+                    value.trim() :
+                    typeof value === 'number' || typeof value === 'boolean' ?
+                        String(value) :
+                        '';
 
             if (normalized.length > 0) {
                 return normalized;

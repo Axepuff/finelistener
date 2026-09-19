@@ -113,11 +113,11 @@ export const Player: FC = observer(() => {
         && segmentSelection?.start !== undefined
         && !store.operations.isBusy,
     );
-    const selectionText = selectedSegment
-        ? `Selected segment: ${formatPreciseTime(selectedSegment.start)} — ${formatPreciseTime(selectedSegment.end)}`
-        : workspace.hasIncompleteSegment
-            ? 'Invalid selection range. End must be greater than start.'
-            : 'No selection. The whole file will be transcribed.';
+    const selectionText = selectedSegment ?
+        `Selected segment: ${formatPreciseTime(selectedSegment.start)} — ${formatPreciseTime(selectedSegment.end)}` :
+        workspace.hasIncompleteSegment ?
+            'Invalid selection range. End must be greater than start.' :
+            'No selection. The whole file will be transcribed.';
 
     return (
         <Paper style={{ padding: 18 }}>

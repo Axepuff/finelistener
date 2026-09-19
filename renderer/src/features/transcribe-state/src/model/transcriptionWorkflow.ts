@@ -102,12 +102,12 @@ export const evaluateTranscriptionWorkflow = ({
         };
     }
 
-    const resolvedOutcome = runOutcome === 'none' && hasRenderedOutput
-        ? 'success'
-        : runOutcome;
-    const state: TranscriptionWorkflowState = resolvedOutcome === 'none'
-        ? 'loaded'
-        : 'done';
+    const resolvedOutcome = runOutcome === 'none' && hasRenderedOutput ?
+        'success' :
+        runOutcome;
+    const state: TranscriptionWorkflowState = resolvedOutcome === 'none' ?
+        'loaded' :
+        'done';
 
     return {
         state,

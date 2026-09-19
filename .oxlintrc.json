@@ -5,6 +5,9 @@
     "import",
     "react"
   ],
+  "jsPlugins": [
+    "@stylistic/eslint-plugin"
+  ],
   "categories": {
     "correctness": "off"
   },
@@ -114,6 +117,18 @@
       "location",
       "Text",
       "Comment"
+    ],
+    "@stylistic/operator-linebreak": [
+      "warn",
+      "after",
+      {
+        "overrides": {
+          "|": "before",
+          "||": "before",
+          "&": "before",
+          "&&": "before"
+        }
+      }
     ],
     "no-unneeded-ternary": "warn",
     "no-array-constructor": "error",

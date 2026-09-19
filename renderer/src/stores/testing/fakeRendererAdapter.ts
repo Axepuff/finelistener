@@ -92,14 +92,14 @@ export const createFakeRendererAdapter = (
     return {
         adapter,
         get activeListenerCount() {
-            return listeners.transcribeText.size
-                + listeners.transcribeProgress.size
-                + listeners.transcribeLog.size
-                + listeners.recordingState.size
-                + listeners.recordingProgress.size
-                + listeners.recordingLevel.size
-                + listeners.recordingError.size
-                + listeners.modelDownloadProgress.size;
+            return listeners.transcribeText.size +
+                listeners.transcribeProgress.size +
+                listeners.transcribeLog.size +
+                listeners.recordingState.size +
+                listeners.recordingProgress.size +
+                listeners.recordingLevel.size +
+                listeners.recordingError.size +
+                listeners.modelDownloadProgress.size;
         },
         emitTranscribeText: (chunk) => listeners.transcribeText.forEach((callback) => callback(chunk)),
         emitTranscribeProgress: (value) => listeners.transcribeProgress.forEach((callback) => callback(value)),

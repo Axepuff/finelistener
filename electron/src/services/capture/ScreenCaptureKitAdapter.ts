@@ -228,9 +228,9 @@ export class ScreenCaptureKitAdapter implements CaptureAdapter {
 
                 if (code !== 0 || signal) {
                     const details = this.formatExitDetails(code, signal, stderr);
-                    const message = helperError
-                        ? `${helperError}${details ? ` ${details}` : ''}`
-                        : `ScreenCaptureKit helper exited.${details}`;
+                    const message = helperError ?
+                        `${helperError}${details ? ` ${details}` : ''}` :
+                        `ScreenCaptureKit helper exited.${details}`;
                     const error = new Error(message);
 
                     rejectOnce(error, !helperError);

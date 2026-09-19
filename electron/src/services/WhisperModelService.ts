@@ -107,10 +107,10 @@ const downloadToFile = async (
 
         const request = https.get(url, (response) => {
             if (
-                response.statusCode &&
-                response.statusCode >= 300 &&
-                response.statusCode < 400 &&
-                response.headers.location
+                response.statusCode
+                && response.statusCode >= 300
+                && response.statusCode < 400
+                && response.headers.location
             ) {
                 response.resume();
                 void downloadToFile(response.headers.location, targetPath, onProgress).then(resolve).catch(reject);
@@ -174,9 +174,9 @@ const pickAvailableTargetPath = async (preferredPath: string): Promise<string> =
     const base = path.basename(preferredPath, ext);
 
     for (let attempt = 0; attempt < 100; attempt += 1) {
-        const candidate = attempt === 0
-            ? preferredPath
-            : path.join(dir, `${base}-${attempt}${ext}`);
+        const candidate = attempt === 0 ?
+            preferredPath :
+            path.join(dir, `${base}-${attempt}${ext}`);
 
         try {
             await fsPromises.access(candidate, fs.constants.F_OK);

@@ -114,6 +114,7 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.8.3",
     "@electron-forge/plugin-fuses": "^7.8.3",
     "@electron/fuses": "^1.8.0",
+    "@stylistic/eslint-plugin": "^5.10.0",
     "@types/node": "^24.3.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",

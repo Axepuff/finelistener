@@ -290,9 +290,9 @@ export class MiniAudioAdapter implements CaptureAdapter {
             path.resolve(resourcesPath, 'miniaudio-loopback', exeName),
             path.resolve(resourcesPath, 'miniaudio-loopback', 'bin', exeName),
         ];
-        const candidates = app.isPackaged
-            ? packagedCandidates.concat(devCandidates)
-            : devCandidates.concat(packagedCandidates);
+        const candidates = app.isPackaged ?
+            packagedCandidates.concat(devCandidates) :
+            devCandidates.concat(packagedCandidates);
 
         for (const candidate of candidates) {
             if (fs.existsSync(candidate)) {
@@ -397,9 +397,9 @@ export class MiniAudioAdapter implements CaptureAdapter {
 
                 if (code !== 0 || signal) {
                     const details = this.formatExitDetails(code, signal, stderr);
-                    const message = helperError
-                        ? `${helperError}${details ? ` ${details}` : ''}`
-                        : `MiniAudio helper exited.${details}`;
+                    const message = helperError ?
+                        `${helperError}${details ? ` ${details}` : ''}` :
+                        `MiniAudio helper exited.${details}`;
                     const error = new Error(message);
 
                     rejectOnce(error, !helperError);

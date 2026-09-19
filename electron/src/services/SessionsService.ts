@@ -178,9 +178,9 @@ export class SessionsService {
         const audioWavPath = wavResult.wavPath;
         const resolvedSession = wavResult.session;
 
-        const audioOptimizedWavPath = resolvedSession.audio.optimizedWavPath
-            ? path.join(sessionDir, resolvedSession.audio.optimizedWavPath)
-            : undefined;
+        const audioOptimizedWavPath = resolvedSession.audio.optimizedWavPath ?
+            path.join(sessionDir, resolvedSession.audio.optimizedWavPath) :
+            undefined;
 
         let transcript: SessionTranscriptV1 | undefined;
 
@@ -389,9 +389,9 @@ export class SessionsService {
         session: SessionFileV1,
     ): Promise<{ wavPath: string; session: SessionFileV1 }> {
         const explicitWavRelativePath = session.audio.wavPath?.trim() || null;
-        const fallbackWavRelativePath = path.extname(session.audio.originalPath).toLowerCase() === '.wav'
-            ? session.audio.originalPath
-            : null;
+        const fallbackWavRelativePath = path.extname(session.audio.originalPath).toLowerCase() === '.wav' ?
+            session.audio.originalPath :
+            null;
         const existingRelativePath = explicitWavRelativePath ?? fallbackWavRelativePath;
 
         if (existingRelativePath) {

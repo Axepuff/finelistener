@@ -138,8 +138,8 @@ export class AudioteeAdapter implements CaptureAdapter {
             }
         }
 
-        const killTimeout = proc
-            ? setTimeout(() => {
+        const killTimeout = proc ?
+            setTimeout(() => {
                 if (this.process === proc) {
                     try {
                         proc.kill('SIGKILL');
@@ -147,8 +147,8 @@ export class AudioteeAdapter implements CaptureAdapter {
                         // ignore kill errors
                     }
                 }
-            }, 5000)
-            : null;
+            }, 5000) :
+            null;
 
         if (exitPromise) {
             try {
@@ -166,9 +166,9 @@ export class AudioteeAdapter implements CaptureAdapter {
             await writer.finalize();
         }
 
-        const durationMs = format.sampleRateHz > 0
-            ? Math.round((this.totalFrames / format.sampleRateHz) * 1000)
-            : undefined;
+        const durationMs = format.sampleRateHz > 0 ?
+            Math.round((this.totalFrames / format.sampleRateHz) * 1000) :
+            undefined;
 
         this.resetState();
 
@@ -384,9 +384,9 @@ export class AudioteeAdapter implements CaptureAdapter {
 
         if (this.events.onProgress && now - this.lastProgressAt >= this.progressIntervalMs) {
             this.lastProgressAt = now;
-            const durationMs = this.format.sampleRateHz > 0
-                ? Math.round((this.totalFrames / this.format.sampleRateHz) * 1000)
-                : 0;
+            const durationMs = this.format.sampleRateHz > 0 ?
+                Math.round((this.totalFrames / this.format.sampleRateHz) * 1000) :
+                0;
 
             this.events.onProgress({ durationMs, bytesWritten: this.bytesWritten });
         }

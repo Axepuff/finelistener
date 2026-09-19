@@ -52,12 +52,12 @@ export class RecordingAvailabilityStore {
         ]);
 
         return {
-            permissionStatus: permissionStatusResult.status === 'fulfilled'
-                ? permissionStatusResult.value
-                : FALLBACK_AVAILABILITY_STATE.permissionStatus,
-            isRecordingAvailable: recordingAvailableResult.status === 'fulfilled'
-                ? Boolean(recordingAvailableResult.value)
-                : FALLBACK_AVAILABILITY_STATE.isRecordingAvailable,
+            permissionStatus: permissionStatusResult.status === 'fulfilled' ?
+                permissionStatusResult.value :
+                FALLBACK_AVAILABILITY_STATE.permissionStatus,
+            isRecordingAvailable: recordingAvailableResult.status === 'fulfilled' ?
+                Boolean(recordingAvailableResult.value) :
+                FALLBACK_AVAILABILITY_STATE.isRecordingAvailable,
         };
     }
 }

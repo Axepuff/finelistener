@@ -28,9 +28,9 @@ const supportsOpenPreferences = (adapter: CaptureAdapter): adapter is CaptureAda
 
 export function registerRecordingController(ipc: IpcMain, getMainWindow: () => BrowserWindow | null): void {
     const adapter: CaptureAdapter = createRecordingAdapter();
-    const serviceConfig = adapter instanceof MiniAudioAdapter
-        ? { defaultFormat: MINIAUDIO_WAV_FORMAT }
-        : undefined;
+    const serviceConfig = adapter instanceof MiniAudioAdapter ?
+        { defaultFormat: MINIAUDIO_WAV_FORMAT } :
+        undefined;
     const service = new RecordingService(adapter, {
         onStateChange: (state) => getMainWindow()?.webContents.send('recording:state', state),
         onProgress: (progress) => getMainWindow()?.webContents.send('recording:progress', progress),
@@ -123,9 +123,9 @@ function resolveAudioteeBinaryPath(): string | undefined {
         'bin',
         'audiotee',
     );
-    const candidates = app.isPackaged
-        ? [packagedPath, devBundledPath, devPath]
-        : [devBundledPath, devPath, packagedPath];
+    const candidates = app.isPackaged ?
+        [packagedPath, devBundledPath, devPath] :
+        [devBundledPath, devPath, packagedPath];
 
     for (const candidate of candidates) {
         if (fs.existsSync(candidate)) {

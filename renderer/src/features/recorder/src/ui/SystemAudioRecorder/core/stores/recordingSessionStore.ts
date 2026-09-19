@@ -82,10 +82,10 @@ const applyRecordingProgress = (
 
 const getSilenceWarningMessage = (platform: string | null): string => {
     if (platform === 'darwin') {
-        return 'No system audio detected. On macOS you may need to grant \'System Audio Recording\' permission in System Settings'
-            + ' > Privacy & Security > Screen & System Audio Recording (System Audio Recording Only). In dev mode (`npm run dev`),'
-            + ' the entry may show up as \'FineListener Dev\' or \'Electron\'. If you\'re running from an IDE terminal, add'
-            + ' that terminal app there as well.';
+        return 'No system audio detected. On macOS you may need to grant \'System Audio Recording\' permission in System Settings' +
+            ' > Privacy & Security > Screen & System Audio Recording (System Audio Recording Only). In dev mode (`npm run dev`),' +
+            ' the entry may show up as \'FineListener Dev\' or \'Electron\'. If you\'re running from an IDE terminal, add' +
+            ' that terminal app there as well.';
     }
 
     return 'No system audio detected. Check that audio is playing and the correct output device is selected.';

@@ -29,9 +29,9 @@ export const WhisperModelSelect: React.FC<Props> = observer(({
     const isDownloadActive = whisperModels.isDownloadActive;
 
     const pendingModelLabel = confirmationModel ?? 'selected';
-    const confirmText = pendingModelInfo?.sizeLabel
-        ? `Download the ${pendingModelLabel} model (${pendingModelInfo.sizeLabel})?`
-        : `Download the ${pendingModelLabel} model?`;
+    const confirmText = pendingModelInfo?.sizeLabel ?
+        `Download the ${pendingModelLabel} model (${pendingModelInfo.sizeLabel})?` :
+        `Download the ${pendingModelLabel} model?`;
 
     const modelData = useMemo(
         () => whisperModels.models.map((item) => ({
@@ -62,9 +62,9 @@ export const WhisperModelSelect: React.FC<Props> = observer(({
 
         const modelToDownload = confirmationModel;
         setPendingModel(null);
-        const result = requestedModel
-            ? await store.confirmPendingTranscriptionDownload()
-            : await downloadSelectedModel(modelToDownload);
+        const result = requestedModel ?
+            await store.confirmPendingTranscriptionDownload() :
+            await downloadSelectedModel(modelToDownload);
 
         if (!result.ok) onDownloadError?.(result.message);
     };
