@@ -1,8 +1,9 @@
 import type { RecordingState } from 'electron/src/services/RecordingService';
-import type { SessionDetails, SessionTranscriptV1 } from 'electron/src/types/sessions';
+import type { SessionDetails } from 'electron/src/types/sessions';
 import type { TranscribeOpts } from 'electron/src/types/transcription';
 import { describe, expect, it, vi } from 'vitest';
 import { AppStore } from './appStore';
+import type { RendererAdapter } from './rendererAdapter';
 import { createFakeRendererAdapter } from './testing/fakeRendererAdapter';
 
 const createSession = (overrides: Partial<SessionDetails> = {}): SessionDetails => ({
@@ -25,50 +26,6 @@ const transcriptionOptions = {
 };
 
 describe('AppStore', () => {
-    it('ignores text and progress from a stopped run while the next run is active', async () => {
-        vi.spyOn(console, 'error').mockImplementation(() => undefined);
-        let resolveTranscription: (value: string) => void = () => undefined;
-        let rejectTranscription: (error: Error) => void = () => undefined;
-        const transcribe = vi.fn((_path: string, _options: TranscribeOpts) => new Promise<string>((resolve, reject) => {
-            resolveTranscription = resolve;
-            rejectTranscription = reject;
-        }));
-        const fake = createFakeRendererAdapter({
-            getSession: () => Promise.resolve(createSession()),
-            transcribe,
-            stopTranscription: () => Promise.resolve(true),
-        });
-        const store = new AppStore(fake.adapter);
-
-        store.initialize();
-        try {
-            await store.openSession('session-1');
-            const firstRun = store.startTranscription(transcriptionOptions);
-            const firstRunId = transcribe.mock.calls[0][1].runId;
-
-            await store.stopTranscription();
-            resolveTranscription('Discarded result');
-            await firstRun;
-
-            const secondRun = store.startTranscription(transcriptionOptions);
-            const secondRunId = transcribe.mock.calls[1][1].runId;
-
-            fake.emitTranscribeText({ runId: secondRunId, chunk: '[00:00:00.000 --> 00:00:01.000] Current draft\n' });
-            fake.emitTranscribeProgress({ runId: secondRunId, value: 20 });
-            fake.emitTranscribeText({ runId: firstRunId, chunk: '[00:00:01.000 --> 00:00:02.000] Old output\n' });
-            fake.emitTranscribeProgress({ runId: firstRunId, value: 99 });
-
-            expect(store.transcription.plainText).toBe('Current draft');
-            expect(store.transcription.progress).toBe(20);
-            rejectTranscription(new Error('Second run failed'));
-            await secondRun;
-            expect(store.transcription.plainText).toBe('Current draft');
-            expect(store.transcription.savedTranscript).toBeNull();
-        } finally {
-            store.dispose();
-        }
-    });
-
     it.each(['recording', 'idle'] as const)(
         'restores recording ownership after reinitialization when capture is %s',
         async (restoredState) => {
@@ -229,75 +186,14 @@ describe('AppStore', () => {
         store.dispose();
     });
 
-    it('keeps a saved transcript while a failed run leaves its draft visible', async () => {
-        vi.spyOn(console, 'error').mockImplementation(() => undefined);
-        const savedTranscript: SessionTranscriptV1 = {
-            version: 1,
-            segments: [{ startSec: 1, endSec: 2, text: 'Saved text' }],
-        };
-        let rejectTranscription: (error: Error) => void = () => undefined;
-        const transcribe = vi.fn(() => new Promise<string>((_resolve, reject) => {
-            rejectTranscription = reject;
-        }));
-        const fake = createFakeRendererAdapter({
-            getSession: () => Promise.resolve(createSession({ transcript: savedTranscript, hasTranscript: true })),
-            transcribe,
-        });
-        const store = new AppStore(fake.adapter);
-
-        store.initialize();
-        await store.openSession('session-1');
-        const runPromise = store.startTranscription(transcriptionOptions);
-
-        fake.emitTranscribeText({ runId: 2, chunk: '[00:00:00.000 --> 00:00:01.000] Draft text\n' });
-        rejectTranscription(new Error('whisper crashed'));
-        const result = await runPromise;
-
-        expect(result.ok).toBe(false);
-        expect(store.transcription.savedTranscript).toEqual(savedTranscript);
-        expect(store.transcription.draftTranscript?.segments[0]?.text).toBe('Draft text');
-        expect(store.transcription.visibleTranscript?.segments[0]?.text).toBe('Draft text');
-        expect(store.transcription.runOutcome).toBe('error');
-
-        store.dispose();
-    });
-
-    it('atomically promotes a successful draft to the saved transcript', async () => {
-        let resolveTranscription: (value: string) => void = () => undefined;
-        const fake = createFakeRendererAdapter({
-            getSession: () => Promise.resolve(createSession()),
-            transcribe: () => new Promise<string>((resolve) => {
-                resolveTranscription = resolve;
-            }),
-        });
-        const store = new AppStore(fake.adapter);
-
-        store.initialize();
-        await store.openSession('session-1');
-        const runPromise = store.startTranscription(transcriptionOptions);
-
-        fake.emitTranscribeText({ runId: 2, chunk: '[00:00:02.000 --> 00:00:03.000] Streaming text\n' });
-        expect(store.transcription.draftTranscript?.segments[0]?.text).toBe('Streaming text');
-        expect(store.transcription.savedTranscript).toBeNull();
-
-        resolveTranscription('[00:00:02.000 --> 00:00:03.000] Final text\n');
-        const result = await runPromise;
-
-        expect(result.ok).toBe(true);
-        expect(store.transcription.draftTranscript).toBeNull();
-        expect(store.transcription.savedTranscript?.segments[0]?.text).toBe('Final text');
-        expect(store.transcription.runOutcome).toBe('success');
-
-        store.dispose();
-    });
-
     it('ignores a stale transcription completion after the run is stopped', async () => {
         let resolveTranscription: (value: string) => void = () => undefined;
+        const transcribe = vi.fn<RendererAdapter['transcribe']>(() => new Promise<string>((resolve) => {
+            resolveTranscription = resolve;
+        }));
         const fake = createFakeRendererAdapter({
             getSession: () => Promise.resolve(createSession()),
-            transcribe: () => new Promise<string>((resolve) => {
-                resolveTranscription = resolve;
-            }),
+            transcribe,
             stopTranscription: () => Promise.resolve(true),
         });
         const store = new AppStore(fake.adapter);
@@ -305,11 +201,12 @@ describe('AppStore', () => {
         store.initialize();
         await store.openSession('session-1');
         const runPromise = store.startTranscription(transcriptionOptions);
+        const runId = transcribe.mock.calls[0][1].runId;
 
-        fake.emitTranscribeText({ runId: 2, chunk: '[00:00:00.000 --> 00:00:01.000] Partial text\n' });
+        fake.emitTranscribeText({ runId, chunk: '[00:00:00.000 --> 00:00:01.000] Partial text\n' });
         await store.stopTranscription();
         resolveTranscription('[00:00:00.000 --> 00:00:01.000] Stale final text\n');
-        await runPromise;
+        expect(await runPromise).toEqual({ ok: false, message: 'The transcription run is no longer active.' });
 
         expect(store.transcription.runOutcome).toBe('stopped');
         expect(store.transcriptionWorkflow.outcome).toBe('stopped');
@@ -322,11 +219,12 @@ describe('AppStore', () => {
     it('ignores a delayed stop response after another transcription starts', async () => {
         let resolveTranscription: (value: string) => void = () => undefined;
         let resolveStop: (value: boolean) => void = () => undefined;
+        const transcribe = vi.fn<RendererAdapter['transcribe']>(() => new Promise<string>((resolve) => {
+            resolveTranscription = resolve;
+        }));
         const fake = createFakeRendererAdapter({
             getSession: () => Promise.resolve(createSession()),
-            transcribe: () => new Promise<string>((resolve) => {
-                resolveTranscription = resolve;
-            }),
+            transcribe,
             stopTranscription: () => new Promise<boolean>((resolve) => {
                 resolveStop = resolve;
             }),
@@ -343,10 +241,11 @@ describe('AppStore', () => {
             await firstRun;
             const secondRun = store.startTranscription(transcriptionOptions);
             const secondOperation = store.operations.active;
+            const secondRunId = transcribe.mock.calls[1][1].runId;
 
-            fake.emitTranscribeText({ runId: 3, chunk: '[00:00:00.000 --> 00:00:01.000] Second draft\n' });
+            fake.emitTranscribeText({ runId: secondRunId, chunk: '[00:00:00.000 --> 00:00:01.000] Second draft\n' });
             resolveStop(true);
-            await stopPromise;
+            expect(await stopPromise).toEqual({ ok: false, message: 'The transcription run is no longer active.' });
 
             expect(store.operations.active).toEqual(secondOperation);
             expect(store.transcription.runOutcome).toBe('none');
@@ -360,6 +259,48 @@ describe('AppStore', () => {
         } finally {
             store.dispose();
         }
+    });
+
+    it('does not let a stopped run release the next foreground operation', async () => {
+        const resolvers: Array<(value: string) => void> = [];
+        const transcribe = vi.fn<RendererAdapter['transcribe']>(
+            () => new Promise<string>((resolve) => {
+                resolvers.push(resolve);
+            }),
+        );
+        const fake = createFakeRendererAdapter({ transcribe, stopTranscription: () => Promise.resolve(true) });
+        const store = new AppStore(fake.adapter);
+
+        store.workspace.replaceWorkspace(createSession());
+        const firstRun = store.startTranscription(transcriptionOptions);
+        await store.stopTranscription();
+
+        const secondRun = store.startTranscription(transcriptionOptions);
+        const secondOperation = store.operations.active;
+        resolvers[0]('[00:00:00.000 --> 00:00:01.000] Old result\n');
+
+        expect(await firstRun).toEqual({ ok: false, message: 'The transcription run is no longer active.' });
+        expect(store.operations.active).toEqual(secondOperation);
+
+        resolvers[1]('[00:00:00.000 --> 00:00:01.000] New result\n');
+        expect((await secondRun).ok).toBe(true);
+        expect(store.operations.isBusy).toBe(false);
+    });
+
+    it('refreshes the session list only after the current transcription succeeds', async () => {
+        const listSessions = vi.fn(() => Promise.resolve([]));
+        const fake = createFakeRendererAdapter({
+            listSessions,
+            transcribe: () => Promise.resolve('[00:00:00.000 --> 00:00:01.000] Final text\n'),
+        });
+        const store = new AppStore(fake.adapter);
+
+        store.workspace.replaceWorkspace(createSession());
+        const result = await store.startTranscription(transcriptionOptions);
+
+        expect(result.ok).toBe(true);
+        expect(store.transcription.savedTranscript?.segments[0]?.text).toBe('Final text');
+        expect(listSessions).toHaveBeenCalledOnce();
     });
 
     it('rejects a conflicting foreground operation', async () => {

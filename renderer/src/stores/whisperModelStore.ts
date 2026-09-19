@@ -1,12 +1,12 @@
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { RendererAdapter } from './rendererAdapter';
-import { commandFailure, commandSuccess, type CommandResult } from './types';
+import { commandFailure, commandSuccess, type CommandResult, type DeepReadonly } from './types';
 
 export class WhisperModelStore {
     private modelsValue: WhisperModelInfo[] = [];
 
-    downloadProgress: WhisperModelDownloadProgress | null = null;
+    private downloadProgressValue: WhisperModelDownloadProgress | null = null;
 
     constructor(private readonly adapter: RendererAdapter | null) {
         makeAutoObservable<this, 'adapter'>(
@@ -16,15 +16,19 @@ export class WhisperModelStore {
         );
     }
 
-    get models(): readonly WhisperModelInfo[] {
+    get models(): readonly DeepReadonly<WhisperModelInfo>[] {
         return this.modelsValue;
+    }
+
+    get downloadProgress(): DeepReadonly<WhisperModelDownloadProgress> | null {
+        return this.downloadProgressValue;
     }
 
     get isDownloadActive(): boolean {
         return this.downloadProgress !== null;
     }
 
-    getModel(name: WhisperModelName): WhisperModelInfo | undefined {
+    getModel(name: WhisperModelName): DeepReadonly<WhisperModelInfo> | undefined {
         return this.modelsValue.find((model) => model.name === name);
     }
 
@@ -53,7 +57,7 @@ export class WhisperModelStore {
     async download(name: WhisperModelName): Promise<CommandResult> {
         if (!this.adapter) return commandFailure('Model download is not available.');
 
-        this.downloadProgress = {
+        this.downloadProgressValue = {
             name,
             percent: 0,
             downloadedBytes: 0,
@@ -73,12 +77,29 @@ export class WhisperModelStore {
             return commandFailure('Failed to download the model. Please try again.');
         } finally {
             runInAction(() => {
-                this.downloadProgress = null;
+                this.downloadProgressValue = null;
             });
         }
     }
 
     updateDownloadProgress(progress: WhisperModelDownloadProgress): void {
-        this.downloadProgress = progress;
+        this.downloadProgressValue = progress;
+    }
+
+    async importCustomModel(): Promise<CommandResult<{ path: string; fileName: string } | null>> {
+        if (!this.adapter) return commandFailure('Custom model import is not available.');
+
+        try {
+            const result = await this.adapter.importWhisperModelFromFile();
+
+            if (!result) return commandSuccess(null);
+            if (!result.ok) return commandFailure('Failed to import the model file.');
+
+            return commandSuccess({ path: result.path, fileName: result.fileName });
+        } catch (error: unknown) {
+            console.error('Failed to import custom model', error);
+
+            return commandFailure('Failed to import the model file.');
+        }
     }
 }

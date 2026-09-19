@@ -18,7 +18,7 @@ const RIGHT_SIDEBAR_DEFAULT_WIDTH = 360;
 
 export const Home: React.FC = observer(() => {
     const store = useAppStore();
-    const { workspace } = store;
+    const { sessions } = store;
 
     return (
         <Box style={{ height: '100vh', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
@@ -48,7 +48,7 @@ export const Home: React.FC = observer(() => {
                             </Paper>
                         ),
                     }}
-                    rightSidebar={workspace.sessions.length ? {
+                    rightSidebar={sessions.items.length ? {
                         minWidth: RIGHT_SIDEBAR_MIN_WIDTH,
                         maxWidth: RIGHT_SIDEBAR_MAX_WIDTH,
                         defaultWidth: RIGHT_SIDEBAR_DEFAULT_WIDTH,

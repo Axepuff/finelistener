@@ -2,60 +2,33 @@ import { Button, Group, Loader, Modal, RingProgress, Select, Stack, Text } from 
 import { IconCircleCheck, IconCloudDownload } from '@tabler/icons-react';
 import type { WhisperModelName } from 'electron/src/types/whisper';
 import { observer } from 'mobx-react-lite';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAppStore } from '../../../../../AppContext';
 
 interface Props {
     value: WhisperModelName;
     onChange: (value: WhisperModelName) => void;
-    onStatusChange?: (status: { isModelDownloaded: boolean; isDownloadActive: boolean }) => void;
     onDownloadError?: (message: string) => void;
     disabled?: boolean;
-    requestDownload?: boolean;
-    onDownloadComplete?: () => void;
-    onDownloadCancelled?: () => void;
 }
 
 export const WhisperModelSelect: React.FC<Props> = observer(({
     value,
     onChange,
-    onStatusChange,
     onDownloadError,
     disabled = false,
-    requestDownload = false,
-    onDownloadComplete,
-    onDownloadCancelled,
 }) => {
     const store = useAppStore();
     const { whisperModels } = store;
     const [pendingModel, setPendingModel] = useState<WhisperModelName | null>(null);
-    const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-    const [downloadCancelled, setDownloadCancelled] = useState(false);
-
-    const selectedModelInfo = whisperModels.getModel(value);
-    const pendingModelInfo = pendingModel ? whisperModels.getModel(pendingModel) : undefined;
-    const isModelDownloaded = selectedModelInfo?.isDownloaded ?? false;
+    const control = store.transcriptionControl;
+    const requestedModel = control.isDownloadingPendingModel ? null : control.pendingDownloadModel;
+    const confirmationModel = requestedModel ?? pendingModel;
+    const isConfirmOpen = confirmationModel !== null;
+    const pendingModelInfo = confirmationModel ? whisperModels.getModel(confirmationModel) : undefined;
     const isDownloadActive = whisperModels.isDownloadActive;
 
-    useEffect(() => {
-        onStatusChange?.({ isModelDownloaded, isDownloadActive });
-    }, [isDownloadActive, isModelDownloaded, onStatusChange]);
-
-    useEffect(() => {
-        if (requestDownload && !isModelDownloaded && !isConfirmOpen && !downloadCancelled) {
-            setPendingModel(value);
-            setIsConfirmOpen(true);
-        }
-    }, [requestDownload, isModelDownloaded, value, isConfirmOpen, downloadCancelled]);
-
-    // Reset cancelled guard when requestDownload is toggled off
-    useEffect(() => {
-        if (!requestDownload) {
-            setDownloadCancelled(false);
-        }
-    }, [requestDownload]);
-
-    const pendingModelLabel = pendingModel ?? 'selected';
+    const pendingModelLabel = confirmationModel ?? 'selected';
     const confirmText = pendingModelInfo?.sizeLabel
         ? `Download the ${pendingModelLabel} model (${pendingModelInfo.sizeLabel})?`
         : `Download the ${pendingModelLabel} model?`;
@@ -82,34 +55,28 @@ export const WhisperModelSelect: React.FC<Props> = observer(({
         }
 
         setPendingModel(nextModelName);
-        setIsConfirmOpen(true);
     };
 
     const handleConfirmDownload = async () => {
-        if (!pendingModel) {
-            setIsConfirmOpen(false);
+        if (!confirmationModel || isDownloadActive) return;
 
-            return;
-        }
-
-        onChange(pendingModel);
-        setIsConfirmOpen(false);
-        const result = await whisperModels.download(pendingModel);
-
-        if (result.ok) {
-            onDownloadComplete?.();
-        } else {
-            onDownloadError?.(result.message);
-            onDownloadCancelled?.();
-        }
+        const modelToDownload = confirmationModel;
         setPendingModel(null);
+        const result = requestedModel
+            ? await store.confirmPendingTranscriptionDownload()
+            : await downloadSelectedModel(modelToDownload);
+
+        if (!result.ok) onDownloadError?.(result.message);
+    };
+
+    const downloadSelectedModel = async (modelName: WhisperModelName) => {
+        onChange(modelName);
+        return store.downloadWhisperModel(modelName);
     };
 
     const handleCancelDownload = () => {
-        setIsConfirmOpen(false);
         setPendingModel(null);
-        setDownloadCancelled(true);
-        onDownloadCancelled?.();
+        control.cancelPendingDownload();
     };
 
     const getModelStatusNode = (modelName: WhisperModelName) => {
@@ -173,7 +140,7 @@ export const WhisperModelSelect: React.FC<Props> = observer(({
                     <Text size="sm">{confirmText}</Text>
                     <Group justify="flex-end" gap={8}>
                         <Button variant="outline" onClick={handleCancelDownload}>{'Cancel'}</Button>
-                        <Button onClick={handleConfirmDownload}>
+                        <Button onClick={handleConfirmDownload} disabled={isDownloadActive}>
                             {'Download'}
                         </Button>
                     </Group>

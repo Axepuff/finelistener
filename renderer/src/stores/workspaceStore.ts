@@ -1,19 +1,26 @@
-import type { SessionDetails, SessionListItem } from 'electron/src/types/sessions';
+import type { SessionDetails } from 'electron/src/types/sessions';
 import { makeAutoObservable } from 'mobx';
 import type { AudioMode, DeepReadonly, Segment, SegmentSelection } from './types';
 
-export class WorkspaceStore {
-    private sessionsValue: SessionListItem[] = [];
+type WorkspaceSession = Omit<SessionDetails, 'transcript' | 'hasTranscript'>;
 
-    private activeSessionValue: DeepReadonly<SessionDetails> | null = null;
+const toWorkspaceSession = (session: DeepReadonly<WorkspaceSession>): WorkspaceSession => ({
+    id: session.id,
+    title: session.title,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    sourceKind: session.sourceKind,
+    audioOriginalPath: session.audioOriginalPath,
+    audioWavPath: session.audioWavPath,
+    audioOptimizedWavPath: session.audioOptimizedWavPath,
+});
+
+export class WorkspaceStore {
+    private activeSessionValue: DeepReadonly<WorkspaceSession> | null = null;
 
     private audioSourcePathValue: string | null = null;
 
     private segmentSelectionValue: SegmentSelection | null = null;
-
-    private sessionsLoadingValue = false;
-
-    private sessionsLoadErrorValue: string | null = null;
 
     private audioModeValue: AudioMode = 'original';
 
@@ -24,14 +31,6 @@ export class WorkspaceStore {
     private playbackPositionValue = 0;
 
     private requestedPlaybackTimeValue = 0;
-
-    get sessionsLoading(): boolean {
-        return this.sessionsLoadingValue;
-    }
-
-    get sessionsLoadError(): string | null {
-        return this.sessionsLoadErrorValue;
-    }
 
     get audioMode(): AudioMode {
         return this.audioModeValue;
@@ -57,11 +56,7 @@ export class WorkspaceStore {
         makeAutoObservable(this, {}, { autoBind: true });
     }
 
-    get sessions(): DeepReadonly<SessionListItem[]> {
-        return this.sessionsValue;
-    }
-
-    get activeSession(): DeepReadonly<SessionDetails> | null {
+    get activeSession(): DeepReadonly<WorkspaceSession> | null {
         return this.activeSessionValue;
     }
 
@@ -95,29 +90,11 @@ export class WorkspaceStore {
         return this.segmentSelectionValue !== null && this.selectedSegment === null;
     }
 
-    replaceSessions(sessions: SessionListItem[]): void {
-        this.sessionsValue = sessions;
-    }
-
-    setSessionsLoading(isLoading: boolean): void {
-        this.sessionsLoadingValue = isLoading;
-    }
-
-    setSessionsLoadError(message: string | null): void {
-        this.sessionsLoadErrorValue = message;
-    }
-
     replaceWorkspace(session: DeepReadonly<SessionDetails>): void {
-        this.activeSessionValue = session;
+        this.activeSessionValue = toWorkspaceSession(session);
         this.audioModeValue = 'original';
         this.audioSourcePathValue = session.audioWavPath;
         this.resetPlayback();
-    }
-
-    updateActiveSession(session: DeepReadonly<SessionDetails>): void {
-        if (this.activeSessionValue?.id !== session.id) return;
-
-        this.activeSessionValue = session;
     }
 
     useOriginalAudio(): void {
@@ -128,10 +105,10 @@ export class WorkspaceStore {
         this.resetPlayback();
     }
 
-    useOptimizedAudio(session: DeepReadonly<SessionDetails>): boolean {
+    useOptimizedAudio(session: DeepReadonly<WorkspaceSession>): boolean {
         if (!session.audioOptimizedWavPath) return false;
 
-        this.activeSessionValue = session;
+        this.activeSessionValue = toWorkspaceSession(session);
         this.audioModeValue = 'optimized';
         this.audioSourcePathValue = session.audioOptimizedWavPath;
         this.resetPlayback();
@@ -175,10 +152,6 @@ export class WorkspaceStore {
 
     requestPlaybackTime(time: number): void {
         this.requestedPlaybackTimeValue = Number.isFinite(time) ? Math.max(0, time) : 0;
-    }
-
-    removeSession(sessionId: string): void {
-        this.sessionsValue = this.sessionsValue.filter((session) => session.id !== sessionId);
     }
 
     clearWorkspace(): void {
