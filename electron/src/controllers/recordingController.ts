@@ -36,6 +36,7 @@ export function registerRecordingController(ipc: IpcMain, getMainWindow: () => B
         onProgress: (progress) => getMainWindow()?.webContents.send('recording:progress', progress),
         onLevel: (level) => getMainWindow()?.webContents.send('recording:level', level),
         onError: (error) => getMainWindow()?.webContents.send('recording:error', toErrorPayload(error)),
+        onFinished: (result) => getMainWindow()?.webContents.send('recording:finished', result),
     }, serviceConfig);
 
     ipc.handle('recording:is-available', async () => {

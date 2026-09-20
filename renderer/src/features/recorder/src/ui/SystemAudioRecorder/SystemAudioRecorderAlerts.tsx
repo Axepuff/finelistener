@@ -18,7 +18,7 @@ export const SystemAudioRecorderAlerts: React.FC = observer(() => {
                     <Text size="sm" c="yellow.7">
                         {alerts.isMacOS ?
                             "No system audio detected. On macOS, check that 'System Audio Recording' permission is enabled." :
-                            'No system audio detected. Check that audio is playing.'}
+                            'No audio detected. Check the selected recording devices.'}
                     </Text>
                     {alerts.isMacOS ? (
                         <Group gap={8} align="center" wrap="wrap">

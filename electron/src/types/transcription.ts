@@ -1,4 +1,5 @@
 import type { WhisperModelName } from './whisper';
+import type { RecordingSource } from './sessions';
 
 export type Segment = { start: number; end: number };
 
@@ -22,14 +23,23 @@ export interface TranscribeOpts {
     useGpu?: boolean;
     vadModelPath?: string;
     segment?: Segment;
+    optimized?: boolean;
 }
 
 export interface TranscriptionTextEvent {
     runId: number;
     chunk: string;
+    source?: RecordingSource;
+    offsetSec?: number;
 }
 
 export interface TranscriptionProgressEvent {
     runId: number;
     value: number;
+    source?: RecordingSource;
+}
+
+export interface SessionTranscribeOpts extends TranscribeOpts {
+    retryFailed?: boolean;
+    optimized?: boolean;
 }

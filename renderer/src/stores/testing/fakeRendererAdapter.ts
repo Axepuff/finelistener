@@ -1,6 +1,6 @@
-import type { RecordingLevel, RecordingProgress, RecordingState } from 'electron/src/services/RecordingService';
+import type { RecordingLevel, RecordingProgress, RecordingResult, RecordingState } from 'electron/src/services/RecordingService';
 import type { TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
-import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
+import { UI_PREFERENCE_DEFAULTS, type UiPreferenceKey, type UiPreferenceValueMap } from '../../../../electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress } from 'electron/src/types/whisper';
 import type { RendererAdapter } from '../rendererAdapter';
 
@@ -11,6 +11,7 @@ interface AdapterListeners {
     recordingState: Set<(state: RecordingState) => void>;
     recordingProgress: Set<(progress: RecordingProgress) => void>;
     recordingLevel: Set<(level: RecordingLevel) => void>;
+    recordingFinished: Set<(result: RecordingResult) => void>;
     recordingError: Set<(payload: { message: string }) => void>;
     modelDownloadProgress: Set<(payload: WhisperModelDownloadProgress) => void>;
 }
@@ -41,6 +42,7 @@ export const createFakeRendererAdapter = (
         recordingState: new Set(),
         recordingProgress: new Set(),
         recordingLevel: new Set(),
+        recordingFinished: new Set(),
         recordingError: new Set(),
         modelDownloadProgress: new Set(),
     };
@@ -57,6 +59,7 @@ export const createFakeRendererAdapter = (
         optimizeAudio: unavailable,
         revealSessionsFolder: () => Promise.resolve(true),
         transcribe: () => Promise.resolve(''),
+        transcribeSession: unavailable,
         stopTranscription: () => Promise.resolve(false),
         saveText: () => Promise.resolve({ ok: true }),
         startSystemRecording: unavailable,
@@ -71,8 +74,8 @@ export const createFakeRendererAdapter = (
         downloadWhisperModel: () => Promise.resolve(),
         importWhisperModelFromFile: () => Promise.resolve(null),
         openDevTools: () => Promise.resolve(true),
-        getUiPreference: <K extends UiPreferenceKey>(_key: K) => (
-            Promise.resolve(null as unknown as UiPreferenceValueMap[K])
+        getUiPreference: <K extends UiPreferenceKey>(key: K) => (
+            Promise.resolve(UI_PREFERENCE_DEFAULTS[key])
         ),
         setUiPreference: <K extends UiPreferenceKey>(
             _key: K,
@@ -84,6 +87,7 @@ export const createFakeRendererAdapter = (
         onRecordingState: (callback) => subscribe(listeners.recordingState, callback),
         onRecordingProgress: (callback) => subscribe(listeners.recordingProgress, callback),
         onRecordingLevel: (callback) => subscribe(listeners.recordingLevel, callback),
+        onRecordingFinished: (callback) => subscribe(listeners.recordingFinished, callback),
         onRecordingError: (callback) => subscribe(listeners.recordingError, callback),
         onWhisperModelDownloadProgress: (callback) => subscribe(listeners.modelDownloadProgress, callback),
         ...overrides,
@@ -98,6 +102,7 @@ export const createFakeRendererAdapter = (
                 listeners.recordingState.size +
                 listeners.recordingProgress.size +
                 listeners.recordingLevel.size +
+                listeners.recordingFinished.size +
                 listeners.recordingError.size +
                 listeners.modelDownloadProgress.size;
         },

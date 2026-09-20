@@ -173,7 +173,7 @@ describe('AppStore', () => {
         store.initialize();
         store.initialize();
 
-        expect(fake.activeListenerCount).toBe(8);
+        expect(fake.activeListenerCount).toBe(9);
 
         store.dispose();
         store.dispose();
@@ -181,7 +181,7 @@ describe('AppStore', () => {
         expect(fake.activeListenerCount).toBe(0);
 
         store.initialize();
-        expect(fake.activeListenerCount).toBe(8);
+        expect(fake.activeListenerCount).toBe(9);
 
         store.dispose();
     });

@@ -8,8 +8,10 @@ import type {
     SessionListItem,
     SessionTranscriptV1,
     SessionTranscriptionInfo,
+    SessionSourceTrack,
 } from '../types/sessions';
 import { AudioPreprocessor } from './AudioPreprocessor';
+import type { RecordingResult } from './RecordingService';
 
 const SESSION_FILE_NAME = 'session.json';
 const SESSION_VERSION = 1 as const;
@@ -46,7 +48,9 @@ const writeJsonFile = async (filePath: string, value: unknown): Promise<void> =>
     const dir = path.dirname(filePath);
 
     await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(value, null, 2), 'utf8');
+    const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
+    await fs.writeFile(temporaryPath, JSON.stringify(value, null, 2), 'utf8');
+    await fs.rename(temporaryPath, filePath);
 };
 
 const getErrnoCode = (error: unknown): string | null => {
@@ -200,6 +204,10 @@ export class SessionsService {
             audioWavPath,
             audioOptimizedWavPath,
             transcript,
+            tracks: resolvedSession.tracks?.map((track) => ({
+                ...track,
+                filePath: this.resolveTrackPath(sessionDir, track.filePath),
+            })),
         };
     }
 
@@ -258,7 +266,11 @@ export class SessionsService {
         return this.getSession(sessionId);
     }
 
-    public async createSessionFromRecordingFile(recordingFilePath: string): Promise<SessionDetails> {
+    public async createSessionFromRecordingFile(recording: string | RecordingResult): Promise<SessionDetails> {
+        if (typeof recording !== 'string' && recording?.tracks?.length) {
+            return this.createSessionFromTracks(recording);
+        }
+        const recordingFilePath = typeof recording === 'string' ? recording : recording?.filePath;
         if (!recordingFilePath || typeof recordingFilePath !== 'string') {
             throw new Error('Invalid recording file path');
         }
@@ -308,6 +320,74 @@ export class SessionsService {
 
         await writeJsonFile(path.join(sessionDir, SESSION_FILE_NAME), sessionFile);
 
+        return this.getSession(sessionId);
+    }
+
+    private resolveTrackPath(sessionDir: string, relativePath: string): string {
+        const resolved = path.resolve(sessionDir, relativePath);
+        if (!resolved.startsWith(`${path.resolve(sessionDir)}${path.sep}`)) {
+            throw new Error('Invalid source track path');
+        }
+        return resolved;
+    }
+
+    private async createSessionFromTracks(recording: RecordingResult): Promise<SessionDetails> {
+        const inputTracks = recording.tracks!;
+        if (inputTracks.length > 2 || new Set(inputTracks.map((track) => track.source)).size !== inputTracks.length) {
+            throw new Error('Invalid recording sources');
+        }
+        for (const track of inputTracks) {
+            if (!['system', 'microphone'].includes(track.source) || typeof track.filePath !== 'string'
+                || !track.filePath.trim() || !Number.isFinite(track.startOffsetMs ?? 0)
+                || (track.startOffsetMs ?? 0) < 0) {
+                throw new Error('Invalid recording source');
+            }
+        }
+        const createdAt = Date.now();
+        const sessionId = randomUUID();
+        const sessionDir = this.resolveSessionDir(sessionId);
+        await fs.mkdir(path.join(sessionDir, ORIGINAL_AUDIO_DIR), { recursive: true });
+        const tracks: SessionSourceTrack[] = [];
+        try {
+            for (const track of inputTracks) {
+                const relativePath = path.join(ORIGINAL_AUDIO_DIR, `${track.source}.wav`);
+                // Keep the temporary originals until the entire session has been finalized.
+                await fs.copyFile(track.filePath, path.join(sessionDir, relativePath));
+                tracks.push({
+                    source: track.source,
+                    filePath: relativePath,
+                    startOffsetMs: track.startOffsetMs ?? 0,
+                    durationMs: track.durationMs,
+                    failure: track.failure ?? recording.sourceFailures?.find((failure) => failure.source === track.source)?.message,
+                });
+            }
+            const mixed = await this.audioPreprocessor.mixSources(tracks.map((track) => ({
+                ...track, filePath: path.join(sessionDir, track.filePath),
+            })));
+            try {
+                await fs.copyFile(mixed.path, path.join(sessionDir, SESSION_WAV_RELATIVE_PATH));
+            } finally {
+                await mixed.cleanup();
+            }
+            const session: SessionFileV1 = {
+                version: SESSION_VERSION, id: sessionId,
+                title: `recording-${formatDateForTitle(createdAt)}.wav`,
+                createdAt, updatedAt: createdAt, sourceKind: 'recorded', tracks,
+                audio: {
+                    originalFileName: 'recording.wav', originalPath: SESSION_WAV_RELATIVE_PATH,
+                    wavPath: SESSION_WAV_RELATIVE_PATH,
+                },
+            };
+            await writeJsonFile(path.join(sessionDir, SESSION_FILE_NAME), session);
+        } catch (error) {
+            await fs.rm(sessionDir, { recursive: true, force: true });
+            throw error;
+        }
+        for (const track of inputTracks) {
+            await fs.unlink(track.filePath).catch((error: unknown) => {
+                console.warn('Failed to remove finalized recording temporary file', error);
+            });
+        }
         return this.getSession(sessionId);
     }
 
@@ -408,7 +488,10 @@ export class SessionsService {
 
         const originalAbsolutePath = path.join(sessionDir, session.audio.originalPath);
         const targetWavPath = path.join(sessionDir, SESSION_WAV_RELATIVE_PATH);
-        const { path: tmpWavPath, cleanup } = await this.audioPreprocessor.convertAudio({
+        const { path: tmpWavPath, cleanup } = session.tracks?.length ?
+            await this.audioPreprocessor.mixSources(session.tracks.map((track) => ({
+                ...track, filePath: this.resolveTrackPath(sessionDir, track.filePath),
+            }))) : await this.audioPreprocessor.convertAudio({
             audioPath: originalAbsolutePath,
             ...SESSION_WAV_CONVERT_OPTIONS,
         });

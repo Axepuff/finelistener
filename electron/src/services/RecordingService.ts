@@ -2,11 +2,12 @@ import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import { app } from 'electron';
-import type { CaptureAdapter } from 'electron/src/services/capture/CaptureAdapter';
+import type { CaptureAdapter, RecordingSourceKind, RecordingSources } from 'electron/src/services/capture/CaptureAdapter';
 import { atom, createStore, type Atom } from 'jotai/vanilla';
 import { DEFAULT_WAV_FORMAT, type WavFormat } from './AudioPreprocessor';
 
 export interface RecordingLevel {
+    source?: RecordingSourceKind;
     rms: number;
     peak: number;
     clipped: boolean;
@@ -15,6 +16,20 @@ export interface RecordingLevel {
 export interface RecordingProgress {
     durationMs: number;
     bytesWritten?: number;
+    sourceFailures?: RecordingSourceFailure[];
+}
+
+export interface RecordingSourceFailure {
+    source: RecordingSourceKind;
+    message: string;
+}
+
+export interface RecordingTrack {
+    source: RecordingSourceKind;
+    filePath: string;
+    durationMs?: number;
+    startOffsetMs?: number;
+    failure?: string;
 }
 
 export interface RecordingSession {
@@ -30,6 +45,8 @@ export interface RecordingResult {
     durationMs?: number;
     bytesWritten?: number;
     sessionId?: string;
+    tracks?: RecordingTrack[];
+    sourceFailures?: RecordingSourceFailure[];
 }
 
 export type RecordingState = 'idle' | 'starting' | 'recording' | 'stopping' | 'error';
@@ -39,6 +56,7 @@ export interface RecordingServiceCallbacks {
     onProgress?: (progress: RecordingProgress) => void;
     onLevel?: (level: RecordingLevel) => void;
     onError?: (error: Error) => void;
+    onFinished?: (result: RecordingResult) => void;
 }
 
 export interface RecordingServiceConfig {
@@ -50,6 +68,7 @@ export interface RecordingStartOptions {
     fileName?: string;
     format?: Partial<WavFormat>;
     deviceId?: string;
+    sources?: RecordingSources;
 }
 
 export class RecordingService {
@@ -95,6 +114,9 @@ export class RecordingService {
         if (this.getState() !== 'idle') {
             throw new Error('Recording is already in progress');
         }
+        if (options.sources && typeof options.sources.system !== 'string' && typeof options.sources.microphone !== 'string') {
+            throw new Error('Select at least one recording source.');
+        }
 
         this.setState('starting');
         this.store.set(this.atoms.stopRequested, false);
@@ -104,9 +126,16 @@ export class RecordingService {
         const format: WavFormat = { ...this.defaultFormat, ...(options.format ?? {}) };
         const deviceId = options.deviceId;
 
-        await fs.mkdir(this.recordingsDir, { recursive: true });
+        let outputPath: string;
 
-        const outputPath = await this.resolveOutputPath(options.fileName);
+        try {
+            await fs.mkdir(this.recordingsDir, { recursive: true });
+            outputPath = await this.resolveOutputPath(options.fileName);
+        } catch (error) {
+            this.store.set(this.atoms.startInFlight, false);
+            this.setState('idle');
+            throw error;
+        }
         const sessionId = randomUUID();
         const session: RecordingSession = {
             sessionId,
@@ -120,7 +149,7 @@ export class RecordingService {
 
         try {
             await this.adapter.startRecording(
-                { outputPath, format, deviceId },
+                { outputPath, format, deviceId, sources: options.sources },
                 {
                     onLevel: (level) => {
                         if (!this.isCurrentSession(sessionId)) return;
@@ -133,6 +162,16 @@ export class RecordingService {
                     onError: (error) => {
                         if (!this.isCurrentSession(sessionId)) return;
                         void this.handleAdapterError(error, sessionId);
+                    },
+                    onFinished: (result) => {
+                        if (!this.isCurrentSession(sessionId)) return;
+                        const finalized = this.attachSessionResult(result, session);
+
+                        this.store.set(this.atoms.lastResult, finalized);
+                        this.store.set(this.atoms.session, null);
+                        this.store.set(this.atoms.lastError, null);
+                        this.callbacks.onFinished?.(finalized);
+                        this.setState('idle');
                     },
                 },
             );
@@ -260,8 +299,8 @@ export class RecordingService {
         if (this.store.get(this.atoms.stopInFlight)) {
             try {
                 await this.waitForStopCompletion();
-            } catch {
-                // ignore cleanup errors
+            } catch (cleanupError) {
+                console.error('Recording cleanup failed:', cleanupError);
             }
 
             return;
@@ -281,13 +320,16 @@ export class RecordingService {
             this.store.set(this.atoms.session, null);
 
             if (session) {
-                this.store.set(this.atoms.lastResult, this.attachSessionResult(result, session));
+                const finalized = this.attachSessionResult(result, session);
+
+                this.store.set(this.atoms.lastResult, finalized);
+                this.callbacks.onFinished?.(finalized);
             }
 
             this.store.set(this.atoms.lastError, null);
             this.setState('idle');
-        } catch {
-            // ignore cleanup errors
+        } catch (cleanupError) {
+            console.error('Recording cleanup failed:', cleanupError);
         } finally {
             this.store.set(this.atoms.stopInFlight, false);
         }

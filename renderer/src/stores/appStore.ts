@@ -313,20 +313,36 @@ export class AppStore {
         return this.whisperModels.download(model);
     }
 
-    private async startPreparedTranscription(options: StartTranscriptionOptions): Promise<CommandResult> {
+    private async startPreparedTranscription(options: StartTranscriptionOptions, retryFailed = false): Promise<CommandResult> {
         const requestId = ++this.transcriptionRequestId;
-        const result = await this.startTranscription(options);
+        const result = await this.startTranscription(options, retryFailed);
 
         // An intentional stop or reset supersedes the original button request's result.
         return requestId === this.transcriptionRequestId && !this.disposed ? result : commandSuccess(undefined);
     }
 
-    async startTranscription(options: StartTranscriptionOptions): Promise<CommandResult> {
+    async retryIncompleteTranscription(): Promise<CommandResult> {
+        const run = this.transcription.savedTranscript?.sourceRun;
+
+        if (!run || run.status !== 'incomplete') return commandFailure('No incomplete transcription is available.');
+
+        return this.startPreparedTranscription({
+            language: run.settings.language,
+            model: run.settings.model ?? 'base',
+            modelPath: run.settings.modelPath,
+            maxContext: run.settings.maxContext,
+            maxLen: run.settings.maxLen,
+            splitOnWord: run.settings.splitOnWord ?? false,
+            useVad: run.settings.useVad ?? false,
+        }, true);
+    }
+
+    async startTranscription(options: StartTranscriptionOptions, retryFailed = false): Promise<CommandResult> {
         const audioPath = this.workspace.audioSourcePath;
 
         if (!this.adapter) return commandFailure('Transcription is not available.');
         if (!audioPath) return commandFailure('Choose an audio source before transcribing.');
-        if (this.workspace.hasIncompleteSegment) {
+        if (!retryFailed && this.workspace.hasIncompleteSegment) {
             return commandFailure('Set both the start and end of the segment, with the end after the start.');
         }
 
@@ -334,7 +350,9 @@ export class AppStore {
 
         if (!operation) return commandFailure('Another workspace operation is already running.');
 
-        const selectedSegment = this.workspace.selectedSegment ?? undefined;
+        const selectedSegment = retryFailed ?
+            this.transcription.savedTranscript?.sourceRun?.settings.segment :
+            this.workspace.selectedSegment ?? undefined;
         const sessionId = this.workspace.activeSessionId ?? undefined;
         const fileName = audioPath.split(/[/\\]/).pop() || audioPath;
 
@@ -351,6 +369,9 @@ export class AppStore {
             sessionId,
             segment: selectedSegment ? { ...selectedSegment } : undefined,
             options: { ...options },
+            sourceAware: Boolean(this.workspace.activeSession?.tracks?.length),
+            retryFailed,
+            optimized: this.workspace.audioMode === 'optimized',
         };
         const startedAt = performance.now();
         const isCurrent = (): boolean => this.operations.owns(operation) && !this.disposed;
@@ -361,11 +382,18 @@ export class AppStore {
             if (result.status === 'replaced' || !isCurrent()) {
                 return commandFailure('The transcription run is no longer active.');
             }
-            if (result.status === 'failed') return commandFailure(result.message);
+            if (result.status === 'failed') {
+                this.activityLog.appendEvent(`Whisper transcription failed for ${fileName}`);
+                void this.sessions.refresh();
+
+                return commandFailure(result.message);
+            }
 
             const durationSeconds = Math.max(0, performance.now() - startedAt) / 1000;
 
-            this.activityLog.appendEvent(`Whisper transcription finished for ${fileName}`);
+            this.activityLog.appendEvent(result.status === 'incomplete' ?
+                `Whisper transcription is incomplete for ${fileName}` :
+                `Whisper transcription finished for ${fileName}`);
             this.activityLog.appendEvent(`Processed ${fileName}: ${durationSeconds.toFixed(1)} s.`);
             void this.sessions.refresh();
 

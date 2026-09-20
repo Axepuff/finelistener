@@ -1,485 +1,287 @@
-#define MINIAUDIO_IMPLEMENTATION
-#include "miniaudio.h"
-
-#include <atomic>
-#include <chrono>
-#include <cmath>
-#include <cerrno>
-#include <csignal>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <limits>
-#include <string>
-#include <thread>
-#include <vector>
-
-#ifdef _WIN32
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#endif
+#include <audioclient.h>
+#include <mmdeviceapi.h>
+#include <functiondiscoverykeys_devpkey.h>
+#include <ksmedia.h>
+#define MINIAUDIO_IMPLEMENTATION
+#include "miniaudio.h"
+#include "timeline.h"
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace {
-
-constexpr ma_uint32 kDefaultSampleRate = 16000;
-constexpr ma_uint32 kDefaultChannels = 1;
-constexpr ma_uint32 kDefaultBitDepth = 16;
-
-struct Options {
-    bool listDevices = false;
-    std::string outputPath;
-    std::string deviceId;
-    int deviceIndex = -1;
-    ma_uint32 sampleRate = kDefaultSampleRate;
-    ma_uint32 channels = kDefaultChannels;
-    ma_uint32 bitDepth = kDefaultBitDepth;
-};
-
-struct DeviceChoice {
-    bool hasId = false;
-    bool hasIndex = false;
-    ma_device_id id{};
-    int index = -1;
-};
-
-struct AppState {
-    ma_encoder encoder{};
-    std::atomic<ma_uint64> totalFrames{0};
-    std::atomic<ma_uint64> bytesWritten{0};
-    std::atomic<float> rms{0.0f};
-    std::atomic<float> peak{0.0f};
-    std::atomic<int> clipped{0};
-    std::atomic<int> lastError{MA_SUCCESS};
-    ma_uint32 sampleRate = kDefaultSampleRate;
-    ma_uint32 channels = kDefaultChannels;
-    ma_uint32 bytesPerFrame = 2;
-};
-
-std::atomic<bool> g_shouldQuit{false};
-
-void onSignal(int) {
-    g_shouldQuit.store(true);
-}
-
-void printUsage() {
-    std::fprintf(stderr,
-        "miniaudio-loopback --output <path> [--device-id <id>|--device-index <n>] "
-        "[--sample-rate <hz>] [--channels <n>] [--bit-depth <n>] [--list-devices]\n");
-}
-
-bool parseInt(const char* text, int& out) {
-    if (!text) return false;
-    errno = 0;
-    char* end = nullptr;
-    long value = std::strtol(text, &end, 10);
-    if (errno != 0 || end == text || *end != '\0') return false;
-    if (value < (std::numeric_limits<int>::min)() || value > (std::numeric_limits<int>::max)()) return false;
-    out = static_cast<int>(value);
-    return true;
-}
-
-bool parseUint32(const char* text, ma_uint32& out) {
-    if (!text) return false;
-    errno = 0;
-    char* end = nullptr;
-    unsigned long value = std::strtoul(text, &end, 10);
-    if (errno != 0 || end == text || *end != '\0') return false;
-    if (value > (std::numeric_limits<ma_uint32>::max)()) return false;
-    out = static_cast<ma_uint32>(value);
-    return true;
-}
-
-bool parseArgs(int argc, char** argv, Options& options) {
-    for (int i = 1; i < argc; i += 1) {
-        const std::string arg = argv[i];
-        if (arg == "--list-devices") {
-            options.listDevices = true;
-        } else if (arg == "--output" && i + 1 < argc) {
-            options.outputPath = argv[++i];
-        } else if (arg == "--device-id" && i + 1 < argc) {
-            options.deviceId = argv[++i];
-        } else if (arg == "--device-index" && i + 1 < argc) {
-            int value = 0;
-            if (!parseInt(argv[i + 1], value) || value < 0) {
-                std::fprintf(stderr, "Invalid value for --device-index: %s\n", argv[i + 1]);
-                return false;
-            }
-            options.deviceIndex = value;
-            i += 1;
-        } else if (arg == "--sample-rate" && i + 1 < argc) {
-            ma_uint32 value = 0;
-            if (!parseUint32(argv[i + 1], value) || value == 0) {
-                std::fprintf(stderr, "Invalid value for --sample-rate: %s\n", argv[i + 1]);
-                return false;
-            }
-            options.sampleRate = value;
-            i += 1;
-        } else if (arg == "--channels" && i + 1 < argc) {
-            ma_uint32 value = 0;
-            if (!parseUint32(argv[i + 1], value) || value == 0) {
-                std::fprintf(stderr, "Invalid value for --channels: %s\n", argv[i + 1]);
-                return false;
-            }
-            options.channels = value;
-            i += 1;
-        } else if (arg == "--bit-depth" && i + 1 < argc) {
-            ma_uint32 value = 0;
-            if (!parseUint32(argv[i + 1], value) || value == 0) {
-                std::fprintf(stderr, "Invalid value for --bit-depth: %s\n", argv[i + 1]);
-                return false;
-            }
-            options.bitDepth = value;
-            i += 1;
-        } else if (arg == "--help" || arg == "-h") {
-            printUsage();
-            return false;
-        } else {
-            std::fprintf(stderr, "Unknown argument: %s\n", arg.c_str());
-            printUsage();
-            return false;
-        }
-    }
-
-    if (!options.listDevices && options.outputPath.empty()) {
-        std::fprintf(stderr, "--output is required unless --list-devices is used.\n");
-        printUsage();
-        return false;
-    }
-
-    return true;
-}
-
-std::string jsonEscape(const std::string& value) {
+constexpr unsigned sampleRate = 16000;
+std::string escape(const std::string& value) {
     std::string out;
-    out.reserve(value.size());
-    for (char c : value) {
-        switch (c) {
-            case '"':
-                out += "\\\"";
-                break;
-            case '\\':
-                out += "\\\\";
-                break;
-            case '\b':
-                out += "\\b";
-                break;
-            case '\f':
-                out += "\\f";
-                break;
-            case '\n':
-                out += "\\n";
-                break;
-            case '\r':
-                out += "\\r";
-                break;
-            case '\t':
-                out += "\\t";
-                break;
-            default:
-                if (static_cast<unsigned char>(c) < 0x20) {
-                    char buf[7] = {};
-                    std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
-                    out += buf;
-                } else {
-                    out += c;
-                }
-                break;
-        }
+    for (unsigned char c : value) {
+        if (c == '"' || c == '\\') { out += '\\'; out += c; }
+        else if (c < 32) { char buf[7]; std::snprintf(buf, sizeof(buf), "\\u%04x", c); out += buf; }
+        else out += c;
     }
     return out;
 }
-
-#ifdef _WIN32
-std::string wasapiIdToUtf8(const ma_device_id& id) {
-    const wchar_t* wide = reinterpret_cast<const wchar_t*>(id.wasapi);
-    if (wide[0] == L'\0') return {};
-
-    int length = WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
-    if (length <= 0) return {};
-    std::string out(static_cast<size_t>(length), '\0');
-    int written = WideCharToMultiByte(CP_UTF8, 0, wide, -1, out.data(), length, nullptr, nullptr);
-    if (written <= 0) return {};
-    if (out.back() == '\0') {
-        out.pop_back();
-    }
-    return out;
+std::wstring wide(const std::string& text) {
+    int count = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, nullptr, 0);
+    std::wstring result(count, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, result.data(), count);
+    if (!result.empty()) result.pop_back();
+    return result;
 }
-
-bool utf8ToWasapiId(const std::string& value, ma_device_id& outId) {
-    std::memset(&outId, 0, sizeof(outId));
-    if (value.empty()) return false;
-
-    int length = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, nullptr, 0);
-    if (length <= 0) return false;
-
-    const size_t maxChars = sizeof(outId.wasapi) / sizeof(outId.wasapi[0]);
-    if (static_cast<size_t>(length) > maxChars) {
-        return false;
+std::string utf8(const wchar_t* text) {
+    int count = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+    std::string result(count, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text, -1, result.data(), count, nullptr, nullptr);
+    if (!result.empty()) result.pop_back();
+    return result;
+}
+void emit(const std::string& text) { std::puts(text.c_str()); std::fflush(stdout); }
+void error(const std::string& text, bool recoverable = false) {
+    emit("{\"type\":\"error\",\"message\":\"" + escape(text) + "\"" + (recoverable ? ",\"recoverable\":true" : "") + "}");
+}
+uint64_t qpcTime() {
+    LARGE_INTEGER now, frequency;
+    QueryPerformanceCounter(&now); QueryPerformanceFrequency(&frequency);
+    return static_cast<uint64_t>(static_cast<long double>(now.QuadPart) * 10000000 / frequency.QuadPart);
+}
+template<class T> void release(T*& ptr) { if (ptr) ptr->Release(); ptr = nullptr; }
+struct Source {
+    std::string kind, path, id;
+    IMMDevice* device = nullptr;
+    IAudioClient* client = nullptr;
+    IAudioCaptureClient* capture = nullptr;
+    WAVEFORMATEX* format = nullptr;
+    ma_encoder encoder{};
+    bool encoded = false, started = false, failed = false;
+    uint64_t frames = 0, packetTime = 0;
+    std::vector<float> pending;
+    float rms = 0, peak = 0;
+    ~Source() {
+        if (started) client->Stop();
+        release(capture); release(client); release(device);
+        CoTaskMemFree(format);
+        if (encoded) ma_encoder_uninit(&encoder);
     }
-
-    MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, reinterpret_cast<wchar_t*>(outId.wasapi), length);
+};
+bool writeFrames(Source& source, const ma_int16* samples, size_t count) {
+    ma_uint64 written = 0;
+    if (ma_encoder_write_pcm_frames(&source.encoder, samples, count, &written) != MA_SUCCESS || written != count) return false;
+    source.frames += written;
     return true;
 }
-#endif
-
-void emitJsonLine(const std::string& line) {
-    std::fwrite(line.c_str(), 1, line.size(), stdout);
-    std::fwrite("\n", 1, 1, stdout);
-    std::fflush(stdout);
+bool pad(Source& source, uint64_t until) {
+    const ma_int16 silence[4096] = {};
+    while (source.frames < until) {
+        if (!writeFrames(source, silence, static_cast<size_t>((std::min)(until - source.frames, uint64_t(4096))))) return false;
+    }
+    return true;
+}
+// Packet QPC timestamps share the system clock across endpoints. Resampling each
+// packet onto that clock prevents independent device clocks accumulating drift.
+bool flushPacket(Source& source, uint64_t endTime, uint64_t epoch) {
+    if (source.pending.empty()) return true;
+    const auto interval = timelineInterval(source.packetTime, endTime, epoch, sampleRate);
+    const uint64_t first = (std::max)(interval.first, source.frames);
+    if (!pad(source, interval.first)) return false;
+    if (interval.second > first) {
+        std::vector<ma_int16> samples(static_cast<size_t>(interval.second - first));
+        for (size_t i = 0; i < samples.size(); ++i) {
+            const float value = resampleFrame(source.pending, first + i - interval.first, interval.second - interval.first);
+            samples[i] = static_cast<ma_int16>((std::clamp)(value * 32767.0f, -32768.0f, 32767.0f));
+        }
+        if (!writeFrames(source, samples.data(), samples.size())) return false;
+    }
+    source.pending.clear();
+    return true;
+}
+uint64_t nominalEnd(const Source& source) {
+    return source.packetTime + static_cast<uint64_t>(source.pending.size()) * 10000000 / source.format->nSamplesPerSec;
+}
+float sampleValue(const BYTE* bytes, const WAVEFORMATEX* format) {
+    const bool floating = format->wFormatTag == WAVE_FORMAT_IEEE_FLOAT ||
+        (format->wFormatTag == WAVE_FORMAT_EXTENSIBLE && reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(format)->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT);
+    if (floating) { float sample; std::memcpy(&sample, bytes, 4); return std::isfinite(sample) ? sample : 0; }
+    if (format->wBitsPerSample == 16) { int16_t sample; std::memcpy(&sample, bytes, 2); return sample / 32768.0f; }
+    if (format->wBitsPerSample == 24) { uint32_t packed = uint32_t(bytes[0]) << 8 | uint32_t(bytes[1]) << 16 | uint32_t(bytes[2]) << 24; return static_cast<int32_t>(packed) / 2147483648.0f; }
+    int32_t sample; std::memcpy(&sample, bytes, 4); return sample / 2147483648.0f;
+}
+HRESULT readPackets(Source& source, uint64_t epoch) {
+    UINT32 available = 0;
+    HRESULT result = source.capture->GetNextPacketSize(&available);
+    while (SUCCEEDED(result) && available) {
+        BYTE* data = nullptr; UINT32 count = 0; DWORD flags = 0; UINT64 position = 0, timestamp = 0;
+        result = source.capture->GetBuffer(&data, &count, &flags, &position, &timestamp);
+        if (FAILED(result)) break;
+        if (flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR) timestamp = qpcTime() - uint64_t(count) * 10000000 / source.format->nSamplesPerSec;
+        // A gap/discontinuity must be silence, never stretched old speech.
+        const uint64_t end = packetEnd(source.packetTime, nominalEnd(source), timestamp, (flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY) != 0);
+        if (!flushPacket(source, end, epoch)) { source.capture->ReleaseBuffer(count); return E_FAIL; }
+        source.packetTime = timestamp;
+        source.pending.assign(count, 0);
+        double squares = 0; float peak = 0;
+        for (UINT32 frame = 0; frame < count; ++frame) {
+            float mono = 0;
+            if (!(flags & AUDCLNT_BUFFERFLAGS_SILENT)) {
+                for (unsigned channel = 0; channel < source.format->nChannels; ++channel)
+                    mono += sampleValue(data + frame * source.format->nBlockAlign + channel * (source.format->wBitsPerSample / 8), source.format);
+                mono /= source.format->nChannels;
+            }
+            source.pending[frame] = mono; squares += mono * mono; peak = (std::max)(peak, std::abs(mono));
+        }
+        source.rms = count ? static_cast<float>(std::sqrt(squares / count)) : 0; source.peak = peak;
+        result = source.capture->ReleaseBuffer(count);
+        if (FAILED(result)) break;
+        result = source.capture->GetNextPacketSize(&available);
+    }
+    return result;
+}
+HRESULT initialize(Source& source, IMMDeviceEnumerator* enumerator) {
+    const EDataFlow flow = source.kind == "system" ? eRender : eCapture;
+    HRESULT result = source.id.empty() ? enumerator->GetDefaultAudioEndpoint(flow, eConsole, &source.device)
+                                      : enumerator->GetDevice(wide(source.id).c_str(), &source.device);
+    if (FAILED(result)) return result;
+    IMMEndpoint* endpoint = nullptr; EDataFlow actual = eAll;
+    result = source.device->QueryInterface(__uuidof(IMMEndpoint), reinterpret_cast<void**>(&endpoint));
+    if (SUCCEEDED(result)) result = endpoint->GetDataFlow(&actual);
+    release(endpoint);
+    if (FAILED(result) || actual != flow) return E_INVALIDARG;
+    result = source.device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&source.client));
+    if (FAILED(result)) return result;
+    result = source.client->GetMixFormat(&source.format);
+    if (FAILED(result)) return result;
+    const bool floating = source.format->wFormatTag == WAVE_FORMAT_IEEE_FLOAT || (source.format->wFormatTag == WAVE_FORMAT_EXTENSIBLE && reinterpret_cast<WAVEFORMATEXTENSIBLE*>(source.format)->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT);
+    const bool pcm = source.format->wFormatTag == WAVE_FORMAT_PCM || (source.format->wFormatTag == WAVE_FORMAT_EXTENSIBLE && reinterpret_cast<WAVEFORMATEXTENSIBLE*>(source.format)->SubFormat == KSDATAFORMAT_SUBTYPE_PCM);
+    if ((!floating && !pcm) || (floating && source.format->wBitsPerSample != 32) || (pcm && source.format->wBitsPerSample != 16 && source.format->wBitsPerSample != 24 && source.format->wBitsPerSample != 32)) return AUDCLNT_E_UNSUPPORTED_FORMAT;
+    result = source.client->Initialize(AUDCLNT_SHAREMODE_SHARED, source.kind == "system" ? AUDCLNT_STREAMFLAGS_LOOPBACK : 0, 1000000, 0, source.format, nullptr);
+    if (FAILED(result)) return result;
+    result = source.client->GetService(__uuidof(IAudioCaptureClient), reinterpret_cast<void**>(&source.capture));
+    if (FAILED(result)) return result;
+    const auto config = ma_encoder_config_init(ma_encoding_format_wav, ma_format_s16, 1, sampleRate);
+    if (ma_encoder_init_file_w(wide(source.path).c_str(), &config, &source.encoder) != MA_SUCCESS) return E_FAIL;
+    source.encoded = true;
+    return S_OK;
+}
+bool stopRequested() {
+    HANDLE input = GetStdHandle(STD_INPUT_HANDLE); DWORD available = 0;
+    if (!PeekNamedPipe(input, nullptr, 0, nullptr, &available, nullptr)) return true;
+    if (!available) return false;
+    char text[64]; DWORD read = 0;
+    return ReadFile(input, text, (std::min)(available, DWORD(sizeof(text))), &read, nullptr) && read > 0;
+}
+bool listDevices(IMMDeviceEnumerator* enumerator) {
+    std::string json = "["; bool first = true;
+    for (EDataFlow flow : {eRender, eCapture}) {
+        IMMDeviceCollection* collection = nullptr;
+        if (FAILED(enumerator->EnumAudioEndpoints(flow, DEVICE_STATE_ACTIVE, &collection))) return false;
+        IMMDevice* defaultDevice = nullptr; LPWSTR defaultId = nullptr;
+        if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(flow, eConsole, &defaultDevice))) defaultDevice->GetId(&defaultId);
+        UINT count = 0; collection->GetCount(&count);
+        for (UINT i = 0; i < count; ++i) {
+            IMMDevice* device = nullptr; IPropertyStore* properties = nullptr; LPWSTR id = nullptr;
+            PROPVARIANT name; PropVariantInit(&name);
+            if (SUCCEEDED(collection->Item(i, &device)) && SUCCEEDED(device->GetId(&id)) && SUCCEEDED(device->OpenPropertyStore(STGM_READ, &properties)) && SUCCEEDED(properties->GetValue(PKEY_Device_FriendlyName, &name)) && name.vt == VT_LPWSTR) {
+                if (!first) json += ','; first = false;
+                json += "{\"id\":\"" + escape(utf8(id)) + "\",\"name\":\"" + escape(utf8(name.pwszVal)) + "\",\"source\":\"" + (flow == eRender ? "system" : "microphone") + "\",\"isDefault\":" + (defaultId && std::wcscmp(id, defaultId) == 0 ? "true" : "false") + "}";
+            }
+            PropVariantClear(&name); CoTaskMemFree(id); release(properties); release(device);
+        }
+        CoTaskMemFree(defaultId); release(defaultDevice); release(collection);
+    }
+    emit(json + "]"); return true;
+}
 }
 
-void emitError(const std::string& message) {
-    emitJsonLine("{\"type\":\"error\",\"message\":\"" + jsonEscape(message) + "\"}");
-}
-
-ma_result listDevices() {
-    ma_backend backends[] = { ma_backend_wasapi };
-    ma_context context;
-    ma_context_config config = ma_context_config_init();
-    ma_result result = ma_context_init(backends, 1, &config, &context);
-    if (result != MA_SUCCESS) {
-        return result;
+int wmain(int argc, wchar_t** wideArgv) {
+    std::vector<std::string> arguments;
+    for (int i = 0; i < argc; ++i) arguments.push_back(utf8(wideArgv[i]));
+    std::vector<const char*> argv;
+    for (auto& argument : arguments) argv.push_back(argument.c_str());
+    std::string output, microphoneOutput, systemId, microphoneId; bool list = false, system = true;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--list-devices") list = true;
+        else if (arg == "--system-off") system = false;
+        else if (i + 1 < argc && arg == "--output") output = argv[++i];
+        else if (i + 1 < argc && arg == "--microphone-output") microphoneOutput = argv[++i];
+        else if (i + 1 < argc && arg == "--device-id") systemId = argv[++i];
+        else if (i + 1 < argc && arg == "--microphone-device-id") microphoneId = argv[++i];
+        else if (i + 1 < argc && (arg == "--sample-rate" || arg == "--channels" || arg == "--bit-depth")) {
+            std::string expected = arg == "--sample-rate" ? "16000" : arg == "--channels" ? "1" : "16";
+            if (argv[++i] != expected) { error("Unsupported output format."); return 1; }
+        } else { error("Invalid capture arguments."); return 1; }
     }
-
-    ma_device_info* playbackInfos = nullptr;
-    ma_uint32 playbackCount = 0;
-    ma_device_info* captureInfos = nullptr;
-    ma_uint32 captureCount = 0;
-    result = ma_context_get_devices(&context, &playbackInfos, &playbackCount, &captureInfos, &captureCount);
-
-    if (result != MA_SUCCESS) {
-        ma_context_uninit(&context);
-        return result;
+    if (!list && (output.empty() || (!system && microphoneOutput.empty()))) { error("No recording source selected."); return 1; }
+    HRESULT result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(result)) { error("Audio initialization failed."); return 1; }
+    IMMDeviceEnumerator* enumerator = nullptr;
+    result = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), reinterpret_cast<void**>(&enumerator));
+    if (FAILED(result)) { CoUninitialize(); error("Audio device enumeration failed."); return 1; }
+    if (list) { bool ok = listDevices(enumerator); release(enumerator); CoUninitialize(); return ok ? 0 : 1; }
+    std::vector<std::unique_ptr<Source>> sources;
+    auto add = [&](std::string kind, std::string path, std::string id) { auto source = std::make_unique<Source>(); source->kind = kind; source->path = path; source->id = id; sources.push_back(std::move(source)); };
+    if (system) add("system", output, systemId);
+    if (!microphoneOutput.empty()) add("microphone", microphoneOutput, microphoneId);
+    auto abortStart = [&]() { sources.clear(); release(enumerator); CoUninitialize(); return 1; };
+    for (auto& source : sources) {
+        result = initialize(*source, enumerator);
+        if (FAILED(result)) { error("Could not initialize " + source->kind + " (" + std::to_string(result) + ")."); return abortStart(); }
     }
-
-    std::string payload = "[";
-    for (ma_uint32 i = 0; i < playbackCount; i += 1) {
-        const ma_device_info& info = playbackInfos[i];
-        if (i > 0) payload += ",";
-        std::string idStr = wasapiIdToUtf8(info.id);
-        payload += "{\"id\":\"" + jsonEscape(idStr) + "\",\"name\":\""
-            + jsonEscape(info.name) + "\",\"isDefault\":"
-            + (info.isDefault ? "true" : "false") + ",\"index\":"
-            + std::to_string(i) + "}";
+    const uint64_t epoch = qpcTime();
+    for (auto& source : sources) {
+        result = source->client->Start();
+        if (FAILED(result)) { error("Could not start " + source->kind + " (" + std::to_string(result) + ")."); return abortStart(); }
+        source->started = true;
     }
-    payload += "]";
-    std::fwrite(payload.c_str(), 1, payload.size(), stdout);
-    std::fflush(stdout);
-
-    ma_context_uninit(&context);
-    return MA_SUCCESS;
-}
-
-void dataCallback(ma_device* device, void* /*pOutput*/, const void* pInput, ma_uint32 frameCount) {
-    if (!device || !pInput) return;
-
-    auto* state = reinterpret_cast<AppState*>(device->pUserData);
-    if (!state) return;
-
-    ma_result result = ma_encoder_write_pcm_frames(&state->encoder, pInput, frameCount, nullptr);
-    if (result != MA_SUCCESS) {
-        state->lastError.store(result);
-        g_shouldQuit.store(true);
-        return;
-    }
-
-    const ma_uint64 frames = static_cast<ma_uint64>(frameCount);
-    state->totalFrames.fetch_add(frames);
-    state->bytesWritten.fetch_add(frames * state->bytesPerFrame);
-
-    const auto* samples = reinterpret_cast<const ma_int16*>(pInput);
-    const ma_uint64 sampleCount = frames * state->channels;
-    if (sampleCount == 0) return;
-
-    double sumSquares = 0.0;
-    ma_int32 peak = 0;
-    bool clipped = false;
-
-    for (ma_uint64 i = 0; i < sampleCount; i += 1) {
-        const ma_int32 sample = samples[i];
-        const ma_int32 absValue = sample < 0 ? -sample : sample;
-        if (absValue >= 32767) clipped = true;
-        if (absValue > peak) peak = absValue;
-        const double normalized = static_cast<double>(sample) / 32768.0;
-        sumSquares += normalized * normalized;
-    }
-
-    const double rms = std::sqrt(sumSquares / static_cast<double>(sampleCount));
-    const double peakNorm = static_cast<double>(peak) / 32768.0;
-
-    state->rms.store(static_cast<float>(rms));
-    state->peak.store(static_cast<float>(peakNorm));
-    state->clipped.store(clipped ? 1 : 0);
-}
-
-DeviceChoice resolveDeviceChoice(const Options& options) {
-    DeviceChoice choice;
-#ifdef _WIN32
-    if (!options.deviceId.empty()) {
-        if (utf8ToWasapiId(options.deviceId, choice.id)) {
-            choice.hasId = true;
+    emit("{\"type\":\"ready\"}");
+    uint64_t lastProgress = epoch;
+    auto fail = [&](Source& source, HRESULT reason) {
+        source.failed = true;
+        std::fprintf(stderr, "Capture failure for %s: %ld\n", source.kind.c_str(), static_cast<long>(reason));
+        flushPacket(source, nominalEnd(source), epoch);
+        source.client->Stop(); source.started = false;
+        emit("{\"type\":\"source-error\",\"source\":\"" + source.kind + "\",\"message\":\"Recording source became unavailable.\"}");
+    };
+    while (!stopRequested()) {
+        bool active = false;
+        for (auto& source : sources) {
+            if (source->failed) continue;
+            DWORD state = 0;
+            result = source->device->GetState(&state);
+            if (SUCCEEDED(result) && state != DEVICE_STATE_ACTIVE) result = AUDCLNT_E_DEVICE_INVALIDATED;
+            if (SUCCEEDED(result)) result = readPackets(*source, epoch);
+            if (FAILED(result)) fail(*source, result); else active = true;
         }
-    }
-#endif
-    if (options.deviceIndex >= 0) {
-        choice.hasIndex = true;
-        choice.index = options.deviceIndex;
-    }
-    return choice;
-}
-
-ma_result resolveDeviceIdFromIndex(ma_context& context, int index, ma_device_id& outId) {
-    ma_device_info* playbackInfos = nullptr;
-    ma_uint32 playbackCount = 0;
-    ma_device_info* captureInfos = nullptr;
-    ma_uint32 captureCount = 0;
-    ma_result result = ma_context_get_devices(&context, &playbackInfos, &playbackCount, &captureInfos, &captureCount);
-    if (result != MA_SUCCESS) return result;
-    if (index < 0 || static_cast<ma_uint32>(index) >= playbackCount) return MA_INVALID_ARGS;
-
-    outId = playbackInfos[index].id;
-    return MA_SUCCESS;
-}
-
-} // namespace
-
-int main(int argc, char** argv) {
-    std::signal(SIGINT, onSignal);
-    std::signal(SIGTERM, onSignal);
-
-    Options options;
-    if (!parseArgs(argc, argv, options)) {
-        return 1;
-    }
-
-    if (options.listDevices) {
-        ma_result result = listDevices();
-        if (result != MA_SUCCESS) {
-            std::fprintf(stderr, "Failed to list devices: %s\n", ma_result_description(result));
-            return 1;
+        const uint64_t now = qpcTime();
+        if (now - lastProgress > 2500000) {
+            lastProgress = now;
+            emit("{\"type\":\"progress\",\"durationMs\":" + std::to_string((now - epoch) / 10000) + "}");
+            for (auto& source : sources) {
+                // Loopback may produce no packets while the system is silent.
+                if (now > nominalEnd(*source) + 2500000) { source->rms = 0; source->peak = 0; }
+                emit("{\"type\":\"level\",\"source\":\"" + source->kind + "\",\"rms\":" + std::to_string(source->rms) + ",\"peak\":" + std::to_string(source->peak) + ",\"clipped\":" + (source->peak >= 1 ? "true" : "false") + "}");
+            }
         }
-        return 0;
+        if (!active) break;
+        Sleep(5);
     }
-
-    if (options.bitDepth != 16) {
-        std::fprintf(stderr, "Only 16-bit PCM is supported.\n");
-        return 1;
-    }
-
-    ma_backend backends[] = { ma_backend_wasapi };
-    ma_context context;
-    ma_context_config contextConfig = ma_context_config_init();
-    ma_result result = ma_context_init(backends, 1, &contextConfig, &context);
-    if (result != MA_SUCCESS) {
-        emitError(std::string("Failed to init audio context: ") + ma_result_description(result));
-        return 1;
-    }
-
-    DeviceChoice choice = resolveDeviceChoice(options);
-    ma_device_id resolvedDeviceId{};
-    const ma_device_id* deviceIdPtr = nullptr;
-
-    if (choice.hasId) {
-        resolvedDeviceId = choice.id;
-        deviceIdPtr = &resolvedDeviceId;
-    } else if (choice.hasIndex) {
-        result = resolveDeviceIdFromIndex(context, choice.index, resolvedDeviceId);
-        if (result != MA_SUCCESS) {
-            ma_context_uninit(&context);
-            emitError(std::string("Invalid device index: ") + std::to_string(choice.index));
-            return 1;
+    const uint64_t end = qpcTime();
+    bool finalized = true;
+    for (auto& source : sources) {
+        if (source->started) {
+            result = readPackets(*source, epoch);
+            if (FAILED(result)) fail(*source, result);
+            source->client->Stop(); source->started = false;
         }
-        deviceIdPtr = &resolvedDeviceId;
+        if (!flushPacket(*source, (std::min)(nominalEnd(*source), end), epoch) || !pad(*source, timelineFrame(end, epoch, sampleRate))) finalized = false;
     }
-
-    AppState state;
-    state.sampleRate = options.sampleRate;
-    state.channels = options.channels;
-    state.bytesPerFrame = options.channels * (options.bitDepth / 8);
-
-    ma_encoder_config encoderConfig = ma_encoder_config_init(
-        ma_encoding_format_wav,
-        ma_format_s16,
-        options.channels,
-        options.sampleRate
-    );
-    result = ma_encoder_init_file(options.outputPath.c_str(), &encoderConfig, &state.encoder);
-    if (result != MA_SUCCESS) {
-        ma_context_uninit(&context);
-        emitError(std::string("Failed to open output: ") + ma_result_description(result));
-        return 1;
-    }
-
-    ma_device_config deviceConfig = ma_device_config_init(ma_device_type_loopback);
-    deviceConfig.capture.format = ma_format_s16;
-    deviceConfig.capture.channels = options.channels;
-    deviceConfig.capture.pDeviceID = deviceIdPtr;
-    deviceConfig.capture.shareMode = ma_share_mode_shared;
-    deviceConfig.sampleRate = options.sampleRate;
-    deviceConfig.dataCallback = dataCallback;
-    deviceConfig.pUserData = &state;
-
-    ma_device device;
-    result = ma_device_init(&context, &deviceConfig, &device);
-    if (result != MA_SUCCESS) {
-        ma_encoder_uninit(&state.encoder);
-        ma_context_uninit(&context);
-        emitError(std::string("Failed to init loopback device: ") + ma_result_description(result));
-        return 1;
-    }
-
-    emitJsonLine("{\"type\":\"format\",\"sampleRateHz\":" + std::to_string(options.sampleRate)
-        + ",\"channels\":" + std::to_string(options.channels)
-        + ",\"bitDepth\":16,\"codec\":\"pcm_s16le\"}");
-
-    result = ma_device_start(&device);
-    if (result != MA_SUCCESS) {
-        ma_device_uninit(&device);
-        ma_encoder_uninit(&state.encoder);
-        ma_context_uninit(&context);
-        emitError(std::string("Failed to start loopback device: ") + ma_result_description(result));
-        return 1;
-    }
-
-    using clock = std::chrono::steady_clock;
-    auto lastProgressAt = clock::now();
-    auto lastLevelAt = clock::now();
-
-    while (!g_shouldQuit.load()) {
-        if (state.lastError.load() != MA_SUCCESS) {
-            emitError(std::string("Encoder error: ") + ma_result_description(static_cast<ma_result>(state.lastError.load())));
-            break;
-        }
-
-        const auto now = clock::now();
-        if (now - lastProgressAt >= std::chrono::milliseconds(300)) {
-            lastProgressAt = now;
-            const auto frames = state.totalFrames.load();
-            const double durationMs = options.sampleRate > 0
-                ? (static_cast<double>(frames) / static_cast<double>(options.sampleRate)) * 1000.0
-                : 0.0;
-            emitJsonLine("{\"type\":\"progress\",\"durationMs\":" + std::to_string(static_cast<long long>(durationMs))
-                + ",\"bytesWritten\":" + std::to_string(state.bytesWritten.load()) + "}");
-        }
-
-        if (now - lastLevelAt >= std::chrono::milliseconds(250)) {
-            lastLevelAt = now;
-            const float rms = state.rms.load();
-            const float peak = state.peak.load();
-            const bool clipped = state.clipped.load() != 0;
-            emitJsonLine("{\"type\":\"level\",\"rms\":" + std::to_string(rms)
-                + ",\"peak\":" + std::to_string(peak)
-                + ",\"clipped\":" + std::string(clipped ? "true" : "false") + "}");
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    }
-
-    ma_device_stop(&device);
-    ma_device_uninit(&device);
-    ma_encoder_uninit(&state.encoder);
-    ma_context_uninit(&context);
-
+    sources.clear(); release(enumerator); CoUninitialize();
+    if (!finalized) { error("Could not finalize recording audio.", true); return 1; }
+    emit("{\"type\":\"finished\",\"durationMs\":" + std::to_string((end - epoch) / 10000) + "}");
     return 0;
 }

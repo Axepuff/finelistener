@@ -9,7 +9,7 @@ import type {
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
 import type { SessionDetails, SessionListItem } from 'electron/src/types/sessions';
-import type { TranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
+import type { TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
 
@@ -19,10 +19,11 @@ export interface RendererAdapter {
     getSession: (sessionId: string) => Promise<SessionDetails>;
     deleteSession: (sessionId: string) => Promise<boolean>;
     importAudio: () => Promise<SessionDetails | null>;
-    importRecording: (recordingFilePath: string) => Promise<SessionDetails>;
+    importRecording: (recordingFilePath: string | RecordingResult) => Promise<SessionDetails>;
     optimizeAudio: (sessionId: string) => Promise<SessionDetails>;
     revealSessionsFolder: () => Promise<boolean>;
     transcribe: (audioPath: string, options: TranscribeOpts) => Promise<string>;
+    transcribeSession: (sessionId: string, options: SessionTranscribeOpts) => Promise<SessionDetails>;
     stopTranscription: () => Promise<boolean>;
     saveText: (content: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
     startSystemRecording: (options?: RecordingStartOptions) => Promise<RecordingSession>;
@@ -52,6 +53,7 @@ export interface RendererAdapter {
     onRecordingState: (callback: (state: RecordingState) => void) => () => void;
     onRecordingProgress: (callback: (progress: RecordingProgress) => void) => () => void;
     onRecordingLevel: (callback: (level: RecordingLevel) => void) => () => void;
+    onRecordingFinished: (callback: (result: RecordingResult) => void) => () => void;
     onRecordingError: (callback: (payload: { message: string }) => void) => () => void;
     onWhisperModelDownloadProgress: (callback: (payload: WhisperModelDownloadProgress) => void) => () => void;
 }
@@ -69,6 +71,7 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
         optimizeAudio: (sessionId) => api.sessions.optimizeAudio(sessionId),
         revealSessionsFolder: () => api.sessions.revealFolder(),
         transcribe: (audioPath, options) => api.transcribeStream(audioPath, options),
+        transcribeSession: (sessionId, options) => api.transcribeSession(sessionId, options),
         stopTranscription: () => api.stopTranscription(),
         saveText: (content) => api.saveText(content),
         startSystemRecording: (options) => api.startSystemRecording(options),
@@ -91,6 +94,7 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
         onRecordingState: (callback) => api.onRecordingState(callback),
         onRecordingProgress: (callback) => api.onRecordingProgress(callback),
         onRecordingLevel: (callback) => api.onRecordingLevel(callback),
+        onRecordingFinished: (callback) => api.onRecordingFinished(callback),
         onRecordingError: (callback) => api.onRecordingError(callback),
         onWhisperModelDownloadProgress: (callback) => api.onWhisperModelDownloadProgress(callback),
     };

@@ -13,6 +13,7 @@ const toWorkspaceSession = (session: DeepReadonly<WorkspaceSession>): WorkspaceS
     audioOriginalPath: session.audioOriginalPath,
     audioWavPath: session.audioWavPath,
     audioOptimizedWavPath: session.audioOptimizedWavPath,
+    tracks: session.tracks?.map((track) => ({ ...track })),
 });
 
 export class WorkspaceStore {

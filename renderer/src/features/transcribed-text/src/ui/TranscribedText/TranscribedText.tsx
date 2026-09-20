@@ -1,7 +1,8 @@
-import { ActionIcon, Group, Paper, Progress, Stack, Text } from '@mantine/core';
+import { ActionIcon, Alert, Button, Group, Paper, Progress, Stack, Text } from '@mantine/core';
 import { IconPlus } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState, type MouseEvent } from 'react';
+import { formatTranscriptSegment } from 'renderer/src/stores/transcriptFormat';
 import { useAppStore } from '../../../../../AppContext';
 import { TranscribedTextContent } from './TranscribedTextContent';
 import { TranscribedTextControls } from './TranscribedTextControls';
@@ -17,7 +18,7 @@ export const TranscribedText: React.FC = observer(() => {
         || store.lifecycleState === 'importing'
     ) && currentTextValue.trim().length === 0;
     const plainSegments = transcription.visibleTranscript?.segments.map((segment) => ({
-        text: segment.text,
+        text: formatTranscriptSegment(segment),
         startSeconds: segment.startSec,
     })) ?? [];
 
@@ -89,6 +90,27 @@ export const TranscribedText: React.FC = observer(() => {
                         </Group>
                     ) : null}
 
+                    {transcription.isIncomplete ? (
+                        <Alert color={transcription.allSourcesFailed ? 'red' : 'yellow'} title={transcription.allSourcesFailed ? 'Transcription failed' : 'Incomplete transcription'}>
+                            <Stack gap={8}>
+                                <Text size="sm">{transcription.hasCompletedSources ?
+                                    'Completed sources are saved. Retry to transcribe the remaining sources using the original settings.' :
+                                    'No source was transcribed. Retry using the original settings.'}</Text>
+                                <Button size="compact-sm" variant="light" disabled={store.operations.isBusy} onClick={() => {
+                                    void store.retryIncompleteTranscription().then((result) => {
+                                        if (!result.ok) store.activityLog.appendEvent(result.message);
+                                    });
+                                }}>
+                                    {'Retry remaining sources'}
+                                </Button>
+                            </Stack>
+                        </Alert>
+                    ) : null}
+                    {store.workspace.activeSession?.tracks?.some((track) => track.failure) ? (
+                        <Alert color="yellow" title="Recording interrupted">
+                            {'A recording source stopped early. Only the captured audio is available.'}
+                        </Alert>
+                    ) : null}
                     <TranscribedTextContent
                         showRegions={showRegions}
                         renderedText={transcription.renderedHtml}

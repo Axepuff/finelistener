@@ -1,6 +1,7 @@
 import type {
     RecordingLevel,
     RecordingProgress,
+    RecordingResult,
     RecordingState,
 } from 'electron/src/services/RecordingService';
 import type { SessionDetails } from 'electron/src/types/sessions';
@@ -43,6 +44,7 @@ const clearSessionBeforeStart = (previous: RecordingSessionState): RecordingSess
     ...previous,
     recordingError: null,
     recordingLevel: null,
+    sourceLevels: {},
     showSilenceWarning: false,
     recordingDurationMs: 0,
     recordingBytesWritten: null,
@@ -76,8 +78,12 @@ const applyRecordingProgress = (
 ): RecordingSessionState => ({
     ...previous,
     recordingDurationMs: progress.durationMs,
+    sourceLevels: Object.fromEntries(Object.entries(previous.sourceLevels).filter(([source]) =>
+        !progress.sourceFailures?.some((failure) => failure.source === source))),
     recordingBytesWritten: typeof progress.bytesWritten === 'number' ? progress.bytesWritten : null,
     lastProgressAt: Date.now(),
+    recordingError: progress.sourceFailures?.length ? progress.sourceFailures.map((failure) =>
+        `${failure.source === 'microphone' ? 'Microphone' : 'System audio'} stopped recording.`).join(' ') : previous.recordingError,
 });
 
 const getSilenceWarningMessage = (platform: string | null): string => {
@@ -88,7 +94,7 @@ const getSilenceWarningMessage = (platform: string | null): string => {
             ' that terminal app there as well.';
     }
 
-    return 'No system audio detected. Check that audio is playing and the correct output device is selected.';
+    return 'No audio detected. Check the selected recording devices.';
 };
 
 const applyRecordingLevel = (
@@ -211,6 +217,7 @@ export class RecordingSessionStore {
             api.onRecordingProgress((progress) => this.handleRecordingProgress(progress)),
             api.onRecordingLevel((level) => this.handleRecordingLevel(level)),
             api.onRecordingError((payload) => this.handleRecordingError(payload)),
+            api.onRecordingFinished((result) => { void this.finishAutomaticRecording(result); }),
         ];
         this.durationTimer = globalThis.setInterval(() => this.updateFallbackDuration(), 200);
     }
@@ -238,7 +245,12 @@ export class RecordingSessionStore {
     async startRecording(): Promise<CommandResult> {
         const api = this.dependencies.adapter;
 
-        if (!api) return commandFailure('System audio recording is not available.');
+        if (!api) return commandFailure('Audio recording is not available.');
+        const devices = this.dependencies.devicesStore.state;
+
+        if (api.runtimePlatform === 'win32' && (devices.isLoading || (devices.systemDeviceId === null && devices.microphoneDeviceId === null))) {
+            return commandFailure('Enable at least one recording source.');
+        }
 
         const operation = this.dependencies.operations.begin('recording');
 
@@ -276,6 +288,10 @@ export class RecordingSessionStore {
             const { selectedDeviceId } = this.dependencies.devicesStore.state;
             const session = await api.startSystemRecording({
                 deviceId: selectedDeviceId || undefined,
+                sources: api.runtimePlatform === 'win32' ? {
+                    system: devices.systemDeviceId,
+                    microphone: devices.microphoneDeviceId,
+                } : undefined,
             });
 
             if (!this.dependencies.operations.owns(operation) || this.disposed) {
@@ -288,11 +304,25 @@ export class RecordingSessionStore {
         } catch (error: unknown) {
             const message = getErrorMessage(error);
 
-            return this.failStart(operation, `Failed to start recording: ${message}`, message);
+            console.error('Failed to start recording', error);
+
+            return this.failStart(operation, `Failed to start recording: ${message}`, 'Could not start recording. Check the selected devices.');
         }
     }
 
     async stopRecording(): Promise<CommandResult<SessionDetails>> {
+        return this.finishRecording();
+    }
+
+    private async finishAutomaticRecording(result: RecordingResult): Promise<void> {
+        if (this.disposed || this.stateValue.isProcessingRecording) return;
+        if (!this.activeOperation) this.activeOperation = this.dependencies.operations.begin('recording');
+        if (!this.activeOperation) return;
+
+        await this.finishRecording(result);
+    }
+
+    private async finishRecording(completedResult?: RecordingResult): Promise<CommandResult<SessionDetails>> {
         const api = this.dependencies.adapter;
         const operation = this.activeOperation;
 
@@ -300,16 +330,21 @@ export class RecordingSessionStore {
             return commandFailure('No recording is running.');
         }
 
+        if (this.stateValue.isProcessingRecording) return commandFailure('Recording is already being saved.');
+
         this.dependencies.operations.transition(operation, 'processing-recording');
         this.stateValue = { ...this.stateValue, isProcessingRecording: true };
         let captureStopped = false;
 
         try {
-            const result = await api.stopSystemRecording();
+            const result = completedResult ?? await api.stopSystemRecording();
 
             captureStopped = true;
             this.dependencies.logService.append(`Recording finished: ${result.filePath}`);
-            const session = await api.importRecording(result.filePath);
+            if (!this.dependencies.operations.owns(operation) || this.disposed) {
+                return commandFailure('Recording was cancelled.');
+            }
+            const session = await api.importRecording(result);
 
             if (!this.dependencies.operations.owns(operation) || this.disposed) {
                 return commandFailure('The recorded session was replaced before it finished loading.');
@@ -326,7 +361,7 @@ export class RecordingSessionStore {
 
             console.error('Failed to stop recording', error);
             runInAction(() => {
-                this.stateValue = { ...this.stateValue, recordingError: message };
+                this.stateValue = { ...this.stateValue, recordingError: 'Failed to finish the recording.' };
             });
             this.dependencies.logService.append(`Failed to stop recording: ${message}`);
 
@@ -378,7 +413,14 @@ export class RecordingSessionStore {
 
     private handleRecordingLevel(level: RecordingLevel): void {
         const platform = this.dependencies.adapter?.runtimePlatform ?? null;
-        const { nextState, logMessage } = applyRecordingLevel(this.stateValue, level, platform);
+        const sourceLevels = level.source ? { ...this.stateValue.sourceLevels, [level.source]: level } : this.stateValue.sourceLevels;
+        const levels = Object.values(sourceLevels);
+        const combinedLevel = level.source ? {
+            peak: Math.max(...levels.map((value) => value.peak)),
+            rms: Math.max(...levels.map((value) => value.rms)),
+            clipped: levels.some((value) => value.clipped),
+        } : level;
+        const { nextState, logMessage } = applyRecordingLevel({ ...this.stateValue, sourceLevels }, combinedLevel, platform);
 
         this.stateValue = nextState;
 
@@ -388,7 +430,7 @@ export class RecordingSessionStore {
     }
 
     private handleRecordingError(payload: { message: string }): void {
-        this.stateValue = { ...this.stateValue, recordingError: payload.message };
+        this.stateValue = { ...this.stateValue, recordingError: 'Recording failed. Check the selected devices.' };
         this.dependencies.logService.append(`Recording error: ${payload.message}`);
     }
 

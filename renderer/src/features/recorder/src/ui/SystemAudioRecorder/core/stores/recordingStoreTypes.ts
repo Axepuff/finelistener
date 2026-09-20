@@ -11,6 +11,9 @@ export interface RecordingAvailabilityState {
 export interface RecordingDevicesState {
     devices: RecordingDevice[];
     selectedDeviceId: string;
+    systemDeviceId: string | null;
+    microphoneDeviceId: string | null;
+    isLoading: boolean;
     deviceError: string | null;
 }
 
@@ -19,6 +22,7 @@ export interface RecordingSessionState {
     recordingDurationMs: number;
     recordingBytesWritten: number | null;
     recordingLevel: RecordingLevel | null;
+    sourceLevels: Partial<Record<'system' | 'microphone', RecordingLevel>>;
     showSilenceWarning: boolean;
     recordingError: string | null;
     isProcessingRecording: boolean;
@@ -40,6 +44,9 @@ export const initialAvailabilityState: RecordingAvailabilityState = {
 export const initialDevicesState: RecordingDevicesState = {
     devices: [],
     selectedDeviceId: '',
+    systemDeviceId: '',
+    microphoneDeviceId: '',
+    isLoading: true,
     deviceError: null,
 };
 
@@ -48,6 +55,7 @@ export const initialSessionState: RecordingSessionState = {
     recordingDurationMs: 0,
     recordingBytesWritten: null,
     recordingLevel: null,
+    sourceLevels: {},
     showSilenceWarning: false,
     recordingError: null,
     isProcessingRecording: false,

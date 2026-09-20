@@ -1,14 +1,40 @@
+import type { TranscribeOpts } from './transcription';
+
 export type SessionSourceKind = 'imported' | 'recorded';
+export type RecordingSource = 'system' | 'microphone';
+
+export interface SessionSourceTrack {
+    source: RecordingSource;
+    filePath: string;
+    startOffsetMs: number;
+    durationMs?: number;
+    failure?: string;
+}
+
+export interface SessionSourceResult {
+    source: RecordingSource;
+    status: 'pending' | 'completed' | 'failed';
+    segments: SessionTranscriptSegmentV1[];
+    error?: string;
+}
+
+export interface SessionSourceRun {
+    status: 'incomplete' | 'completed';
+    settings: Omit<TranscribeOpts, 'runId' | 'sessionId'> & { optimized?: boolean };
+    sources: SessionSourceResult[];
+}
 
 export interface SessionTranscriptSegmentV1 {
     startSec: number;
     endSec: number | null;
     text: string;
+    source?: RecordingSource;
 }
 
 export interface SessionTranscriptV1 {
     version: 1;
     segments: SessionTranscriptSegmentV1[];
+    sourceRun?: SessionSourceRun;
 }
 
 export interface SessionAudioInfo {
@@ -52,6 +78,7 @@ export interface SessionFileV1 {
     audio: SessionAudioInfo;
     transcript?: SessionTranscriptInfo;
     transcription?: SessionTranscriptionInfo;
+    tracks?: SessionSourceTrack[];
 }
 
 export interface SessionListItem {
@@ -68,4 +95,5 @@ export interface SessionDetails extends SessionListItem {
     audioWavPath: string;
     audioOptimizedWavPath?: string;
     transcript?: SessionTranscriptV1;
+    tracks?: SessionSourceTrack[];
 }

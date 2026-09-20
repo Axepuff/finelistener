@@ -9,7 +9,7 @@ import type {
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
 import type { SessionDetails, SessionListItem } from 'electron/src/types/sessions';
-import type { TranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
+import type { TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
 
@@ -26,7 +26,7 @@ declare global {
                 get: (sessionId: string) => Promise<SessionDetails>;
                 delete: (sessionId: string) => Promise<boolean>;
                 importAudio: () => Promise<SessionDetails | null>;
-                importRecording: (recordingFilePath: string) => Promise<SessionDetails>;
+                importRecording: (recordingFilePath: string | RecordingResult) => Promise<SessionDetails>;
                 optimizeAudio: (sessionId: string) => Promise<SessionDetails>;
                 revealFolder: () => Promise<boolean>;
             };
@@ -46,7 +46,9 @@ declare global {
             onRecordingState: (cb: (state: RecordingState) => void) => () => void;
             onRecordingProgress: (cb: (progress: RecordingProgress) => void) => () => void;
             onRecordingLevel: (cb: (level: RecordingLevel) => void) => () => void;
+            onRecordingFinished: (callback: (result: RecordingResult) => void) => () => void;
             onRecordingError: (cb: (payload: { message: string }) => void) => () => void;
+            transcribeSession: (sessionId: string, options: SessionTranscribeOpts) => Promise<SessionDetails>;
             stopTranscription: () => Promise<boolean>;
             getWhisperModels: () => Promise<WhisperModelInfo[]>;
             downloadWhisperModel: (modelName: WhisperModelName) => Promise<void>;

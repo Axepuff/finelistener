@@ -264,4 +264,39 @@ describe('RecordingService', () => {
 
         await service.stopRecording();
     });
+
+    it('passes both selected sources through and rejects an empty selection before starting', async () => {
+        const service = new RecordingService(adapter);
+
+        await expect(service.startRecording({ sources: { system: null, microphone: null } })).rejects.toThrow('Select at least one');
+        expect(adapter.startRecording).not.toHaveBeenCalled();
+        expect(service.getState()).toBe('idle');
+        await service.startRecording({ sources: { system: 'output', microphone: 'input' } });
+        expect(adapter.startOptions[0].sources).toEqual({ system: 'output', microphone: 'input' });
+        await service.stopRecording();
+    });
+
+    it('keeps surviving capture active and publishes an automatic finish once all sources end', async () => {
+        const onFinished = vi.fn();
+        const onProgress = vi.fn();
+        const service = new RecordingService(adapter, { onFinished, onProgress });
+        const session = await service.startRecording({ sources: { system: '', microphone: '' } });
+        const sourceFailures = [{ source: 'microphone' as const, message: 'Unavailable' }];
+
+        adapter.emitProgress(0, { durationMs: 2500, sourceFailures });
+        expect(service.getState()).toBe('recording');
+        expect(adapter.stopRecording).not.toHaveBeenCalled();
+        expect(onProgress).toHaveBeenCalledWith({ durationMs: 2500, sourceFailures });
+        const result: RecordingResult = { filePath: session.filePath, format: session.format, durationMs: 3000, sourceFailures };
+
+        adapter.events[0].onFinished?.(result);
+        expect(service.getState()).toBe('idle');
+        expect(onFinished).toHaveBeenCalledWith({ ...result, sessionId: session.sessionId });
+        expect(await service.stopRecording()).toEqual({ ...result, sessionId: session.sessionId });
+        await service.startRecording();
+        adapter.events[0].onFinished?.(result);
+        expect(service.getState()).toBe('recording');
+        expect(onFinished).toHaveBeenCalledTimes(1);
+        await service.stopRecording();
+    });
 });
