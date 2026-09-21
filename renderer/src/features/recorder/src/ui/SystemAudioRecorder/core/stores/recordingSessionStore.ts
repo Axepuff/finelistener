@@ -162,6 +162,8 @@ export class RecordingSessionStore {
 
     private activeOperation: ForegroundOperation | null = null;
 
+    private pendingStart: { operation: ForegroundOperation; idleReceived: boolean } | null = null;
+
     private unsubscribeFunctions: Array<() => void> = [];
 
     private durationTimer: ReturnType<typeof setInterval> | null = null;
@@ -231,6 +233,7 @@ export class RecordingSessionStore {
         this.initialized = false;
         this.disposed = true;
         this.lifecycleId += 1;
+        this.pendingStart = null;
         this.unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
         this.unsubscribeFunctions = [];
 
@@ -260,6 +263,7 @@ export class RecordingSessionStore {
         if (!operation) return commandFailure('Another workspace operation is already running.');
 
         this.activeOperation = operation;
+        this.pendingStart = { operation, idleReceived: false };
         this.stateValue = clearSessionBeforeStart(this.stateValue);
 
         try {
@@ -313,9 +317,19 @@ export class RecordingSessionStore {
             const message = getErrorMessage(error);
 
             console.error('Failed to start recording', error);
+            if (!this.dependencies.operations.owns(operation) || this.disposed) {
+                return commandFailure('Recording was cancelled.');
+            }
             this.dependencies.onRecoveryChanged();
 
             return this.failStart(operation, `Failed to start recording: ${message}`, 'Could not start recording. Check the selected devices.');
+        } finally {
+            runInAction(() => {
+                if (this.pendingStart?.operation.id !== operation.id) return;
+                const idleReceived = this.pendingStart.idleReceived;
+                this.pendingStart = null;
+                if (idleReceived && this.activeOperation?.id === operation.id) this.handleRecordingState('idle');
+            });
         }
     }
 
@@ -408,12 +422,14 @@ export class RecordingSessionStore {
 
     private handleRecordingState(state: RecordingState): void {
         this.stateValue = applyRecordingState(this.stateValue, state);
+        if (this.pendingStart) this.pendingStart.idleReceived = state === 'idle';
 
         if (state !== 'idle' && !this.activeOperation && !this.dependencies.operations.isBusy) {
             this.activeOperation = this.dependencies.operations.begin('recording');
         }
 
-        if (state === 'idle' && !this.stateValue.isProcessingRecording && this.activeOperation) {
+        // Start replies carry actionable failures even when the service has already emitted idle.
+        if (state === 'idle' && !this.pendingStart && !this.stateValue.isProcessingRecording && this.activeOperation) {
             this.dependencies.operations.finish(this.activeOperation);
             this.activeOperation = null;
         }

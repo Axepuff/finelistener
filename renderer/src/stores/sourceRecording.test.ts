@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { AppContext } from '../AppContext';
 import { TranscribedText } from '../features/transcribed-text/src/ui/TranscribedText/TranscribedText';
 import type { RecordingState } from 'electron/src/services/RecordingService';
-import type { FinalizeRecordingResult } from 'electron/src/types/recordingArchive';
+import type { FinalizeRecordingResult, StartRecordingResult } from 'electron/src/types/recordingArchive';
 import type { SessionDetails, SessionTranscriptV1 } from 'electron/src/types/sessions';
 import type { SessionTranscribeOpts } from 'electron/src/types/transcription';
 import { describe, expect, it, vi } from 'vitest';
@@ -93,21 +93,65 @@ describe('recording sources', () => {
         } finally { store.dispose(); }
     });
 
-    it('explains how to unblock recording when recovery storage is full', async () => {
+    it('explains the quota failure after starting and idle events, refreshes recovery, and releases the lock', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        let emitState: (state: RecordingState) => void = () => undefined;
+        const listRecoverableRecordings = vi.fn(() => Promise.resolve([]));
         const fake = createFakeRendererAdapter({
             runtimePlatform: 'win32',
             isRecordingAvailable: () => Promise.resolve(true),
-            startSystemRecording: () => Promise.resolve({ error: 'recording-storage-full' }),
+            onRecordingState: (callback) => { emitState = callback; return () => undefined; },
+            listRecoverableRecordings,
+            startSystemRecording: () => {
+                emitState('starting');
+                emitState('idle');
+                return Promise.resolve({ error: 'recording-storage-full' });
+            },
         });
         const store = new AppStore(fake.adapter);
         store.initialize();
         try {
             await settle();
+            listRecoverableRecordings.mockClear();
             expect(await store.recording.startRecording()).toEqual({
                 ok: false,
                 message: recordingStorageFullMessage,
             });
+            expect(listRecoverableRecordings).toHaveBeenCalledTimes(1);
+            expect(store.operations.isBusy).toBe(false);
+        } finally { store.dispose(); }
+    });
+    it('keeps the lock until the start reply and ignores a quota reply after disposal', async () => {
+        let emitState: (state: RecordingState) => void = () => undefined;
+        let resolveStart!: (result: StartRecordingResult) => void;
+        const reply = new Promise<StartRecordingResult>((resolve) => { resolveStart = resolve; });
+        const startSystemRecording = vi.fn(() => {
+            emitState('starting');
+            emitState('idle');
+            return reply;
+        });
+        const listRecoverableRecordings = vi.fn(() => Promise.resolve([]));
+        const fake = createFakeRendererAdapter({
+            runtimePlatform: 'win32', isRecordingAvailable: () => Promise.resolve(true),
+            onRecordingState: (callback) => { emitState = callback; return () => undefined; },
+            startSystemRecording, listRecoverableRecordings,
+        });
+        const store = new AppStore(fake.adapter);
+        store.initialize();
+        try {
+            await settle();
+            listRecoverableRecordings.mockClear();
+            const start = store.recording.startRecording();
+            await settle();
+            expect(startSystemRecording).toHaveBeenCalledTimes(1);
+            expect(store.operations.isBusy).toBe(true);
+            expect((await store.recording.startRecording()).ok).toBe(false);
+            expect(startSystemRecording).toHaveBeenCalledTimes(1);
+            store.dispose();
+            resolveStart({ error: 'recording-storage-full' });
+            await expect(start).resolves.toEqual({ ok: false, message: 'Recording was cancelled.' });
+            expect(listRecoverableRecordings).not.toHaveBeenCalled();
+            expect(store.operations.isBusy).toBe(false);
         } finally { store.dispose(); }
     });
 });
