@@ -22,6 +22,7 @@ import {
 } from './types';
 import { WhisperModelStore } from './whisperModelStore';
 import { WorkspaceStore } from './workspaceStore';
+import { RecordingRecoveryStore } from './recordingRecoveryStore';
 
 configure({ enforceActions: 'always' });
 
@@ -42,6 +43,8 @@ export class AppStore {
 
     readonly recording: SystemAudioRecorderStore;
 
+    readonly recordingRecovery: RecordingRecoveryStore;
+
     private unsubscribeFunctions: Array<() => void> = [];
 
     private initialized = false;
@@ -59,7 +62,9 @@ export class AppStore {
             activityLog: this.activityLog,
             operations: this.operations,
             onSessionImported: (session) => this.acceptSession(session),
+            onRecoveryChanged: () => { void this.recordingRecovery.refresh(); },
         });
+        this.recordingRecovery = new RecordingRecoveryStore(adapter, this.operations, (session) => this.acceptSession(session));
         makeAutoObservable<this, 'adapter' | 'unsubscribeFunctions' | 'transcriptionRequestId'>(this, {
             adapter: false,
             activityLog: false,
@@ -71,6 +76,7 @@ export class AppStore {
             transcriptionRequestId: false,
             whisperModels: false,
             recording: false,
+            recordingRecovery: false,
             unsubscribeFunctions: false,
         }, { autoBind: true });
     }
@@ -118,6 +124,7 @@ export class AppStore {
         }
 
         this.recording.initialize();
+        void this.recordingRecovery.refresh();
     }
 
     dispose(): void {
@@ -131,6 +138,7 @@ export class AppStore {
         this.unsubscribeFunctions = [];
         this.transcription.dispose();
         this.recording.dispose();
+        this.recordingRecovery.dispose();
         this.sessions.dispose();
         this.operations.cancelActive();
     }
@@ -203,6 +211,10 @@ export class AppStore {
 
         try {
             await this.adapter.deleteSession(sessionId);
+
+            if (this.workspace.activeSessionId === sessionId) {
+                await this.adapter.setActiveSession(null);
+            }
 
             runInAction(() => {
                 this.sessions.remove(sessionId);
@@ -436,6 +448,9 @@ export class AppStore {
 
         this.transcriptionRequestId += 1;
         this.transcriptionControl.cancelPendingDownload();
+        void this.adapter?.setActiveSession(null).catch((error: unknown) => {
+            console.error('Failed to clear the active session', error);
+        });
         this.workspace.clearWorkspace();
         this.transcription.clear();
 
@@ -487,6 +502,9 @@ export class AppStore {
     }
 
     private acceptSession(session: SessionDetails): void {
+        void this.adapter?.setActiveSession(session.id).catch((error: unknown) => {
+            console.error('Failed to update the active session', error);
+        });
         this.workspace.replaceWorkspace(session);
         this.transcription.replaceSavedTranscript(session.transcript ?? null);
         void this.sessions.refresh();

@@ -6,6 +6,7 @@ import { AudioteeAdapter } from '../services/capture/AudioteeAdapter';
 import type { CaptureAdapter } from '../services/capture/CaptureAdapter';
 import { MiniAudioAdapter, MINIAUDIO_WAV_FORMAT } from '../services/capture/MiniAudioAdapter';
 import type { ScreenRecordingPermissionStatus } from '../services/capture/ScreenCaptureKitAdapter';
+import { RecordingArchive } from '../services/RecordingArchive';
 
 const toErrorPayload = (error: Error) => ({ message: error.message });
 
@@ -26,11 +27,15 @@ const supportsOpenPreferences = (adapter: CaptureAdapter): adapter is CaptureAda
     return typeof candidate.openScreenRecordingPreferences === 'function';
 };
 
-export function registerRecordingController(ipc: IpcMain, getMainWindow: () => BrowserWindow | null): void {
+export function registerRecordingController(
+    ipc: IpcMain,
+    getMainWindow: () => BrowserWindow | null,
+    archive = new RecordingArchive(),
+): void {
     const adapter: CaptureAdapter = createRecordingAdapter();
     const serviceConfig = adapter instanceof MiniAudioAdapter ?
-        { defaultFormat: MINIAUDIO_WAV_FORMAT } :
-        undefined;
+        { defaultFormat: MINIAUDIO_WAV_FORMAT, archive } :
+        { archive };
     const service = new RecordingService(adapter, {
         onStateChange: (state) => getMainWindow()?.webContents.send('recording:state', state),
         onProgress: (progress) => getMainWindow()?.webContents.send('recording:progress', progress),
@@ -96,6 +101,16 @@ export function registerRecordingController(ipc: IpcMain, getMainWindow: () => B
     });
 
     ipc.handle('recording:stop', async () => service.stopRecording());
+    ipc.handle('recording:list-recoverable', async () => archive.listRecoverable());
+    ipc.handle('recording:recover', async (_event, recordingId: unknown) => {
+        if (typeof recordingId !== 'string') throw new Error('Invalid recording id');
+        return archive.recover(recordingId);
+    });
+    ipc.handle('recording:discard', async (_event, recordingId: unknown) => {
+        if (typeof recordingId !== 'string') throw new Error('Invalid recording id');
+        await archive.discard(recordingId);
+        return true;
+    });
 }
 
 function createRecordingAdapter(): CaptureAdapter {

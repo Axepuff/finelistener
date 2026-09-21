@@ -23,6 +23,7 @@ export type ForegroundOperationKind =
     | 'opening-session'
     | 'recording'
     | 'processing-recording'
+    | 'recovering-recording'
     | 'optimizing-audio'
     | 'transcribing';
 

@@ -71,6 +71,7 @@ export interface SessionTranscriptionInfo {
 export interface SessionFileV1 {
     version: 1;
     id: string;
+    recordingId?: string;
     title: string;
     createdAt: number;
     updatedAt: number;
@@ -79,6 +80,7 @@ export interface SessionFileV1 {
     transcript?: SessionTranscriptInfo;
     transcription?: SessionTranscriptionInfo;
     tracks?: SessionSourceTrack[];
+    sourceWarnings?: Array<{ source: RecordingSource; message: string }>;
 }
 
 export interface SessionListItem {
@@ -96,4 +98,5 @@ export interface SessionDetails extends SessionListItem {
     audioOptimizedWavPath?: string;
     transcript?: SessionTranscriptV1;
     tracks?: SessionSourceTrack[];
+    sourceWarnings?: Array<{ source: RecordingSource; message: string }>;
 }

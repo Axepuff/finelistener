@@ -19,6 +19,7 @@ interface SystemAudioRecorderStoreDependencies {
     activityLog: ActivityLogStore;
     operations: ForegroundOperationStore;
     onSessionImported: (session: SessionDetails) => void;
+    onRecoveryChanged: () => void;
 }
 
 export class SystemAudioRecorderStore {
@@ -45,6 +46,7 @@ export class SystemAudioRecorderStore {
             devicesStore: this.devicesStore,
             operations: dependencies.operations,
             onSessionImported: dependencies.onSessionImported,
+            onRecoveryChanged: dependencies.onRecoveryChanged,
         });
         this.supportActionsStore = new RecordingSupportActionsStore({
             ...recordingDependencies,

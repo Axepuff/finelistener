@@ -19,6 +19,7 @@ const TRANSCRIPT_FILE_RELATIVE_PATH = path.join('transcript', 'transcript.v1.jso
 const ORIGINAL_AUDIO_DIR = 'audio';
 const SESSION_WAV_RELATIVE_PATH = path.join(ORIGINAL_AUDIO_DIR, 'source.wav');
 const SESSION_OPTIMIZED_WAV_RELATIVE_PATH = path.join(ORIGINAL_AUDIO_DIR, 'optimized.wav');
+const DERIVED_CACHE_INDEX_FILE = '.derived-cache.json';
 const SESSION_WAV_CONVERT_OPTIONS = {} as const;
 const SESSION_OPTIMIZED_WAV_CONVERT_OPTIONS = {
     lowPass: 12000,
@@ -53,30 +54,6 @@ const writeJsonFile = async (filePath: string, value: unknown): Promise<void> =>
     await fs.rename(temporaryPath, filePath);
 };
 
-const getErrnoCode = (error: unknown): string | null => {
-    if (!error || typeof error !== 'object') return null;
-
-    const record = error as Record<string, unknown>;
-    const code = record.code;
-
-    return typeof code === 'string' ? code : null;
-};
-
-const moveFile = async (sourcePath: string, targetPath: string): Promise<void> => {
-    try {
-        await fs.rename(sourcePath, targetPath);
-    } catch (error) {
-        const code = getErrnoCode(error);
-
-        if (code !== 'EXDEV') {
-            throw error;
-        }
-
-        await fs.copyFile(sourcePath, targetPath);
-        await fs.unlink(sourcePath);
-    }
-};
-
 const toListItem = (session: SessionFileV1): SessionListItem => ({
     id: session.id,
     title: session.title,
@@ -88,6 +65,10 @@ const toListItem = (session: SessionFileV1): SessionListItem => ({
 
 export class SessionsService {
     private readonly audioPreprocessor = new AudioPreprocessor();
+    private readonly derivedGeneration = new Map<string, Promise<void>>();
+    private activeSessionId: string | null = null;
+
+    constructor(private readonly derivedCacheBudgetBytes = 1024 * 1024 * 1024) {}
 
     public getSessionsRootDir(): string {
         return path.join(app.getPath('userData'), 'sessions');
@@ -186,6 +167,19 @@ export class SessionsService {
             path.join(sessionDir, resolvedSession.audio.optimizedWavPath) :
             undefined;
 
+        if (audioOptimizedWavPath) {
+            try {
+                await fs.access(audioOptimizedWavPath);
+            } catch {
+                await this.generateOptimizedAudio(audioWavPath, audioOptimizedWavPath);
+            }
+        }
+        await this.touchDerivedFiles(resolvedSession.id, [
+            { kind: 'listening', path: audioWavPath },
+            ...(audioOptimizedWavPath ? [{ kind: 'optimized' as const, path: audioOptimizedWavPath }] : []),
+        ]);
+        await this.enforceDerivedCacheBudget(new Set([audioWavPath, ...(audioOptimizedWavPath ? [audioOptimizedWavPath] : [])]));
+
         let transcript: SessionTranscriptV1 | undefined;
 
         if (resolvedSession.transcript?.path) {
@@ -208,6 +202,7 @@ export class SessionsService {
                 ...track,
                 filePath: this.resolveTrackPath(sessionDir, track.filePath),
             })),
+            sourceWarnings: resolvedSession.sourceWarnings,
         };
     }
 
@@ -267,6 +262,7 @@ export class SessionsService {
     }
 
     public async createSessionFromRecordingFile(recording: string | RecordingResult): Promise<SessionDetails> {
+        await this.validateRecordingInput(recording);
         if (typeof recording !== 'string' && recording?.tracks?.length) {
             return this.createSessionFromTracks(recording);
         }
@@ -289,7 +285,7 @@ export class SessionsService {
         const audioRelativePath = path.join(ORIGINAL_AUDIO_DIR, `original${safeExt}`);
         const targetAudioPath = path.join(sessionDir, audioRelativePath);
 
-        await moveFile(recordingFilePath, targetAudioPath);
+        await fs.copyFile(recordingFilePath, targetAudioPath);
 
         const targetWavPath = path.join(sessionDir, SESSION_WAV_RELATIVE_PATH);
         const { path: tmpWavPath, cleanup } = await this.audioPreprocessor.convertAudio({
@@ -320,7 +316,17 @@ export class SessionsService {
 
         await writeJsonFile(path.join(sessionDir, SESSION_FILE_NAME), sessionFile);
 
+        await fs.unlink(recordingFilePath).catch((error: unknown) => {
+            console.warn('Failed to remove finalized recording temporary file', error);
+        });
+
         return this.getSession(sessionId);
+    }
+
+    public async setActiveSession(sessionId: string | null): Promise<void> {
+        if (sessionId !== null) this.resolveSessionDir(sessionId);
+        this.activeSessionId = sessionId;
+        await this.enforceDerivedCacheBudget(new Set());
     }
 
     private resolveTrackPath(sessionDir: string, relativePath: string): string {
@@ -329,6 +335,29 @@ export class SessionsService {
             throw new Error('Invalid source track path');
         }
         return resolved;
+    }
+
+    private async validateRecordingInput(recording: string | RecordingResult): Promise<void> {
+        const submittedPaths = typeof recording === 'string' ? [recording] : [
+            recording.filePath,
+            ...(recording.tracks?.map((track) => track.filePath) ?? []),
+        ];
+        if (!submittedPaths.length || submittedPaths.some((value) => typeof value !== 'string' || !value.trim())) {
+            throw new Error('Invalid recording file path');
+        }
+        const recordingRoot = path.join(app.getPath('userData'), 'recordings');
+        let canonicalRoot: string;
+        try { canonicalRoot = await fs.realpath(recordingRoot); }
+        catch { throw new Error('Recording storage is not available'); }
+        for (const submittedPath of new Set(submittedPaths)) {
+            const stat = await fs.lstat(submittedPath);
+            if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Invalid recording file');
+            const canonicalPath = await fs.realpath(submittedPath);
+            const relative = path.relative(canonicalRoot, canonicalPath);
+            if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+                throw new Error('Recording file is outside managed storage');
+            }
+        }
     }
 
     private async createSessionFromTracks(recording: RecordingResult): Promise<SessionDetails> {
@@ -410,17 +439,7 @@ export class SessionsService {
         const wavAbsolutePath = path.join(sessionDir, wavRelativePath);
         const targetOptimizedPath = path.join(sessionDir, SESSION_OPTIMIZED_WAV_RELATIVE_PATH);
 
-        const { path: tmpWavPath, cleanup } = await this.audioPreprocessor.convertAudio({
-            audioPath: wavAbsolutePath,
-            ...SESSION_OPTIMIZED_WAV_CONVERT_OPTIONS,
-        });
-
-        try {
-            await fs.mkdir(path.dirname(targetOptimizedPath), { recursive: true });
-            await fs.copyFile(tmpWavPath, targetOptimizedPath);
-        } finally {
-            await cleanup().catch(() => void 0);
-        }
+        await this.generateOptimizedAudio(wavAbsolutePath, targetOptimizedPath);
 
         const updatedAt = Date.now();
         const updatedSession: SessionFileV1 = {
@@ -488,20 +507,16 @@ export class SessionsService {
 
         const originalAbsolutePath = path.join(sessionDir, session.audio.originalPath);
         const targetWavPath = path.join(sessionDir, SESSION_WAV_RELATIVE_PATH);
-        const { path: tmpWavPath, cleanup } = session.tracks?.length ?
-            await this.audioPreprocessor.mixSources(session.tracks.map((track) => ({
-                ...track, filePath: this.resolveTrackPath(sessionDir, track.filePath),
-            }))) : await this.audioPreprocessor.convertAudio({
-            audioPath: originalAbsolutePath,
-            ...SESSION_WAV_CONVERT_OPTIONS,
+        await this.runDerivedGeneration(targetWavPath, async () => {
+            const { path: tmpWavPath, cleanup } = session.tracks?.length ?
+                await this.audioPreprocessor.mixSources(session.tracks.map((track) => ({
+                    ...track, filePath: this.resolveTrackPath(sessionDir, track.filePath),
+                }))) : await this.audioPreprocessor.convertAudio({ audioPath: originalAbsolutePath, ...SESSION_WAV_CONVERT_OPTIONS });
+            try {
+                await fs.mkdir(path.dirname(targetWavPath), { recursive: true });
+                await fs.copyFile(tmpWavPath, targetWavPath);
+            } finally { await cleanup().catch(() => void 0); }
         });
-
-        try {
-            await fs.mkdir(path.dirname(targetWavPath), { recursive: true });
-            await fs.copyFile(tmpWavPath, targetWavPath);
-        } finally {
-            await cleanup().catch(() => void 0);
-        }
 
         const updatedAt = Date.now();
         const updatedSession: SessionFileV1 = {
@@ -516,5 +531,67 @@ export class SessionsService {
         await writeJsonFile(sessionFilePath, updatedSession);
 
         return { wavPath: targetWavPath, session: updatedSession };
+    }
+
+    private async generateOptimizedAudio(sourcePath: string, targetPath: string): Promise<void> {
+        await this.runDerivedGeneration(targetPath, async () => {
+            const { path: temporaryPath, cleanup } = await this.audioPreprocessor.convertAudio({
+                audioPath: sourcePath, ...SESSION_OPTIMIZED_WAV_CONVERT_OPTIONS,
+            });
+            try { await fs.mkdir(path.dirname(targetPath), { recursive: true }); await fs.copyFile(temporaryPath, targetPath); }
+            finally { await cleanup().catch(() => void 0); }
+        });
+    }
+
+    private async runDerivedGeneration(targetPath: string, generate: () => Promise<void>): Promise<void> {
+        const existing = this.derivedGeneration.get(targetPath);
+        if (existing) return existing;
+        const operation = generate().finally(() => this.derivedGeneration.delete(targetPath));
+        this.derivedGeneration.set(targetPath, operation);
+        return operation;
+    }
+
+    private async touchDerivedFiles(sessionId: string, files: Array<{ kind: 'listening' | 'optimized'; path: string }>): Promise<void> {
+        const indexPath = path.join(this.getSessionsRootDir(), DERIVED_CACHE_INDEX_FILE);
+        let index: Record<string, { sessionId: string; kind: 'listening' | 'optimized'; relativePath: string; lastAccessedAt: number }> = {};
+        try { index = await readJsonFile<typeof index>(indexPath); } catch { /* Start a new cache index. */ }
+        const now = Date.now();
+        for (const file of files) {
+            try {
+                await fs.access(file.path);
+                const key = `${sessionId}:${file.kind}`;
+                index[key] = { sessionId, kind: file.kind, relativePath: path.relative(this.resolveSessionDir(sessionId), file.path), lastAccessedAt: now };
+            } catch { /* Missing derived files are generated when requested. */ }
+        }
+        await writeJsonFile(indexPath, index);
+    }
+
+    private async enforceDerivedCacheBudget(excluded: Set<string>): Promise<void> {
+        const indexPath = path.join(this.getSessionsRootDir(), DERIVED_CACHE_INDEX_FILE);
+        let index: Record<string, { sessionId: string; kind: 'listening' | 'optimized'; relativePath: string; lastAccessedAt: number }>;
+        try { index = await readJsonFile<typeof index>(indexPath); } catch { return; }
+        const candidates: Array<{ key: string; path: string; size: number; lastAccessedAt: number }> = [];
+        let total = 0;
+        for (const [key, entry] of Object.entries(index)) {
+            try {
+                const sessionDir = this.resolveSessionDir(entry.sessionId);
+                const target = this.resolveTrackPath(sessionDir, entry.relativePath);
+                const session = await readJsonFile<SessionFileV1>(path.join(sessionDir, SESSION_FILE_NAME));
+                const rebuildable = entry.kind === 'optimized' || Boolean(session.tracks?.length)
+                    || path.resolve(target) !== path.resolve(sessionDir, session.audio.originalPath);
+                if (!rebuildable) { delete index[key]; continue; }
+                const stat = await fs.stat(target); total += stat.size;
+                candidates.push({ key, path: target, size: stat.size, lastAccessedAt: entry.lastAccessedAt });
+            } catch { delete index[key]; }
+        }
+        candidates.sort((a, b) => a.lastAccessedAt - b.lastAccessedAt);
+        for (const candidate of candidates) {
+            if (total <= this.derivedCacheBudgetBytes) break;
+            const indexed = index[candidate.key];
+            if (excluded.has(candidate.path) || indexed?.sessionId === this.activeSessionId || this.derivedGeneration.has(candidate.path)) continue;
+            await fs.rm(candidate.path, { force: true });
+            total -= candidate.size; delete index[candidate.key];
+        }
+        await writeJsonFile(indexPath, index);
     }
 }

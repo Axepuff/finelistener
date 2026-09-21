@@ -2,10 +2,12 @@ import type { BrowserWindow, IpcMain } from 'electron';
 import { dialog } from 'electron';
 import { SUPPORTED_MEDIA_EXTENSIONS } from '../constants';
 import { SessionsService } from '../services/SessionsService';
-import type { RecordingResult } from '../services/RecordingService';
 
-export function registerSessionsController(ipc: IpcMain, _getMainWindow: () => BrowserWindow | null): void {
-    const service = new SessionsService();
+export function registerSessionsController(
+    ipc: IpcMain,
+    _getMainWindow: () => BrowserWindow | null,
+    service = new SessionsService(),
+): void {
 
     ipc.handle('sessions:list', async () => {
         return service.listSessions();
@@ -17,6 +19,12 @@ export function registerSessionsController(ipc: IpcMain, _getMainWindow: () => B
         }
 
         return service.getSession(sessionId);
+    });
+
+    ipc.handle('sessions:set-active', async (_event, sessionId: unknown) => {
+        if (sessionId !== null && (typeof sessionId !== 'string' || !sessionId.trim())) throw new Error('Invalid session id');
+        await service.setActiveSession(sessionId);
+        return true;
     });
 
     ipc.handle('sessions:delete', async (_event, sessionId: unknown) => {
@@ -43,15 +51,6 @@ export function registerSessionsController(ipc: IpcMain, _getMainWindow: () => B
         if (canceled || filePaths.length === 0) return null;
 
         return service.createSessionFromImport(filePaths[0]);
-    });
-
-    ipc.handle('sessions:import-recording', async (_event, recordingFilePath: unknown) => {
-        if (!(typeof recordingFilePath === 'string' && recordingFilePath.trim())
-            && !(recordingFilePath && typeof recordingFilePath === 'object' && 'filePath' in recordingFilePath)) {
-            throw new Error('Invalid recording file path');
-        }
-
-        return service.createSessionFromRecordingFile(recordingFilePath as string | RecordingResult);
     });
 
     ipc.handle('sessions:optimize-audio', async (_event, sessionId: unknown) => {

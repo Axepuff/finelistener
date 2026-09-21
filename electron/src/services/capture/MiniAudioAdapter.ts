@@ -1,5 +1,4 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
-import { randomUUID } from 'crypto';
 import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
@@ -171,7 +170,11 @@ export class MiniAudioAdapter implements CaptureAdapter {
         this.tracks = [];
         if (typeof sources.system === 'string') this.tracks.push({ source: 'system', filePath: options.outputPath, startOffsetMs: 0 });
         if (typeof sources.microphone === 'string') {
-            this.tracks.push({ source: 'microphone', filePath: this.tracks.length ? `${options.outputPath.slice(0, -4)}-microphone-${randomUUID()}.wav` : options.outputPath, startOffsetMs: 0 });
+            this.tracks.push({
+                source: 'microphone',
+                filePath: this.tracks.length ? path.join(path.dirname(options.outputPath), 'microphone.wav') : options.outputPath,
+                startOffsetMs: 0,
+            });
         }
         if (!this.tracks.length) throw new Error('Select at least one recording source.');
 

@@ -4,8 +4,11 @@ import { TranscriptionService } from '../services/TranscriptionService';
 import { parseTranscriptToV1 } from '../services/sessionTranscript';
 import type { SessionTranscribeOpts, TranscribeOpts } from '../types/transcription';
 
-export function registerTranscriptionController(ipc: IpcMain, getMainWindow: () => BrowserWindow | null): void {
-    const sessionsService = new SessionsService();
+export function registerTranscriptionController(
+    ipc: IpcMain,
+    getMainWindow: () => BrowserWindow | null,
+    sessionsService = new SessionsService(),
+): void {
     const service = new TranscriptionService({
         onStdoutChunk: (chunk) => getMainWindow()?.webContents.send('transcribe:progress', chunk),
         onStderrChunk: (chunk) => getMainWindow()?.webContents.send('transcribe:log', chunk),

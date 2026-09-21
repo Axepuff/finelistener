@@ -38,8 +38,9 @@ afterEach(async () => {
 });
 
 it('persists source originals and reopens a real FFmpeg mix with aligned duration and bounded samples', async () => {
-    const systemPath = path.join(environment.root, 'system.wav');
-    const microphonePath = path.join(environment.root, 'microphone.wav');
+    const systemPath = path.join(environment.root, 'recordings', 'system.wav');
+    const microphonePath = path.join(environment.root, 'recordings', 'microphone.wav');
+    await fs.mkdir(path.dirname(systemPath), { recursive: true });
     await fs.writeFile(systemPath, wav(26000));
     await fs.writeFile(microphonePath, wav(-26000));
     const service = new SessionsService();
@@ -100,7 +101,8 @@ it('opens legacy sessions without assigning invented source labels', async () =>
 });
 
 it('does not publish a broken session or remove originals when mixing fails', async () => {
-    const source = path.join(environment.root, 'invalid.wav');
+    const source = path.join(environment.root, 'recordings', 'invalid.wav');
+    await fs.mkdir(path.dirname(source), { recursive: true });
     await fs.writeFile(source, 'invalid audio');
     const service = new SessionsService();
     await expect(service.createSessionFromRecordingFile({
@@ -110,4 +112,43 @@ it('does not publish a broken session or remove originals when mixing fails', as
     })).rejects.toThrow();
     await expect(fs.readFile(source, 'utf8')).resolves.toBe('invalid audio');
     await expect(service.listSessions()).resolves.toEqual([]);
+});
+
+it('rejects recording files outside managed storage before creating a session', async () => {
+    const source = path.join(environment.root, 'outside.wav');
+    await fs.mkdir(path.join(environment.root, 'recordings'));
+    await fs.writeFile(source, wav(1000));
+    const service = new SessionsService();
+    await expect(service.createSessionFromRecordingFile(source)).rejects.toThrow('outside managed storage');
+    await expect(fs.readFile(source)).resolves.toEqual(wav(1000));
+    await expect(service.listSessions()).resolves.toEqual([]);
+});
+
+it('rejects a symlink in managed recording storage without touching its target', async () => {
+    const recordings = path.join(environment.root, 'recordings');
+    const external = path.join(environment.root, 'external.wav');
+    const link = path.join(recordings, 'linked.wav');
+    await fs.mkdir(recordings); await fs.writeFile(external, wav(3000));
+    try { await fs.symlink(external, link, 'file'); }
+    catch { return; }
+    const service = new SessionsService();
+    await expect(service.createSessionFromRecordingFile(link)).rejects.toThrow('Invalid recording file');
+    await expect(fs.readFile(external)).resolves.toEqual(wav(3000));
+});
+
+it('evicts least recently used derived audio and regenerates it on demand', async () => {
+    const firstSource = path.join(environment.root, 'first.wav');
+    const secondSource = path.join(environment.root, 'second.wav');
+    await fs.writeFile(firstSource, wav(1000)); await fs.writeFile(secondSource, wav(2000));
+    const service = new SessionsService(40_000);
+    const first = await service.createSessionFromImport(firstSource);
+    await service.setActiveSession(first.id);
+    const second = await service.createSessionFromImport(secondSource);
+    await expect(fs.access(first.audioWavPath)).resolves.toBeUndefined();
+    await service.setActiveSession(second.id);
+    await expect(fs.access(first.audioWavPath)).rejects.toThrow();
+    await expect(fs.access(second.audioWavPath)).resolves.toBeUndefined();
+    const reopened = await service.getSession(first.id);
+    await expect(fs.access(reopened.audioWavPath)).resolves.toBeUndefined();
+    await expect(fs.readFile(reopened.audioOriginalPath)).resolves.toEqual(wav(1000));
 });

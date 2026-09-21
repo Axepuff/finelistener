@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { RecordingResult, RecordingStartOptions } from './src/services/RecordingService';
+import type { RecordingStartOptions } from './src/services/RecordingService';
+import type { FinalizeRecordingResult, RecoverableRecording } from './src/types/recordingArchive';
 import type { TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from './src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from './src/types/uiPreferences';
 
@@ -17,15 +18,18 @@ contextBridge.exposeInMainWorld('api', {
     sessions: {
         list: () => ipcRenderer.invoke('sessions:list'),
         get: (sessionId: string) => ipcRenderer.invoke('sessions:get', sessionId),
+        setActive: (sessionId: string | null) => ipcRenderer.invoke('sessions:set-active', sessionId),
         delete: (sessionId: string) => ipcRenderer.invoke('sessions:delete', sessionId),
         importAudio: () => ipcRenderer.invoke('sessions:import-audio'),
-        importRecording: (recordingFilePath: string | RecordingResult) => ipcRenderer.invoke('sessions:import-recording', recordingFilePath),
         optimizeAudio: (sessionId: string) => ipcRenderer.invoke('sessions:optimize-audio', sessionId),
         revealFolder: () => ipcRenderer.invoke('sessions:reveal-root'),
     },
     saveText: (content: string) => ipcRenderer.invoke('saveText', content),
     startSystemRecording: (options?: RecordingStartOptions) => ipcRenderer.invoke('recording:start', options),
-    stopSystemRecording: () => ipcRenderer.invoke('recording:stop'),
+    stopSystemRecording: (): Promise<FinalizeRecordingResult> => ipcRenderer.invoke('recording:stop'),
+    listRecoverableRecordings: (): Promise<RecoverableRecording[]> => ipcRenderer.invoke('recording:list-recoverable'),
+    recoverRecording: (recordingId: string): Promise<FinalizeRecordingResult> => ipcRenderer.invoke('recording:recover', recordingId),
+    discardRecording: (recordingId: string): Promise<boolean> => ipcRenderer.invoke('recording:discard', recordingId),
     getRecordingState: () => ipcRenderer.invoke('recording:get-state'),
     getRecordingPermissionStatus: () => ipcRenderer.invoke('recording:get-permission-status'),
     openRecordingPreferences: () => ipcRenderer.invoke('recording:open-permission-preferences'),
@@ -88,8 +92,8 @@ contextBridge.exposeInMainWorld('api', {
 
         return () => ipcRenderer.removeListener('recording:level', handler);
     },
-    onRecordingFinished: (cb: (result: RecordingResult) => void) => {
-        const handler = (_e: unknown, result: RecordingResult) => cb(result);
+    onRecordingFinished: (cb: (result: FinalizeRecordingResult) => void) => {
+        const handler = (_e: unknown, result: FinalizeRecordingResult) => cb(result);
 
         ipcRenderer.on('recording:finished', handler);
 

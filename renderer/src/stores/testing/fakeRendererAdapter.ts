@@ -1,4 +1,5 @@
-import type { RecordingLevel, RecordingProgress, RecordingResult, RecordingState } from 'electron/src/services/RecordingService';
+import type { RecordingLevel, RecordingProgress, RecordingState } from 'electron/src/services/RecordingService';
+import type { FinalizeRecordingResult } from 'electron/src/types/recordingArchive';
 import type { TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
 import { UI_PREFERENCE_DEFAULTS, type UiPreferenceKey, type UiPreferenceValueMap } from '../../../../electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress } from 'electron/src/types/whisper';
@@ -11,7 +12,7 @@ interface AdapterListeners {
     recordingState: Set<(state: RecordingState) => void>;
     recordingProgress: Set<(progress: RecordingProgress) => void>;
     recordingLevel: Set<(level: RecordingLevel) => void>;
-    recordingFinished: Set<(result: RecordingResult) => void>;
+    recordingFinished: Set<(result: FinalizeRecordingResult) => void>;
     recordingError: Set<(payload: { message: string }) => void>;
     modelDownloadProgress: Set<(payload: WhisperModelDownloadProgress) => void>;
 }
@@ -53,9 +54,9 @@ export const createFakeRendererAdapter = (
         runtimePlatform: 'linux',
         listSessions: () => Promise.resolve([]),
         getSession: unavailable,
+        setActiveSession: () => Promise.resolve(true),
         deleteSession: () => Promise.resolve(true),
         importAudio: () => Promise.resolve(null),
-        importRecording: unavailable,
         optimizeAudio: unavailable,
         revealSessionsFolder: () => Promise.resolve(true),
         transcribe: () => Promise.resolve(''),
@@ -64,6 +65,9 @@ export const createFakeRendererAdapter = (
         saveText: () => Promise.resolve({ ok: true }),
         startSystemRecording: unavailable,
         stopSystemRecording: unavailable,
+        listRecoverableRecordings: () => Promise.resolve([]),
+        recoverRecording: unavailable,
+        discardRecording: unavailable,
         getRecordingState: () => Promise.resolve('idle'),
         getRecordingPermissionStatus: () => Promise.resolve('unknown'),
         openRecordingPreferences: () => Promise.resolve(false),

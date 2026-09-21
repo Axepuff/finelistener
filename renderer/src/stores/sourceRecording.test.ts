@@ -3,7 +3,8 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AppContext } from '../AppContext';
 import { TranscribedText } from '../features/transcribed-text/src/ui/TranscribedText/TranscribedText';
-import type { RecordingResult, RecordingState } from 'electron/src/services/RecordingService';
+import type { RecordingState } from 'electron/src/services/RecordingService';
+import type { FinalizeRecordingResult } from 'electron/src/types/recordingArchive';
 import type { SessionDetails, SessionTranscriptV1 } from 'electron/src/types/sessions';
 import type { SessionTranscribeOpts } from 'electron/src/types/transcription';
 import { describe, expect, it, vi } from 'vitest';
@@ -31,21 +32,19 @@ const partial: SessionTranscriptV1 = {
         ],
     },
 };
-const captured: RecordingResult = {
-    filePath: 'system.wav', format: { sampleRateHz: 16000, channels: 1, codec: 'pcm_s16le', bitDepth: 16 },
-    tracks: session.tracks,
+const captured: FinalizeRecordingResult = {
+    recordingId: 'capture', sessionId: session.id, session, sourceWarnings: [],
 };
 
 const settle = async () => { for (let i = 0; i < 12; i += 1) await Promise.resolve(); };
 
 describe('recording sources', () => {
-    it('defaults both sources on, persists Off, rejects both Off, and imports all source files', async () => {
+    it('defaults both sources on, persists Off, rejects both Off, and accepts the finalized session', async () => {
         const startSystemRecording = vi.fn(() => Promise.resolve({
-            sessionId: 'capture', filePath: 'system.wav', startedAt: 1, format: captured.format,
+            recordingId: 'capture', startedAt: 1,
         }));
-        const importRecording = vi.fn(() => Promise.resolve(session));
         const fake = createFakeRendererAdapter({ runtimePlatform: 'win32', isRecordingAvailable: () => Promise.resolve(true),
-            startSystemRecording, stopSystemRecording: () => Promise.resolve(captured), importRecording });
+            startSystemRecording, stopSystemRecording: () => Promise.resolve(captured) });
         const persist = vi.spyOn(fake.adapter, 'setUiPreference');
         const store = new AppStore(fake.adapter);
 
@@ -64,19 +63,16 @@ describe('recording sources', () => {
             expect((await store.recording.startRecording()).ok).toBe(true);
             expect(startSystemRecording).toHaveBeenCalledWith({ deviceId: undefined, sources: { system: null, microphone: 'chosen-mic' } });
             expect((await store.recording.stopRecording()).ok).toBe(true);
-            expect(importRecording).toHaveBeenCalledWith(captured);
             expect(store.workspace.activeSession?.tracks).toEqual(session.tracks);
         } finally { store.dispose(); }
     });
 
-    it('imports automatic finish once and retains the workspace lock through import', async () => {
-        let emitFinished: (result: RecordingResult) => void = () => undefined;
+    it('accepts automatic finish once and releases the workspace lock', async () => {
+        let emitFinished: (result: FinalizeRecordingResult) => void = () => undefined;
         let emitState: (state: RecordingState) => void = () => undefined;
-        let finishImport: (value: SessionDetails) => void = () => undefined;
-        const importRecording = vi.fn(() => new Promise<SessionDetails>((resolve) => { finishImport = resolve; }));
         const stopSystemRecording = vi.fn(() => Promise.resolve(captured));
         const fake = createFakeRendererAdapter({
-            getRecordingState: () => Promise.resolve('recording'), importRecording, stopSystemRecording,
+            getRecordingState: () => Promise.resolve('recording'), stopSystemRecording,
             onRecordingFinished: (callback) => { emitFinished = callback; return () => undefined; },
             onRecordingState: (callback) => { emitState = callback; return () => undefined; },
         });
@@ -88,10 +84,7 @@ describe('recording sources', () => {
             emitFinished(captured);
             emitState('idle');
             emitFinished(captured);
-            expect(store.operations.kind).toBe('processing-recording');
-            expect(importRecording).toHaveBeenCalledOnce();
             expect(stopSystemRecording).not.toHaveBeenCalled();
-            finishImport(session);
             await settle();
             expect(store.workspace.activeSessionId).toBe(session.id);
             expect(store.operations.isBusy).toBe(false);

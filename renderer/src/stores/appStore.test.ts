@@ -25,6 +25,10 @@ const transcriptionOptions = {
     useVad: true,
 };
 
+const finalizeResult = (session: SessionDetails) => ({
+    recordingId: 'recording-1', sessionId: session.id, session, sourceWarnings: [],
+});
+
 describe('AppStore', () => {
     it.each(['recording', 'idle'] as const)(
         'restores recording ownership after reinitialization when capture is %s',
@@ -41,8 +45,7 @@ describe('AppStore', () => {
                 emitRecordingState('idle');
 
                 return Promise.resolve({
-                    filePath: 'C:\\audio\\recording.wav',
-                    format: { sampleRateHz: 16000, channels: 1, codec: 'pcm_s16le', bitDepth: 16 },
+                    ...finalizeResult(recordedSession),
                 });
             });
             const fake = createFakeRendererAdapter({
@@ -53,7 +56,6 @@ describe('AppStore', () => {
                     return () => { emitRecordingState = () => undefined; };
                 },
                 stopSystemRecording,
-                importRecording: () => Promise.resolve(recordedSession),
             });
             const store = new AppStore(fake.adapter);
 
@@ -93,10 +95,7 @@ describe('AppStore', () => {
     it('releases the workspace after a stopped recording fails to import', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => undefined);
         let emitRecordingState: (state: RecordingState) => void = () => undefined;
-        let rejectImport: (error: Error) => void = () => undefined;
-        const importRecording = vi.fn(() => new Promise<SessionDetails>((_resolve, reject) => {
-            rejectImport = reject;
-        }));
+        let rejectFinalization: (error: Error) => void = () => undefined;
         const fake = createFakeRendererAdapter({
             getRecordingState: () => Promise.resolve('recording'),
             onRecordingState: (callback) => {
@@ -106,14 +105,8 @@ describe('AppStore', () => {
             },
             stopSystemRecording: () => {
                 emitRecordingState('idle');
-
-                return Promise.resolve({
-                    filePath: 'C:\\audio\\recording.wav',
-                    format: { sampleRateHz: 16000, channels: 1, codec: 'pcm_s16le', bitDepth: 16 },
-                    durationMs: 1000,
-                });
+                return new Promise((_resolve, reject) => { rejectFinalization = reject; });
             },
-            importRecording,
             getSession: () => Promise.resolve(createSession()),
         });
         const store = new AppStore(fake.adapter);
@@ -124,12 +117,11 @@ describe('AppStore', () => {
             const stopPromise = store.recording.stopRecording();
 
             await Promise.resolve();
-            expect(importRecording).toHaveBeenCalledOnce();
             expect(store.recording.session.recordingState).toBe('idle');
             expect(store.operations.kind).toBe('processing-recording');
             expect((await store.openSession('session-1')).ok).toBe(false);
 
-            rejectImport(new Error('Session import failed'));
+            rejectFinalization(new Error('Session finalization failed'));
             expect((await stopPromise).ok).toBe(false);
             expect(store.recording.session.isProcessingRecording).toBe(false);
             expect(store.operations.isBusy).toBe(false);
@@ -141,12 +133,10 @@ describe('AppStore', () => {
 
     it('keeps the workspace locked when stopping capture fails', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => undefined);
-        const importRecording = vi.fn();
         const stopSystemRecording = vi.fn(() => Promise.reject(new Error('Capture is still active')));
         const fake = createFakeRendererAdapter({
             getRecordingState: () => Promise.resolve('recording'),
             stopSystemRecording,
-            importRecording,
         });
         const store = new AppStore(fake.adapter);
 
@@ -157,7 +147,6 @@ describe('AppStore', () => {
             expect(store.operations.kind).toBe('recording');
             expect(store.recording.session.isProcessingRecording).toBe(false);
             expect((await store.importAudio()).ok).toBe(false);
-            expect(importRecording).not.toHaveBeenCalled();
 
             await store.recording.stopRecording();
             expect(stopSystemRecording).toHaveBeenCalledTimes(2);

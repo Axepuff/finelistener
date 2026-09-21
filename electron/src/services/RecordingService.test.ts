@@ -1,302 +1,74 @@
-import fs from 'fs/promises';
-import { tmpdir } from 'os';
-import path from 'path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FinalizeRecordingResult } from '../types/recordingArchive';
+import type { SessionDetails } from '../types/sessions';
 import { DEFAULT_WAV_FORMAT } from './AudioPreprocessor';
-import {
-    RecordingService,
-    type RecordingLevel,
-    type RecordingProgress,
-    type RecordingResult,
-} from './RecordingService';
-import type { CaptureAdapter, CaptureAdapterStartOptions, CaptureAdapterEvents } from './capture/CaptureAdapter';
+import { RecordingArchive } from './RecordingArchive';
+import { RecordingService, type RecordingResult } from './RecordingService';
+import type { CaptureAdapter, CaptureAdapterEvents, CaptureAdapterStartOptions } from './capture/CaptureAdapter';
 
-let mockUserDataPath = '';
-
-vi.mock('electron', () => ({
-    app: {
-        getPath: (name: string) => {
-            if (name !== 'userData') {
-                throw new Error(`Unsupported app path: ${name}`);
-            }
-
-            return mockUserDataPath;
-        },
-    },
-}));
-
-type Deferred<T> = {
-    promise: Promise<T>;
-    resolve: (value: T) => void;
-    reject: (error: Error) => void;
+const session: SessionDetails = {
+    id: 'session-1', title: 'Recording', createdAt: 1, updatedAt: 1, sourceKind: 'recorded', hasTranscript: false,
+    audioOriginalPath: 'mix.wav', audioWavPath: 'mix.wav',
 };
 
-const createDeferred = <T>(): Deferred<T> => {
-    let resolve: (value: T) => void;
-    let reject: (error: Error) => void;
-
-    const promise = new Promise<T>((res, rej) => {
-        resolve = res;
-        reject = rej;
-    });
-
-    return {
-        promise,
-        resolve: resolve!,
-        reject: reject!,
-    };
-};
-
-const flushPromises = async (): Promise<void> => {
-    await new Promise<void>((resolve) => {
-        setImmediate(resolve);
-    });
-};
-
-const waitFor = async (predicate: () => boolean): Promise<void> => {
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-        if (predicate()) {
-            return;
-        }
-        await flushPromises();
-    }
-
-    throw new Error('Condition not met');
-};
+class FakeArchive {
+    public prepareCapture = vi.fn(() => Promise.resolve({ recordingId: '00000000-0000-4000-8000-000000000001', outputPath: 'C:/owned/audio/system.wav', startedAt: 1 }));
+    public registerCaptureResult = vi.fn(() => Promise.resolve());
+    public finalize = vi.fn((): Promise<FinalizeRecordingResult> => Promise.resolve({
+        recordingId: '00000000-0000-4000-8000-000000000001', sessionId: session.id, session, sourceWarnings: [],
+    }));
+}
 
 class FakeAdapter implements CaptureAdapter {
-    public readonly id = 'fake';
-    public readonly label = 'Fake Adapter';
-    public readonly startOptions: CaptureAdapterStartOptions[] = [];
-    public readonly events: CaptureAdapterEvents[] = [];
-    public startDeferred: Deferred<void> | null = null;
-    public stopDeferred: Deferred<RecordingResult> | null = null;
-    public stopResult: RecordingResult | null = null;
-
-    public startRecording = vi.fn(async (options: CaptureAdapterStartOptions, events: CaptureAdapterEvents) => {
-        this.startOptions.push(options);
-        this.events.push(events);
-
-        if (this.startDeferred) {
-            await this.startDeferred.promise;
-        }
-    });
-
-    public stopRecording = vi.fn(async () => {
-        if (this.stopDeferred) {
-            return this.stopDeferred.promise;
-        }
-
-        if (this.stopResult) {
-            return this.stopResult;
-        }
-
-        const lastOptions = this.startOptions[this.startOptions.length - 1];
-
-        return {
-            filePath: lastOptions?.outputPath ?? 'unknown.wav',
-            format: lastOptions?.format ?? DEFAULT_WAV_FORMAT,
-        };
-    });
-
-    public emitProgress(index: number, progress: RecordingProgress): void {
-        this.events[index]?.onProgress?.(progress);
-    }
-
-    public emitLevel(index: number, level: RecordingLevel): void {
-        this.events[index]?.onLevel?.(level);
-    }
-
-    public emitError(index: number, error: Error): void {
-        this.events[index]?.onError?.(error);
-    }
+    readonly id = 'fake'; readonly label = 'Fake';
+    events: CaptureAdapterEvents | null = null;
+    options: CaptureAdapterStartOptions | null = null;
+    stopResult: RecordingResult = { filePath: 'C:/owned/audio/system.wav', format: DEFAULT_WAV_FORMAT };
+    startRecording = vi.fn((options: CaptureAdapterStartOptions, events: CaptureAdapterEvents) => { this.options = options; this.events = events; return Promise.resolve(); });
+    stopRecording = vi.fn(() => Promise.resolve(this.stopResult));
 }
 
 describe('RecordingService', () => {
     let adapter: FakeAdapter;
+    let archive: FakeArchive;
+    beforeEach(() => { adapter = new FakeAdapter(); archive = new FakeArchive(); });
 
-    beforeEach(async () => {
-        mockUserDataPath = await fs.mkdtemp(path.join(tmpdir(), 'finelistener-test-'));
-        adapter = new FakeAdapter();
+    const createService = (callbacks = {}) => new RecordingService(adapter, callbacks, {
+        archive: archive as unknown as RecordingArchive,
     });
 
-    afterEach(async () => {
-        await fs.rm(mockUserDataPath, { recursive: true, force: true });
+    it('returns only an opaque recording id to the renderer and finalizes in main', async () => {
+        const service = createService();
+        const started = await service.startRecording({ sources: { system: '', microphone: null } });
+        expect(started).toEqual({ recordingId: '00000000-0000-4000-8000-000000000001', startedAt: 1 });
+        expect(started).not.toHaveProperty('filePath');
+        expect(adapter.options?.outputPath).toBe('C:/owned/audio/system.wav');
+        const finished = await service.stopRecording();
+        expect(archive.registerCaptureResult).toHaveBeenCalledWith(started.recordingId, adapter.stopResult);
+        expect(finished.session).toBe(session);
     });
 
-    it('forwards current session events and ignores stale ones', async () => {
-        const onProgress = vi.fn();
-        const onLevel = vi.fn();
-        const onError = vi.fn();
-        const service = new RecordingService(adapter, { onProgress, onLevel, onError });
-
+    it('coalesces repeated stop calls', async () => {
+        const service = createService();
         await service.startRecording();
-
-        adapter.emitProgress(0, { durationMs: 1200, bytesWritten: 2048 });
-        adapter.emitLevel(0, { rms: 0.2, peak: 0.9, clipped: false });
-
-        expect(onProgress).toHaveBeenCalledWith({ durationMs: 1200, bytesWritten: 2048 });
-        expect(onLevel).toHaveBeenCalledWith({ rms: 0.2, peak: 0.9, clipped: false });
-
-        await service.stopRecording();
-
-        onProgress.mockClear();
-        onLevel.mockClear();
-        onError.mockClear();
-
-        await service.startRecording();
-
-        adapter.emitProgress(0, { durationMs: 2500 });
-        adapter.emitError(0, new Error('stale'));
-        await flushPromises();
-
-        expect(onProgress).not.toHaveBeenCalled();
-        expect(onError).not.toHaveBeenCalled();
-        expect(service.getState()).toBe('recording');
-
-        adapter.emitProgress(1, { durationMs: 3000 });
-
-        expect(onProgress).toHaveBeenCalledWith({ durationMs: 3000 });
+        const [first, second] = await Promise.all([service.stopRecording(), service.stopRecording()]);
+        expect(adapter.stopRecording).toHaveBeenCalledOnce();
+        expect(first).toEqual(second);
     });
 
-    it('handles adapter error by stopping, clearing session, and returning idle', async () => {
-        const onError = vi.fn();
-        const service = new RecordingService(adapter, { onError });
-        const session = await service.startRecording();
-
-        adapter.stopResult = { filePath: session.filePath, format: session.format };
-        adapter.emitError(0, new Error('boom'));
-        await flushPromises();
-
-        expect(onError).toHaveBeenCalledTimes(1);
-        expect(adapter.stopRecording).toHaveBeenCalledTimes(1);
-        expect(service.getState()).toBe('idle');
-        expect(service.getCurrentSession()).toBeNull();
-
-        const result = await service.stopRecording();
-
-        expect(result.filePath).toBe(session.filePath);
-        expect(result.sessionId).toBe(session.sessionId);
-    });
-
-    it('makes stopRecording idempotent', async () => {
-        const service = new RecordingService(adapter);
-
-        await service.startRecording();
-
-        const stopDeferred = createDeferred<RecordingResult>();
-
-        adapter.stopDeferred = stopDeferred;
-
-        const stopPromise = service.stopRecording();
-        const secondStopPromise = service.stopRecording();
-
-        expect(stopPromise).not.toBe(secondStopPromise);
-        expect(adapter.stopRecording).toHaveBeenCalledTimes(1);
-
-        stopDeferred.resolve({
-            filePath: adapter.startOptions[0].outputPath,
-            format: adapter.startOptions[0].format,
-        });
-
-        const [firstResult, secondResult] = await Promise.all([stopPromise, secondStopPromise]);
-
-        expect(firstResult).toStrictEqual(secondResult);
-        expect(service.getState()).toBe('idle');
-    });
-
-    it('allows stop during starting without switching to recording', async () => {
-        const service = new RecordingService(adapter);
-        const startDeferred = createDeferred<void>();
-
-        adapter.startDeferred = startDeferred;
-
-        const startPromise = service.startRecording();
-
-        await waitFor(() => adapter.startOptions.length > 0);
-
-        expect(service.getState()).toBe('starting');
-        expect(service.getCurrentSession()).not.toBeNull();
-
-        const stopPromise = service.stopRecording();
-
-        startDeferred.resolve();
-        await stopPromise;
-
-        expect(service.getState()).toBe('idle');
-        await startPromise;
-
-        expect(service.getState()).toBe('idle');
-        expect(service.getCurrentSession()).toBeNull();
-    });
-
-    it('reports stopRecording errors to callbacks', async () => {
-        const onError = vi.fn();
-        const service = new RecordingService(adapter, { onError });
-
-        await service.startRecording();
-
-        const stopDeferred = createDeferred<RecordingResult>();
-        const stopError = new Error('stop failed');
-
-        adapter.stopDeferred = stopDeferred;
-
-        const stopPromise = service.stopRecording();
-
-        stopDeferred.reject(stopError);
-
-        await expect(stopPromise).rejects.toThrow('stop failed');
-        expect(onError).toHaveBeenCalledWith(stopError);
-        expect(service.getState()).toBe('error');
-    });
-
-    it('adds a suffix when fileName already exists', async () => {
-        const service = new RecordingService(adapter);
-        const recordingsDir = path.join(mockUserDataPath, 'recordings');
-        const existingPath = path.join(recordingsDir, 'take.wav');
-
-        await fs.mkdir(recordingsDir, { recursive: true });
-        await fs.writeFile(existingPath, '');
-
-        const session = await service.startRecording({ fileName: 'take.wav' });
-
-        expect(path.basename(session.filePath)).toBe('take-1.wav');
-
-        await service.stopRecording();
-    });
-
-    it('passes both selected sources through and rejects an empty selection before starting', async () => {
-        const service = new RecordingService(adapter);
-
-        await expect(service.startRecording({ sources: { system: null, microphone: null } })).rejects.toThrow('Select at least one');
-        expect(adapter.startRecording).not.toHaveBeenCalled();
-        expect(service.getState()).toBe('idle');
-        await service.startRecording({ sources: { system: 'output', microphone: 'input' } });
-        expect(adapter.startOptions[0].sources).toEqual({ system: 'output', microphone: 'input' });
-        await service.stopRecording();
-    });
-
-    it('keeps surviving capture active and publishes an automatic finish once all sources end', async () => {
+    it('finalizes an automatic helper completion and emits one public result', async () => {
         const onFinished = vi.fn();
-        const onProgress = vi.fn();
-        const service = new RecordingService(adapter, { onFinished, onProgress });
-        const session = await service.startRecording({ sources: { system: '', microphone: '' } });
-        const sourceFailures = [{ source: 'microphone' as const, message: 'Unavailable' }];
-
-        adapter.emitProgress(0, { durationMs: 2500, sourceFailures });
-        expect(service.getState()).toBe('recording');
-        expect(adapter.stopRecording).not.toHaveBeenCalled();
-        expect(onProgress).toHaveBeenCalledWith({ durationMs: 2500, sourceFailures });
-        const result: RecordingResult = { filePath: session.filePath, format: session.format, durationMs: 3000, sourceFailures };
-
-        adapter.events[0].onFinished?.(result);
-        expect(service.getState()).toBe('idle');
-        expect(onFinished).toHaveBeenCalledWith({ ...result, sessionId: session.sessionId });
-        expect(await service.stopRecording()).toEqual({ ...result, sessionId: session.sessionId });
+        const service = createService({ onFinished });
         await service.startRecording();
-        adapter.events[0].onFinished?.(result);
-        expect(service.getState()).toBe('recording');
-        expect(onFinished).toHaveBeenCalledTimes(1);
-        await service.stopRecording();
+        adapter.events?.onFinished?.(adapter.stopResult);
+        await vi.waitFor(() => expect(onFinished).toHaveBeenCalledOnce());
+        expect(onFinished.mock.calls[0][0]).not.toHaveProperty('filePath');
+        expect(await service.stopRecording()).toEqual(onFinished.mock.calls[0][0]);
+    });
+
+    it('rejects an empty source selection before preparing storage', async () => {
+        const service = createService();
+        await expect(service.startRecording({ sources: { system: null, microphone: null } })).rejects.toThrow('Select at least one');
+        expect(archive.prepareCapture).not.toHaveBeenCalled();
     });
 });

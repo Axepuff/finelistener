@@ -1,11 +1,10 @@
 import type {
     RecordingLevel,
     RecordingProgress,
-    RecordingResult,
-    RecordingSession,
     RecordingStartOptions,
     RecordingState,
 } from 'electron/src/services/RecordingService';
+import type { FinalizeRecordingResult, RecoverableRecording, RecordingSessionInfo } from 'electron/src/types/recordingArchive';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
 import type { SessionDetails, SessionListItem } from 'electron/src/types/sessions';
@@ -24,16 +23,19 @@ declare global {
             sessions: {
                 list: () => Promise<SessionListItem[]>;
                 get: (sessionId: string) => Promise<SessionDetails>;
+                setActive: (sessionId: string | null) => Promise<boolean>;
                 delete: (sessionId: string) => Promise<boolean>;
                 importAudio: () => Promise<SessionDetails | null>;
-                importRecording: (recordingFilePath: string | RecordingResult) => Promise<SessionDetails>;
                 optimizeAudio: (sessionId: string) => Promise<SessionDetails>;
                 revealFolder: () => Promise<boolean>;
             };
             transcribeStream: (audioPath: string, opts: TranscribeOpts) => Promise<string>;
             saveText: (content: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
-            startSystemRecording: (options?: RecordingStartOptions) => Promise<RecordingSession>;
-            stopSystemRecording: () => Promise<RecordingResult>;
+            startSystemRecording: (options?: RecordingStartOptions) => Promise<RecordingSessionInfo>;
+            stopSystemRecording: () => Promise<FinalizeRecordingResult>;
+            listRecoverableRecordings: () => Promise<RecoverableRecording[]>;
+            recoverRecording: (recordingId: string) => Promise<FinalizeRecordingResult>;
+            discardRecording: (recordingId: string) => Promise<boolean>;
             getRecordingState: () => Promise<RecordingState>;
             getRecordingPermissionStatus: () => Promise<ScreenRecordingPermissionStatus>;
             openRecordingPreferences: () => Promise<boolean>;
@@ -46,7 +48,7 @@ declare global {
             onRecordingState: (cb: (state: RecordingState) => void) => () => void;
             onRecordingProgress: (cb: (progress: RecordingProgress) => void) => () => void;
             onRecordingLevel: (cb: (level: RecordingLevel) => void) => () => void;
-            onRecordingFinished: (callback: (result: RecordingResult) => void) => () => void;
+            onRecordingFinished: (callback: (result: FinalizeRecordingResult) => void) => () => void;
             onRecordingError: (cb: (payload: { message: string }) => void) => () => void;
             transcribeSession: (sessionId: string, options: SessionTranscribeOpts) => Promise<SessionDetails>;
             stopTranscription: () => Promise<boolean>;

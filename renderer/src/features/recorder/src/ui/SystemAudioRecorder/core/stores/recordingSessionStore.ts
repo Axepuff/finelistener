@@ -1,9 +1,9 @@
 import type {
     RecordingLevel,
     RecordingProgress,
-    RecordingResult,
     RecordingState,
 } from 'electron/src/services/RecordingService';
+import type { FinalizeRecordingResult } from 'electron/src/types/recordingArchive';
 import type { SessionDetails } from 'electron/src/types/sessions';
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { ForegroundOperationStore } from 'renderer/src/stores/foregroundOperationStore';
@@ -33,6 +33,7 @@ interface RecordingSessionDependencies extends RecordingDependencies {
     devicesStore: RecordingDevicesStore;
     operations: ForegroundOperationStore;
     onSessionImported: (session: SessionDetails) => void;
+    onRecoveryChanged: () => void;
 }
 
 interface LevelProcessingResult {
@@ -286,7 +287,7 @@ export class RecordingSessionStore {
             }
 
             const { selectedDeviceId } = this.dependencies.devicesStore.state;
-            const session = await api.startSystemRecording({
+            await api.startSystemRecording({
                 deviceId: selectedDeviceId || undefined,
                 sources: api.runtimePlatform === 'win32' ? {
                     system: devices.systemDeviceId,
@@ -298,7 +299,7 @@ export class RecordingSessionStore {
                 return commandFailure('Recording was cancelled.');
             }
 
-            this.dependencies.logService.append(`Recording started: ${session.filePath}`);
+            this.dependencies.logService.append('Recording started.');
 
             return commandSuccess(undefined);
         } catch (error: unknown) {
@@ -314,7 +315,7 @@ export class RecordingSessionStore {
         return this.finishRecording();
     }
 
-    private async finishAutomaticRecording(result: RecordingResult): Promise<void> {
+    private async finishAutomaticRecording(result: FinalizeRecordingResult): Promise<void> {
         if (this.disposed || this.stateValue.isProcessingRecording) return;
         if (!this.activeOperation) this.activeOperation = this.dependencies.operations.begin('recording');
         if (!this.activeOperation) return;
@@ -322,7 +323,7 @@ export class RecordingSessionStore {
         await this.finishRecording(result);
     }
 
-    private async finishRecording(completedResult?: RecordingResult): Promise<CommandResult<SessionDetails>> {
+    private async finishRecording(completedResult?: FinalizeRecordingResult): Promise<CommandResult<SessionDetails>> {
         const api = this.dependencies.adapter;
         const operation = this.activeOperation;
 
@@ -340,11 +341,11 @@ export class RecordingSessionStore {
             const result = completedResult ?? await api.stopSystemRecording();
 
             captureStopped = true;
-            this.dependencies.logService.append(`Recording finished: ${result.filePath}`);
+            this.dependencies.logService.append('Recording finished.');
             if (!this.dependencies.operations.owns(operation) || this.disposed) {
                 return commandFailure('Recording was cancelled.');
             }
-            const session = await api.importRecording(result);
+            const session = result.session;
 
             if (!this.dependencies.operations.owns(operation) || this.disposed) {
                 return commandFailure('The recorded session was replaced before it finished loading.');
@@ -359,11 +360,14 @@ export class RecordingSessionStore {
         } catch (error: unknown) {
             const message = getErrorMessage(error);
 
+            captureStopped = this.stateValue.recordingState === 'idle';
+
             console.error('Failed to stop recording', error);
             runInAction(() => {
                 this.stateValue = { ...this.stateValue, recordingError: 'Failed to finish the recording.' };
             });
             this.dependencies.logService.append(`Failed to stop recording: ${message}`);
+            this.dependencies.onRecoveryChanged();
 
             return commandFailure('Failed to finish the recording.');
         } finally {
