@@ -27,6 +27,17 @@ const SESSION_OPTIMIZED_WAV_CONVERT_OPTIONS = {
     dynanorm: true,
 } as const;
 
+type DerivedCacheKind = 'listening' | 'optimized';
+
+interface DerivedCacheEntry {
+    sessionId: string;
+    kind: DerivedCacheKind;
+    relativePath: string;
+    lastAccessedAt: number;
+}
+
+type DerivedCacheIndex = Record<string, DerivedCacheEntry>;
+
 const formatDateForTitle = (timestampMs: number): string => {
     const date = new Date(timestampMs);
     const yyyy = String(date.getFullYear());
@@ -81,7 +92,7 @@ export class SessionsService {
 
         const trimmed = sessionId.trim();
 
-        if (!trimmed || trimmed === '.' || trimmed === '..' || /[\\/]/.test(trimmed)) {
+        if (!trimmed || trimmed.startsWith('.') || trimmed === '..' || /[\\/]/.test(trimmed)) {
             throw new Error('Invalid session id');
         }
 
@@ -551,9 +562,9 @@ export class SessionsService {
         return operation;
     }
 
-    private async touchDerivedFiles(sessionId: string, files: Array<{ kind: 'listening' | 'optimized'; path: string }>): Promise<void> {
+    private async touchDerivedFiles(sessionId: string, files: Array<{ kind: DerivedCacheKind; path: string }>): Promise<void> {
         const indexPath = path.join(this.getSessionsRootDir(), DERIVED_CACHE_INDEX_FILE);
-        let index: Record<string, { sessionId: string; kind: 'listening' | 'optimized'; relativePath: string; lastAccessedAt: number }> = {};
+        let index: DerivedCacheIndex = {};
         try { index = await readJsonFile<typeof index>(indexPath); } catch { /* Start a new cache index. */ }
         const now = Date.now();
         for (const file of files) {
@@ -568,14 +579,13 @@ export class SessionsService {
 
     private async enforceDerivedCacheBudget(excluded: Set<string>): Promise<void> {
         const indexPath = path.join(this.getSessionsRootDir(), DERIVED_CACHE_INDEX_FILE);
-        let index: Record<string, { sessionId: string; kind: 'listening' | 'optimized'; relativePath: string; lastAccessedAt: number }>;
-        try { index = await readJsonFile<typeof index>(indexPath); } catch { return; }
+        const index = await this.rebuildDerivedCacheIndex(indexPath);
         const candidates: Array<{ key: string; path: string; size: number; lastAccessedAt: number }> = [];
         let total = 0;
         for (const [key, entry] of Object.entries(index)) {
             try {
                 const sessionDir = this.resolveSessionDir(entry.sessionId);
-                const target = this.resolveTrackPath(sessionDir, entry.relativePath);
+                const target = await this.resolveOwnedFile(sessionDir, entry.relativePath);
                 const session = await readJsonFile<SessionFileV1>(path.join(sessionDir, SESSION_FILE_NAME));
                 const rebuildable = entry.kind === 'optimized' || Boolean(session.tracks?.length)
                     || path.resolve(target) !== path.resolve(sessionDir, session.audio.originalPath);
@@ -593,5 +603,64 @@ export class SessionsService {
             total -= candidate.size; delete index[candidate.key];
         }
         await writeJsonFile(indexPath, index);
+    }
+
+    private async rebuildDerivedCacheIndex(indexPath: string): Promise<DerivedCacheIndex> {
+        let previous: DerivedCacheIndex = {};
+        try { previous = await readJsonFile<DerivedCacheIndex>(indexPath); } catch { /* Rebuild from session manifests. */ }
+
+        let entries: Array<import('fs').Dirent> = [];
+        try { entries = await fs.readdir(this.getSessionsRootDir(), { withFileTypes: true }); } catch { return {}; }
+
+        const rebuilt: DerivedCacheIndex = {};
+        for (const entry of entries) {
+            if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+            const sessionDir = this.resolveSessionDir(entry.name);
+            let session: SessionFileV1;
+            try {
+                session = await readJsonFile<SessionFileV1>(path.join(sessionDir, SESSION_FILE_NAME));
+                if (session.version !== SESSION_VERSION) continue;
+            } catch {
+                continue;
+            }
+
+            const files: Array<{ kind: DerivedCacheKind; relativePath: string }> = [];
+            if (session.audio.wavPath) {
+                const isListeningCache = Boolean(session.tracks?.length)
+                    || path.resolve(sessionDir, session.audio.wavPath) !== path.resolve(sessionDir, session.audio.originalPath);
+                if (isListeningCache) files.push({ kind: 'listening', relativePath: session.audio.wavPath });
+            }
+            if (session.audio.optimizedWavPath) {
+                files.push({ kind: 'optimized', relativePath: session.audio.optimizedWavPath });
+            }
+
+            for (const file of files) {
+                try {
+                    const target = await this.resolveOwnedFile(sessionDir, file.relativePath);
+                    const stat = await fs.stat(target);
+                    const key = `${entry.name}:${file.kind}`;
+                    rebuilt[key] = {
+                        sessionId: entry.name,
+                        kind: file.kind,
+                        relativePath: file.relativePath,
+                        lastAccessedAt: previous[key]?.lastAccessedAt ?? stat.mtimeMs,
+                    };
+                } catch { /* Missing derived files are generated when requested. */ }
+            }
+        }
+        return rebuilt;
+    }
+
+    private async resolveOwnedFile(sessionDir: string, relativePath: string): Promise<string> {
+        const target = this.resolveTrackPath(sessionDir, relativePath);
+        const stat = await fs.lstat(target);
+        if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Invalid session file');
+        const canonicalSessionDir = await fs.realpath(sessionDir);
+        const canonicalTarget = await fs.realpath(target);
+        const relative = path.relative(canonicalSessionDir, canonicalTarget);
+        if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+            throw new Error('Session file is outside managed storage');
+        }
+        return target;
     }
 }

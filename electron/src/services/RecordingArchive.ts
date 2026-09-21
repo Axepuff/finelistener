@@ -6,7 +6,13 @@ import type { WavFormat } from './AudioPreprocessor';
 import { AudioPreprocessor } from './AudioPreprocessor';
 import type { RecordingResult } from './RecordingService';
 import type { RecordingSourceKind, RecordingSources } from './capture/CaptureAdapter';
-import type { FinalizeRecordingResult, RecoverableRecording, RecordingSourceWarning, RecoveryState } from '../types/recordingArchive';
+import {
+    RECORDING_STORAGE_FULL_MESSAGE,
+    type FinalizeRecordingResult,
+    type RecoverableRecording,
+    type RecordingSourceWarning,
+    type RecoveryState,
+} from '../types/recordingArchive';
 import type { SessionFileV1, SessionSourceTrack } from '../types/sessions';
 import { SessionsService } from './SessionsService';
 
@@ -17,6 +23,7 @@ const SESSION_FILE = 'session.json';
 const RECOVERY_VERSION = 1 as const;
 const SESSION_VERSION = 1 as const;
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SAFE_SOURCE_WARNING = 'This audio source could not be recovered.';
 export const DEFAULT_RECOVERY_QUOTA_BYTES = 2 * 1024 * 1024 * 1024;
 export const DEFAULT_RECOVERY_WARNING_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -64,6 +71,7 @@ export class RecordingArchive {
     private readonly audioPreprocessor: AudioPreprocessor;
     private readonly recoveryQuotaBytes: number;
     private readonly operations = new Map<string, Promise<FinalizeRecordingResult>>();
+    private readonly activeRecordings = new Set<string>();
 
     constructor(config: RecordingArchiveConfig = {}) {
         this.rootDir = config.rootDir ?? path.join(app.getPath('userData'), 'recordings');
@@ -75,7 +83,7 @@ export class RecordingArchive {
     public async prepareCapture(sources: RecordingSources | undefined, format: WavFormat): Promise<PreparedRecording> {
         const usage = await this.getRecoveryUsage();
         if (usage >= this.recoveryQuotaBytes) {
-            throw new Error('Recording storage is full. Recover or delete an unfinished recording before starting a new one.');
+            throw new Error(RECORDING_STORAGE_FULL_MESSAGE);
         }
         const recordingId = randomUUID();
         const createdAt = Date.now();
@@ -92,46 +100,70 @@ export class RecordingArchive {
             sourceWarnings: [],
         };
         await atomicWriteJson(path.join(recordingDir, MANIFEST_FILE), manifest);
+        this.activeRecordings.add(recordingId);
         const primarySource = enabledSources.includes('system') ? 'system' : 'microphone';
         return { recordingId, startedAt: createdAt, outputPath: path.join(recordingDir, AUDIO_DIR, sourceFileName(primarySource)) };
     }
 
     public async registerCaptureResult(recordingId: string, result: RecordingResult): Promise<void> {
-        const location = await this.findOwnedRecording(recordingId);
-        const manifest = await this.readManifest(location);
-        const failures = new Map(result.sourceFailures?.map((failure) => [failure.source, failure.message]) ?? []);
-        const submittedTracks = result.tracks?.length ? result.tracks : [{
-            source: manifest.sources[0], filePath: result.filePath, durationMs: result.durationMs,
-        }];
-        const observedTracks: NonNullable<RecoveryManifestV1['tracks']> = [];
-        for (const track of submittedTracks) {
-            if (!manifest.sources.includes(track.source)) throw new Error('Capture returned an unexpected recording source');
-            const exists = await this.assertOwnedTrack(location, track.filePath, track.source);
-            if (!exists) {
-                failures.set(track.source, 'Recording source did not produce an audio file.');
-                continue;
+        const normalizedId = this.normalizeId(recordingId);
+        try {
+            const location = await this.findOwnedRecording(normalizedId);
+            const manifest = await this.readManifest(location);
+            const failedSources = new Set(result.sourceFailures?.map((failure) => {
+                console.warn('Recording source reported a capture failure', {
+                    recordingId: normalizedId,
+                    source: failure.source,
+                    error: failure.message,
+                });
+                return failure.source;
+            }) ?? []);
+            const submittedTracks = result.tracks?.length ? result.tracks : [{
+                source: manifest.sources[0], filePath: result.filePath, durationMs: result.durationMs,
+            }];
+            const observedTracks: NonNullable<RecoveryManifestV1['tracks']> = [];
+            for (const track of submittedTracks) {
+                if (!manifest.sources.includes(track.source)) throw new Error('Capture returned an unexpected recording source');
+                const exists = await this.assertOwnedTrack(location, track.filePath, track.source);
+                if (!exists) {
+                    failedSources.add(track.source);
+                    continue;
+                }
+                observedTracks.push({
+                    source: track.source,
+                    startOffsetMs: Number.isFinite(track.startOffsetMs) && (track.startOffsetMs ?? 0) >= 0 ? track.startOffsetMs ?? 0 : 0,
+                    durationMs: Number.isFinite(track.durationMs) && (track.durationMs ?? 0) >= 0 ? track.durationMs : undefined,
+                });
+                if (track.failure) {
+                    console.warn('Recording track reported a capture failure', {
+                        recordingId: normalizedId,
+                        source: track.source,
+                        error: track.failure,
+                    });
+                    failedSources.add(track.source);
+                }
             }
-            observedTracks.push({
-                source: track.source,
-                startOffsetMs: Number.isFinite(track.startOffsetMs) && (track.startOffsetMs ?? 0) >= 0 ? track.startOffsetMs ?? 0 : 0,
-                durationMs: Number.isFinite(track.durationMs) && (track.durationMs ?? 0) >= 0 ? track.durationMs : undefined,
-            });
-            if (track.failure) failures.set(track.source, track.failure);
+            manifest.durationMs = result.durationMs;
+            manifest.bytesWritten = result.bytesWritten;
+            manifest.sourceWarnings = Array.from(failedSources, (source) => ({ source, message: SAFE_SOURCE_WARNING }));
+            manifest.tracks = observedTracks;
+            manifest.state = 'ready';
+            await atomicWriteJson(path.join(location, MANIFEST_FILE), manifest);
+        } finally {
+            this.activeRecordings.delete(normalizedId);
         }
-        manifest.durationMs = result.durationMs;
-        manifest.bytesWritten = result.bytesWritten;
-        manifest.sourceWarnings = Array.from(failures, ([source, message]) => ({ source, message }));
-        manifest.tracks = observedTracks;
-        manifest.state = 'ready';
-        await atomicWriteJson(path.join(location, MANIFEST_FILE), manifest);
+    }
+
+    public markCaptureStopped(recordingId: string): void {
+        this.activeRecordings.delete(this.normalizeId(recordingId));
     }
 
     public finalize(recordingId: string): Promise<FinalizeRecordingResult> {
-        this.assertId(recordingId);
-        const existing = this.operations.get(recordingId);
+        const normalizedId = this.normalizeId(recordingId);
+        const existing = this.operations.get(normalizedId);
         if (existing) return existing;
-        const operation = this.finalizeInternal(recordingId).finally(() => this.operations.delete(recordingId));
-        this.operations.set(recordingId, operation);
+        const operation = this.finalizeInternal(normalizedId).finally(() => this.operations.delete(normalizedId));
+        this.operations.set(normalizedId, operation);
         return operation;
     }
 
@@ -155,7 +187,9 @@ export class RecordingArchive {
             if (!entryName || entryName === '.' || entryName === '..' || /[\\/]/.test(entryName)) throw new Error('Invalid recording id');
             const root = isPending ? this.pendingRoot() : this.stagingRoot();
             const target = path.join(root, entryName);
+            if (isPending && this.activeRecordings.has(entryName.toLowerCase())) throw new Error('An active recording cannot be deleted');
             await this.assertOwnedDirectory(target);
+            if (await this.hasValidManifest(target)) throw new Error('Invalid unknown recording id');
             await fs.rm(target, { recursive: true, force: true });
             return;
         }
@@ -163,16 +197,18 @@ export class RecordingArchive {
             const entryName = recordingId.slice('legacy:'.length);
             if (!entryName || entryName === '.' || entryName === '..' || /[\\/]/.test(entryName)) throw new Error('Invalid recording id');
             const target = path.join(this.rootDir, entryName);
+            if (path.relative(path.resolve(target), path.resolve(this.pendingRoot())) === '') throw new Error('Invalid recording id');
             const relative = path.relative(path.resolve(this.rootDir), path.resolve(target));
             if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Invalid recording path');
+            const stat = await fs.lstat(target);
+            if (stat.isSymbolicLink()) throw new Error('Invalid recording path');
             await fs.rm(target, { recursive: true, force: true });
             return;
         }
-        this.assertId(recordingId);
-        if (this.operations.has(recordingId)) throw new Error('Recording recovery is already in progress');
-        const candidates = [this.pendingDir(recordingId), path.join(this.stagingRoot(), recordingId)];
-        const location = (await Promise.all(candidates.map(async (candidate) => await this.exists(candidate) ? candidate : null))).find(Boolean);
-        if (!location) throw new Error('Recording recovery item was not found');
+        const normalizedId = this.normalizeId(recordingId);
+        if (this.activeRecordings.has(normalizedId)) throw new Error('An active recording cannot be deleted');
+        if (this.operations.has(normalizedId)) throw new Error('Recording recovery is already in progress');
+        const location = await this.findOwnedRecording(normalizedId);
         await this.assertOwnedDirectory(location);
         await fs.rm(location, { recursive: true, force: true });
     }
@@ -187,8 +223,7 @@ export class RecordingArchive {
                 return {
                     recordingId,
                     sessionId: published.id,
-                    session: await this.sessionsService.getSession(published.id),
-                    sourceWarnings: published.sourceWarnings ?? [],
+                    sourceWarnings: this.toPublicWarnings(published.sourceWarnings ?? []),
                 };
             }
             throw error;
@@ -196,10 +231,10 @@ export class RecordingArchive {
         const manifest = await this.readManifest(location);
         if (manifest.sessionId) {
             const publishedDir = path.join(this.sessionsRoot(), manifest.sessionId);
-            if (await this.exists(path.join(publishedDir, SESSION_FILE))) return this.resultFromPublished(manifest, publishedDir);
+            if (await this.exists(path.join(publishedDir, SESSION_FILE))) return this.resultFromPublished(manifest);
         }
         const validTracks: SessionSourceTrack[] = [];
-        const warnings = new Map(manifest.sourceWarnings.map((warning) => [warning.source, warning.message]));
+        const warnings = new Map(this.toPublicWarnings(manifest.sourceWarnings).map((warning) => [warning.source, warning.message]));
         for (const source of manifest.sources) {
             const filePath = path.join(location, AUDIO_DIR, sourceFileName(source));
             try {
@@ -212,7 +247,8 @@ export class RecordingArchive {
                     durationMs: observed?.durationMs ?? durationMs,
                 });
             } catch (error) {
-                warnings.set(source, `Recording source could not be recovered: ${errorMessage(error)}`);
+                console.warn('Recording source validation failed', { recordingId, source, error: errorMessage(error) });
+                warnings.set(source, SAFE_SOURCE_WARNING);
             }
         }
         manifest.sourceWarnings = Array.from(warnings, ([source, message]) => ({ source, message }));
@@ -261,7 +297,7 @@ export class RecordingArchive {
             await fs.rm(path.join(publishedDir, MANIFEST_FILE), { force: true }).catch((error) => {
                 console.warn('Failed to remove published recording recovery manifest', error);
             });
-            return { recordingId, sessionId, session: await this.sessionsService.getSession(sessionId), sourceWarnings: manifest.sourceWarnings };
+            return { recordingId, sessionId, sourceWarnings: this.toPublicWarnings(manifest.sourceWarnings) };
         } catch (error) {
             if (published) throw error;
             manifest.state = 'recoverable';
@@ -272,9 +308,13 @@ export class RecordingArchive {
         }
     }
 
-    private async resultFromPublished(manifest: RecoveryManifestV1, _publishedDir: string): Promise<FinalizeRecordingResult> {
+    private resultFromPublished(manifest: RecoveryManifestV1): FinalizeRecordingResult {
         const sessionId = manifest.sessionId!;
-        return { recordingId: manifest.recordingId, sessionId, session: await this.sessionsService.getSession(sessionId), sourceWarnings: manifest.sourceWarnings };
+        return {
+            recordingId: manifest.recordingId,
+            sessionId,
+            sourceWarnings: this.toPublicWarnings(manifest.sourceWarnings),
+        };
     }
 
     private async findPublishedSession(recordingId: string): Promise<SessionFileV1 | null> {
@@ -285,7 +325,7 @@ export class RecordingArchive {
             const sessionPath = path.join(this.sessionsRoot(), entry.name, SESSION_FILE);
             try {
                 const session = JSON.parse(await fs.readFile(sessionPath, 'utf8')) as SessionFileV1 & { recordingId?: string };
-                if (session.recordingId === recordingId) return session;
+                if (session.recordingId === recordingId && session.id === entry.name && ID_PATTERN.test(session.id)) return session;
             } catch { /* Ignore invalid session entries. */ }
         }
         return null;
@@ -299,6 +339,7 @@ export class RecordingArchive {
             const location = path.join(root, entry.name);
             try {
                 const manifest = await this.readManifest(location);
+                if (this.activeRecordings.has(manifest.recordingId) || this.operations.has(manifest.recordingId)) continue;
                 if (manifest.state === 'capturing') {
                     manifest.state = 'recoverable';
                     await atomicWriteJson(path.join(location, MANIFEST_FILE), manifest);
@@ -306,7 +347,9 @@ export class RecordingArchive {
                 items.push({
                     recordingId: manifest.recordingId, createdAt: manifest.createdAt,
                     ageMs: Math.max(0, Date.now() - manifest.createdAt), sizeBytes: await this.directorySize(location),
-                    state: manifest.state, sources: manifest.sources, sourceWarnings: manifest.sourceWarnings,
+                    state: manifest.state,
+                    sources: manifest.sources,
+                    sourceWarnings: this.toPublicWarnings(manifest.sourceWarnings),
                     canRecover: true,
                 });
             } catch {
@@ -324,10 +367,11 @@ export class RecordingArchive {
         for (const entry of entries) {
             if (entry.name === 'pending') continue;
             const target = path.join(this.rootDir, entry.name);
-            const stat = await fs.stat(target).catch(() => null);
+            const stat = await fs.lstat(target).catch(() => null);
             if (!stat) continue;
             items.push({ recordingId: `legacy:${entry.name}`, createdAt: stat.birthtimeMs, ageMs: Date.now() - stat.birthtimeMs,
-                sizeBytes: stat.isDirectory() ? await this.directorySize(target) : stat.size, state: 'unknown', sources: [], sourceWarnings: [], canRecover: false });
+                sizeBytes: stat.isDirectory() && !stat.isSymbolicLink() ? await this.directorySize(target) : stat.size,
+                state: 'unknown', sources: [], sourceWarnings: [], canRecover: false });
         }
     }
 
@@ -375,16 +419,26 @@ export class RecordingArchive {
     private async assertOwnedDirectory(location: string): Promise<void> {
         const allowedRoots = [this.pendingRoot(), this.stagingRoot()].map((root) => path.resolve(root));
         const resolved = path.resolve(location);
-        if (!allowedRoots.some((root) => { const relative = path.relative(root, resolved); return relative && !relative.startsWith('..') && !path.isAbsolute(relative); })) {
+        const allowedRoot = allowedRoots.find((root) => {
+            const relative = path.relative(root, resolved);
+            return relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+        });
+        if (!allowedRoot) {
             throw new Error('Invalid recording directory');
         }
         const stat = await fs.lstat(location);
         if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Invalid recording directory');
+        const canonicalRoot = await fs.realpath(allowedRoot);
+        const canonicalLocation = await fs.realpath(location);
+        const canonicalRelative = path.relative(canonicalRoot, canonicalLocation);
+        if (!canonicalRelative || canonicalRelative.startsWith('..') || path.isAbsolute(canonicalRelative)) {
+            throw new Error('Invalid recording directory');
+        }
     }
 
     private async findOwnedRecording(recordingId: string): Promise<string> {
-        this.assertId(recordingId);
-        for (const candidate of [this.pendingDir(recordingId), path.join(this.stagingRoot(), recordingId)]) {
+        const normalizedId = this.normalizeId(recordingId);
+        for (const candidate of [this.pendingDir(normalizedId), path.join(this.stagingRoot(), normalizedId)]) {
             if (await this.exists(path.join(candidate, MANIFEST_FILE))) { await this.assertOwnedDirectory(candidate); return candidate; }
         }
         let stagingEntries: import('fs').Dirent[] = [];
@@ -392,7 +446,12 @@ export class RecordingArchive {
         for (const entry of stagingEntries) {
             if (!entry.isDirectory()) continue;
             const candidate = path.join(this.stagingRoot(), entry.name);
-            try { if ((await this.readManifest(candidate)).recordingId === recordingId) return candidate; } catch { /* ignore */ }
+            try {
+                if ((await this.readManifest(candidate)).recordingId === normalizedId) {
+                    await this.assertOwnedDirectory(candidate);
+                    return candidate;
+                }
+            } catch { /* Ignore invalid staging entries. */ }
         }
         throw new Error('Recording recovery item was not found');
     }
@@ -401,8 +460,31 @@ export class RecordingArchive {
         const value = JSON.parse(await fs.readFile(path.join(location, MANIFEST_FILE), 'utf8')) as Partial<RecoveryManifestV1>;
         if (value.version !== 1 || typeof value.recordingId !== 'string' || !ID_PATTERN.test(value.recordingId)
             || typeof value.createdAt !== 'number' || !Array.isArray(value.sources) || !value.sources.every((source) => source === 'system' || source === 'microphone')
+            || (value.sessionId !== undefined && (typeof value.sessionId !== 'string' || !ID_PATTERN.test(value.sessionId)))
             || !['capturing', 'ready', 'recoverable', 'committing'].includes(value.state ?? '')) throw new Error('Invalid recovery manifest');
-        return { ...value, sourceWarnings: Array.isArray(value.sourceWarnings) ? value.sourceWarnings : [] } as RecoveryManifestV1;
+        return {
+            ...value,
+            recordingId: value.recordingId.toLowerCase(),
+            sessionId: value.sessionId?.toLowerCase(),
+            sourceWarnings: Array.isArray(value.sourceWarnings) ? value.sourceWarnings : [],
+        } as RecoveryManifestV1;
+    }
+
+    private async hasValidManifest(location: string): Promise<boolean> {
+        try {
+            await this.readManifest(location);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    private toPublicWarnings(warnings: RecordingSourceWarning[]): RecordingSourceWarning[] {
+        const sources = new Set<RecordingSourceKind>();
+        for (const warning of warnings) {
+            if (warning?.source === 'system' || warning?.source === 'microphone') sources.add(warning.source);
+        }
+        return Array.from(sources, (source) => ({ source, message: SAFE_SOURCE_WARNING }));
     }
 
     private resolveSources(sources: RecordingSources | undefined): RecordingSourceKind[] {
@@ -414,7 +496,10 @@ export class RecordingArchive {
         return enabled;
     }
 
-    private assertId(id: string): void { if (!ID_PATTERN.test(id)) throw new Error('Invalid recording id'); }
+    private normalizeId(id: string): string {
+        if (!ID_PATTERN.test(id)) throw new Error('Invalid recording id');
+        return id.toLowerCase();
+    }
     private pendingRoot(): string { return path.join(this.rootDir, 'pending'); }
     private pendingDir(id: string): string { return path.join(this.pendingRoot(), id); }
     private sessionsRoot(): string { return this.sessionsService.getSessionsRootDir(); }

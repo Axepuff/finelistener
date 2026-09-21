@@ -152,3 +152,32 @@ it('evicts least recently used derived audio and regenerates it on demand', asyn
     await expect(fs.access(reopened.audioWavPath)).resolves.toBeUndefined();
     await expect(fs.readFile(reopened.audioOriginalPath)).resolves.toEqual(wav(1000));
 });
+
+it('does not allow the sessions API to delete the staging root', async () => {
+    const stagingFile = path.join(environment.root, 'sessions', '.staging', 'recording', 'audio.wav');
+    await fs.mkdir(path.dirname(stagingFile), { recursive: true });
+    await fs.writeFile(stagingFile, wav(1000));
+
+    const service = new SessionsService();
+    await expect(service.deleteSession('.staging')).rejects.toThrow('Invalid session id');
+    await expect(fs.access(stagingFile)).resolves.toBeUndefined();
+});
+
+it('rebuilds cache accounting when the derived cache index is missing', async () => {
+    const firstSource = path.join(environment.root, 'first-rebuild.wav');
+    const secondSource = path.join(environment.root, 'second-rebuild.wav');
+    await fs.writeFile(firstSource, wav(1000));
+    await fs.writeFile(secondSource, wav(2000));
+
+    const initialService = new SessionsService(Number.MAX_SAFE_INTEGER);
+    const first = await initialService.createSessionFromImport(firstSource);
+    const second = await initialService.createSessionFromImport(secondSource);
+    await fs.rm(path.join(environment.root, 'sessions', '.derived-cache.json'), { force: true });
+
+    const enforcingService = new SessionsService(40_000);
+    await enforcingService.setActiveSession(second.id);
+
+    await expect(fs.access(first.audioWavPath)).rejects.toThrow();
+    await expect(fs.access(first.audioOriginalPath)).resolves.toBeUndefined();
+    await expect(fs.access(second.audioWavPath)).resolves.toBeUndefined();
+});

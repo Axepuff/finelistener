@@ -56,10 +56,11 @@ export class RecordingService {
         this.setState('starting'); this.store.set(this.atoms.stopRequested, false);
         this.store.set(this.atoms.lastError, null); this.store.set(this.atoms.startInFlight, true);
         const format = { ...this.defaultFormat };
-        let session: ActiveRecording;
+        let pendingSession: ActiveRecording | null = null;
         try {
             const prepared = await this.archive.prepareCapture(options.sources, format);
-            session = { ...prepared, format };
+            const session: ActiveRecording = { ...prepared, format };
+            pendingSession = session;
             this.store.set(this.atoms.session, session); this.store.set(this.atoms.lastResult, null);
             await this.adapter.startRecording(
                 { outputPath: session.outputPath, format, deviceId: options.deviceId, sources: options.sources },
@@ -73,6 +74,7 @@ export class RecordingService {
             if (this.isCurrentSession(session.recordingId) && !this.store.get(this.atoms.stopRequested)) this.setState('recording');
             return { recordingId: session.recordingId, startedAt: session.startedAt };
         } catch (error) {
+            if (pendingSession) this.archive.markCaptureStopped(pendingSession.recordingId);
             const err = this.toError(error); this.store.set(this.atoms.lastError, err);
             this.store.set(this.atoms.session, null); this.setState('idle'); throw err;
         } finally { this.store.set(this.atoms.startInFlight, false); }
@@ -128,6 +130,7 @@ export class RecordingService {
         try { const result = await this.completeCapture(session, await this.adapter.stopRecording()); this.callbacks.onFinished?.(result); }
         catch (cleanupError) {
             const err = this.toError(cleanupError); console.error('Recording cleanup failed', err);
+            this.archive.markCaptureStopped(recordingId);
             this.store.set(this.atoms.lastError, err); this.store.set(this.atoms.session, null); this.setState('idle');
         } finally { this.store.set(this.atoms.stopInFlight, false); }
     }

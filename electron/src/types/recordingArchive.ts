@@ -1,6 +1,6 @@
-import type { SessionDetails } from './sessions';
-
 export type RecoveryState = 'capturing' | 'ready' | 'recoverable' | 'committing';
+
+export const RECORDING_STORAGE_FULL_MESSAGE = 'Recording storage is full. Recover or delete an unfinished recording before starting a new one.';
 
 export interface RecordingSourceWarning {
     source: 'system' | 'microphone';
@@ -10,7 +10,6 @@ export interface RecordingSourceWarning {
 export interface FinalizeRecordingResult {
     recordingId: string;
     sessionId: string;
-    session: SessionDetails;
     sourceWarnings: RecordingSourceWarning[];
 }
 

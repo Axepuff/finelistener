@@ -21,6 +21,7 @@ const session: SessionDetails = {
     ],
 };
 const options = { language: 'en', model: 'base' as const, splitOnWord: true, useVad: true };
+const recordingStorageFullMessage = 'Recording storage is full. Recover or delete an unfinished recording before starting a new one.';
 const partial: SessionTranscriptV1 = {
     version: 1,
     segments: [{ startSec: 2, endSec: 3, text: 'Saved speech', source: 'system' }],
@@ -33,7 +34,7 @@ const partial: SessionTranscriptV1 = {
     },
 };
 const captured: FinalizeRecordingResult = {
-    recordingId: 'capture', sessionId: session.id, session, sourceWarnings: [],
+    recordingId: 'capture', sessionId: session.id, sourceWarnings: [],
 };
 
 const settle = async () => { for (let i = 0; i < 12; i += 1) await Promise.resolve(); };
@@ -44,7 +45,7 @@ describe('recording sources', () => {
             recordingId: 'capture', startedAt: 1,
         }));
         const fake = createFakeRendererAdapter({ runtimePlatform: 'win32', isRecordingAvailable: () => Promise.resolve(true),
-            startSystemRecording, stopSystemRecording: () => Promise.resolve(captured) });
+            startSystemRecording, stopSystemRecording: () => Promise.resolve(captured), getSession: () => Promise.resolve(session) });
         const persist = vi.spyOn(fake.adapter, 'setUiPreference');
         const store = new AppStore(fake.adapter);
 
@@ -73,6 +74,7 @@ describe('recording sources', () => {
         const stopSystemRecording = vi.fn(() => Promise.resolve(captured));
         const fake = createFakeRendererAdapter({
             getRecordingState: () => Promise.resolve('recording'), stopSystemRecording,
+            getSession: () => Promise.resolve(session),
             onRecordingFinished: (callback) => { emitFinished = callback; return () => undefined; },
             onRecordingState: (callback) => { emitState = callback; return () => undefined; },
         });
@@ -88,6 +90,24 @@ describe('recording sources', () => {
             await settle();
             expect(store.workspace.activeSessionId).toBe(session.id);
             expect(store.operations.isBusy).toBe(false);
+        } finally { store.dispose(); }
+    });
+
+    it('explains how to unblock recording when recovery storage is full', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const fake = createFakeRendererAdapter({
+            runtimePlatform: 'win32',
+            isRecordingAvailable: () => Promise.resolve(true),
+            startSystemRecording: () => Promise.reject(new Error(recordingStorageFullMessage)),
+        });
+        const store = new AppStore(fake.adapter);
+        store.initialize();
+        try {
+            await settle();
+            expect(await store.recording.startRecording()).toEqual({
+                ok: false,
+                message: recordingStorageFullMessage,
+            });
         } finally { store.dispose(); }
     });
 });

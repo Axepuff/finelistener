@@ -23,6 +23,8 @@ import {
     initialSessionState,
 } from './recordingStoreTypes';
 
+const RECORDING_STORAGE_FULL_MESSAGE = 'Recording storage is full. Recover or delete an unfinished recording before starting a new one.';
+
 const SILENCE_PEAK_THRESHOLD = 0.0005;
 const SILENCE_RMS_THRESHOLD = 0.0005;
 const SILENCE_WARNING_AFTER_MS = 2000;
@@ -306,8 +308,13 @@ export class RecordingSessionStore {
             const message = getErrorMessage(error);
 
             console.error('Failed to start recording', error);
+            this.dependencies.onRecoveryChanged();
 
-            return this.failStart(operation, `Failed to start recording: ${message}`, 'Could not start recording. Check the selected devices.');
+            const userMessage = message === RECORDING_STORAGE_FULL_MESSAGE ?
+                RECORDING_STORAGE_FULL_MESSAGE :
+                'Could not start recording. Check the selected devices.';
+
+            return this.failStart(operation, `Failed to start recording: ${message}`, userMessage);
         }
     }
 
@@ -345,7 +352,7 @@ export class RecordingSessionStore {
             if (!this.dependencies.operations.owns(operation) || this.disposed) {
                 return commandFailure('Recording was cancelled.');
             }
-            const session = result.session;
+            const session = await api.getSession(result.sessionId);
 
             if (!this.dependencies.operations.owns(operation) || this.disposed) {
                 return commandFailure('The recorded session was replaced before it finished loading.');

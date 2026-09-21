@@ -25,8 +25,14 @@ const transcriptionOptions = {
     useVad: true,
 };
 
+const createDeferred = <T>() => {
+    let resolve!: (value: T | PromiseLike<T>) => void;
+    const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+    return { promise, resolve };
+};
+
 const finalizeResult = (session: SessionDetails) => ({
-    recordingId: 'recording-1', sessionId: session.id, session, sourceWarnings: [],
+    recordingId: 'recording-1', sessionId: session.id, sourceWarnings: [],
 });
 
 describe('AppStore', () => {
@@ -56,6 +62,7 @@ describe('AppStore', () => {
                     return () => { emitRecordingState = () => undefined; };
                 },
                 stopSystemRecording,
+                getSession: () => Promise.resolve(recordedSession),
             });
             const store = new AppStore(fake.adapter);
 
@@ -335,5 +342,34 @@ describe('AppStore', () => {
             'C:\\audio\\source.wav',
             expect.objectContaining({ segment: { start: 0, end: 4 } }),
         );
+    });
+
+    it('ignores a recovery result that completes after disposal', async () => {
+        const recovery = createDeferred<ReturnType<typeof finalizeResult>>();
+        const recoveredSession = createSession({ id: 'recovered-session' });
+        const fake = createFakeRendererAdapter({
+            listRecoverableRecordings: () => Promise.resolve([{
+                recordingId: 'recording-1',
+                createdAt: 1,
+                ageMs: 1,
+                sizeBytes: 1,
+                state: 'recoverable',
+                sources: ['system'],
+                sourceWarnings: [],
+                canRecover: true,
+            }]),
+            recoverRecording: () => recovery.promise,
+            getSession: () => Promise.resolve(recoveredSession),
+        });
+        const store = new AppStore(fake.adapter);
+        store.initialize();
+        await vi.waitFor(() => expect(store.recordingRecovery.hasItems).toBe(true));
+
+        const recoveryPromise = store.recordingRecovery.recover('recording-1');
+        store.dispose();
+        recovery.resolve(finalizeResult(recoveredSession));
+        await recoveryPromise;
+
+        expect(store.workspace.activeSessionId).toBeNull();
     });
 });

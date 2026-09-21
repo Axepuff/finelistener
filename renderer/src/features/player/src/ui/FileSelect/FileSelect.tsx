@@ -1,7 +1,6 @@
 import { Button, Paper, SegmentedControl, Stack, Text } from '@mantine/core';
 import { IconFileMusic } from '@tabler/icons-react';
-import { SystemAudioRecorder } from '@~/recorder';
-import { RecordingRecovery } from '@~/recorder/src/ui/RecordingRecovery/RecordingRecovery';
+import { RecordingRecovery, SystemAudioRecorder } from '@~/recorder';
 import { observer } from 'mobx-react-lite';
 import { useMemo, useState, type FC } from 'react';
 import { useAppStore } from '../../../../../AppContext';

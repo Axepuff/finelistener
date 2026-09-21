@@ -124,7 +124,7 @@ export class AppStore {
         }
 
         this.recording.initialize();
-        void this.recordingRecovery.refresh();
+        this.recordingRecovery.initialize();
     }
 
     dispose(): void {
