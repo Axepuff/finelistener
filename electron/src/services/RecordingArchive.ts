@@ -65,6 +65,10 @@ const atomicWriteJson = async (filePath: string, value: unknown): Promise<void> 
 
 const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
+export class RecordingStorageFullError extends Error {
+    constructor() { super(RECORDING_STORAGE_FULL_MESSAGE); }
+}
+
 export class RecordingArchive {
     private readonly rootDir: string;
     private readonly sessionsService: SessionsService;
@@ -83,7 +87,7 @@ export class RecordingArchive {
     public async prepareCapture(sources: RecordingSources | undefined, format: WavFormat): Promise<PreparedRecording> {
         const usage = await this.getRecoveryUsage();
         if (usage >= this.recoveryQuotaBytes) {
-            throw new Error(RECORDING_STORAGE_FULL_MESSAGE);
+            throw new RecordingStorageFullError();
         }
         const recordingId = randomUUID();
         const createdAt = Date.now();

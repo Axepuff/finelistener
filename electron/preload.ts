@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { RecordingStartOptions } from './src/services/RecordingService';
-import type { FinalizeRecordingResult, RecoverableRecording } from './src/types/recordingArchive';
+import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResult } from './src/types/recordingArchive';
 import type { TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from './src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from './src/types/uiPreferences';
 
@@ -25,7 +25,7 @@ contextBridge.exposeInMainWorld('api', {
         revealFolder: () => ipcRenderer.invoke('sessions:reveal-root'),
     },
     saveText: (content: string) => ipcRenderer.invoke('saveText', content),
-    startSystemRecording: (options?: RecordingStartOptions) => ipcRenderer.invoke('recording:start', options),
+    startSystemRecording: (options?: RecordingStartOptions): Promise<StartRecordingResult> => ipcRenderer.invoke('recording:start', options),
     stopSystemRecording: (): Promise<FinalizeRecordingResult> => ipcRenderer.invoke('recording:stop'),
     listRecoverableRecordings: (): Promise<RecoverableRecording[]> => ipcRenderer.invoke('recording:list-recoverable'),
     recoverRecording: (recordingId: string): Promise<FinalizeRecordingResult> => ipcRenderer.invoke('recording:recover', recordingId),

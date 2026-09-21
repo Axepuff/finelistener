@@ -28,3 +28,5 @@ export interface RecordingSessionInfo {
     recordingId: string;
     startedAt: number;
 }
+
+export type StartRecordingResult = RecordingSessionInfo | { error: 'recording-storage-full' };

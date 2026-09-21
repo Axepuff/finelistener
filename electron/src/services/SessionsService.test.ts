@@ -100,6 +100,23 @@ it('opens legacy sessions without assigning invented source labels', async () =>
     expect(session.audioWavPath).toBe(path.join(sessionDir, 'original.wav'));
 });
 
+it.each([undefined, null, { wavPath: 42 }, { wavPath: 'cache.wav' }])('opens a valid session alongside a malformed audio manifest: %j', async (audio) => {
+    const sessionDir = path.join(environment.root, 'sessions', 'valid');
+    const brokenDir = path.join(environment.root, 'sessions', 'broken');
+    await fs.mkdir(sessionDir, { recursive: true });
+    await fs.mkdir(brokenDir, { recursive: true });
+    await fs.writeFile(path.join(sessionDir, 'original.wav'), wav(1000));
+    await fs.writeFile(path.join(sessionDir, 'session.json'), JSON.stringify({
+        version: 1, id: 'valid', title: 'Recording', createdAt: 1, updatedAt: 1, sourceKind: 'recorded',
+        audio: { originalFileName: 'original.wav', originalPath: 'original.wav' },
+    }));
+    await fs.writeFile(path.join(brokenDir, 'session.json'), JSON.stringify({ version: 1, audio }));
+
+    await expect(new SessionsService().getSession('valid')).resolves.toMatchObject({
+        id: 'valid', audioWavPath: path.join(sessionDir, 'original.wav'),
+    });
+});
+
 it('does not publish a broken session or remove originals when mixing fails', async () => {
     const source = path.join(environment.root, 'recordings', 'invalid.wav');
     await fs.mkdir(path.dirname(source), { recursive: true });

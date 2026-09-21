@@ -4,7 +4,7 @@ import type {
     RecordingStartOptions,
     RecordingState,
 } from 'electron/src/services/RecordingService';
-import type { FinalizeRecordingResult, RecoverableRecording, RecordingSessionInfo } from 'electron/src/types/recordingArchive';
+import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResult } from 'electron/src/types/recordingArchive';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
 import type { SessionDetails, SessionListItem } from 'electron/src/types/sessions';
@@ -25,7 +25,7 @@ export interface RendererAdapter {
     transcribeSession: (sessionId: string, options: SessionTranscribeOpts) => Promise<SessionDetails>;
     stopTranscription: () => Promise<boolean>;
     saveText: (content: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
-    startSystemRecording: (options?: RecordingStartOptions) => Promise<RecordingSessionInfo>;
+    startSystemRecording: (options?: RecordingStartOptions) => Promise<StartRecordingResult>;
     stopSystemRecording: () => Promise<FinalizeRecordingResult>;
     listRecoverableRecordings: () => Promise<RecoverableRecording[]>;
     recoverRecording: (recordingId: string) => Promise<FinalizeRecordingResult>;

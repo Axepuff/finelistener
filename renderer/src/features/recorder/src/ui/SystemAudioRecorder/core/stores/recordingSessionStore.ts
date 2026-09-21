@@ -289,7 +289,7 @@ export class RecordingSessionStore {
             }
 
             const { selectedDeviceId } = this.dependencies.devicesStore.state;
-            await api.startSystemRecording({
+            const result = await api.startSystemRecording({
                 deviceId: selectedDeviceId || undefined,
                 sources: api.runtimePlatform === 'win32' ? {
                     system: devices.systemDeviceId,
@@ -301,6 +301,11 @@ export class RecordingSessionStore {
                 return commandFailure('Recording was cancelled.');
             }
 
+            if ('error' in result) {
+                this.dependencies.onRecoveryChanged();
+                return this.failStart(operation, RECORDING_STORAGE_FULL_MESSAGE, RECORDING_STORAGE_FULL_MESSAGE);
+            }
+
             this.dependencies.logService.append('Recording started.');
 
             return commandSuccess(undefined);
@@ -310,11 +315,7 @@ export class RecordingSessionStore {
             console.error('Failed to start recording', error);
             this.dependencies.onRecoveryChanged();
 
-            const userMessage = message === RECORDING_STORAGE_FULL_MESSAGE ?
-                RECORDING_STORAGE_FULL_MESSAGE :
-                'Could not start recording. Check the selected devices.';
-
-            return this.failStart(operation, `Failed to start recording: ${message}`, userMessage);
+            return this.failStart(operation, `Failed to start recording: ${message}`, 'Could not start recording. Check the selected devices.');
         }
     }
 

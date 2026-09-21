@@ -98,7 +98,7 @@ describe('recording sources', () => {
         const fake = createFakeRendererAdapter({
             runtimePlatform: 'win32',
             isRecordingAvailable: () => Promise.resolve(true),
-            startSystemRecording: () => Promise.reject(new Error(recordingStorageFullMessage)),
+            startSystemRecording: () => Promise.resolve({ error: 'recording-storage-full' }),
         });
         const store = new AppStore(fake.adapter);
         store.initialize();

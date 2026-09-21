@@ -620,6 +620,9 @@ export class SessionsService {
             try {
                 session = await readJsonFile<SessionFileV1>(path.join(sessionDir, SESSION_FILE_NAME));
                 if (session.version !== SESSION_VERSION) continue;
+                if (!session.audio || typeof session.audio.originalPath !== 'string'
+                    || (session.audio.wavPath !== undefined && typeof session.audio.wavPath !== 'string')
+                    || (session.audio.optimizedWavPath !== undefined && typeof session.audio.optimizedWavPath !== 'string')) continue;
             } catch {
                 continue;
             }

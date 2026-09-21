@@ -6,7 +6,8 @@ import { AudioteeAdapter } from '../services/capture/AudioteeAdapter';
 import type { CaptureAdapter } from '../services/capture/CaptureAdapter';
 import { MiniAudioAdapter, MINIAUDIO_WAV_FORMAT } from '../services/capture/MiniAudioAdapter';
 import type { ScreenRecordingPermissionStatus } from '../services/capture/ScreenCaptureKitAdapter';
-import { RecordingArchive } from '../services/RecordingArchive';
+import { RecordingArchive, RecordingStorageFullError } from '../services/RecordingArchive';
+import type { StartRecordingResult } from '../types/recordingArchive';
 
 const toErrorPayload = (error: Error) => ({ message: error.message });
 
@@ -92,12 +93,17 @@ export function registerRecordingController(
         return true;
     });
 
-    ipc.handle('recording:start', async (_event, options?: RecordingStartOptions) => {
+    ipc.handle('recording:start', async (_event, options?: RecordingStartOptions): Promise<StartRecordingResult> => {
         if (adapter.isAvailable && !(await adapter.isAvailable())) {
             throw new Error(`${adapter.label} is not available.`);
         }
 
-        return service.startRecording(options ?? {});
+        try {
+            return await service.startRecording(options ?? {});
+        } catch (error) {
+            if (error instanceof RecordingStorageFullError) return { error: 'recording-storage-full' };
+            throw error;
+        }
     });
 
     ipc.handle('recording:stop', async () => service.stopRecording());
