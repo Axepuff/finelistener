@@ -1,5 +1,5 @@
-import { ActionIcon, Box, Button, Group, Notification, SegmentedControl, Switch, TextInput } from '@mantine/core';
-import { IconCopy, IconDownload, IconSearch, IconTextSize, IconClockHour2 } from '@tabler/icons-react';
+import { ActionIcon, Box, Button, Group, Notification, SegmentedControl, Switch, Text, TextInput } from '@mantine/core';
+import { IconChevronDown, IconChevronUp, IconClockHour2, IconCopy, IconDownload, IconSearch, IconTextSize, IconX } from '@tabler/icons-react';
 import React, { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useAppStore } from 'renderer/src/AppContext';
@@ -9,15 +9,26 @@ interface Props {
     currentTextValue: string;
     showRegions: boolean;
     setShowRegions: React.Dispatch<React.SetStateAction<boolean>>;
+    searchQuery: string;
+    onSearchChange: (value: string) => void;
+    matchCount: number;
+    activeMatchIndex: number;
+    onPreviousMatch: () => void;
+    onNextMatch: () => void;
 }
 
 export const TranscribedTextControls: React.FC<Props> = observer(({
     currentTextValue,
     showRegions,
     setShowRegions,
+    searchQuery,
+    onSearchChange,
+    matchCount,
+    activeMatchIndex,
+    onPreviousMatch,
+    onNextMatch,
 }) => {
     const store = useAppStore();
-    const [searchValue, setSearchValue] = useState('');
     const [isCopyNotificationOpen, setIsCopyNotificationOpen] = useState(false);
     const [copyNotificationKey, setCopyNotificationKey] = useState(0);
 
@@ -108,12 +119,38 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
                         />
                     ) : null}
                     <TextInput
-                        value={searchValue}
-                        onChange={(event) => setSearchValue(event.currentTarget.value)}
+                        value={searchQuery}
+                        onChange={(event) => onSearchChange(event.currentTarget.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                                event.preventDefault();
+                                if (event.shiftKey) onPreviousMatch();
+                                else onNextMatch();
+                            } else if (event.key === 'Escape') {
+                                onSearchChange('');
+                            }
+                        }}
                         placeholder="Search text..."
+                        aria-label="Search transcript"
                         leftSection={<IconSearch size={16} />}
+                        rightSection={searchQuery ? (
+                            <ActionIcon variant="subtle" color="gray" size="sm" aria-label="Clear search" onClick={() => onSearchChange('')}>
+                                <IconX size={14} />
+                            </ActionIcon>
+                        ) : null}
                         className={styles.searchInput}
                     />
+                    {searchQuery.trim() ? (
+                        <Text size="xs" c="dimmed" className={styles.searchCount} role="status">
+                            {matchCount > 0 ? `${activeMatchIndex + 1} of ${matchCount}` : '0 results'}
+                        </Text>
+                    ) : null}
+                    <ActionIcon variant="subtle" color="gray" size={32} aria-label="Previous search result" disabled={matchCount === 0} onClick={onPreviousMatch}>
+                        <IconChevronUp size={16} />
+                    </ActionIcon>
+                    <ActionIcon variant="subtle" color="gray" size={32} aria-label="Next search result" disabled={matchCount === 0} onClick={onNextMatch}>
+                        <IconChevronDown size={16} />
+                    </ActionIcon>
                     <ActionIcon
                         variant="subtle"
                         color="gray"

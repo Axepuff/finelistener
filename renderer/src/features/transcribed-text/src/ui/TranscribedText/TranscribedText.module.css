@@ -19,6 +19,16 @@
     white-space: normal;
 }
 
+.searchMatch {
+    background-color: var(--mantine-color-yellow-2);
+    color: inherit;
+    border-radius: 2px;
+}
+
+.searchMatch[data-active="true"] {
+    background-color: var(--mantine-color-orange-4);
+}
+
 .copyNotificationWrapper {
     position: fixed;
     right: 16px;
@@ -43,6 +53,10 @@
 
 .searchInput {
     width: 220px;
+}
+
+.searchCount {
+    white-space: nowrap;
 }
 
 .saveButton {

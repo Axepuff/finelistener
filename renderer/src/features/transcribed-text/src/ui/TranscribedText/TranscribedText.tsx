@@ -3,15 +3,19 @@ import { IconPlus } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState, type MouseEvent } from 'react';
 import { formatTranscriptSegment } from 'renderer/src/stores/transcriptFormat';
+import { formatSecondsReadable } from 'renderer/src/shared/lib';
 import { useAppStore } from '../../../../../AppContext';
 import { TranscribedTextContent } from './TranscribedTextContent';
 import { TranscribedTextControls } from './TranscribedTextControls';
+import { findTranscriptMatches } from './search';
 import { parseTimeToSeconds } from './utils';
 
 export const TranscribedText: React.FC = observer(() => {
     const store = useAppStore();
     const { transcription } = store;
     const [showRegions, setShowRegions] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedMatchIndex, setSelectedMatchIndex] = useState(0);
     const currentTextValue = showRegions ? transcription.timecodedText : transcription.plainText;
     const isInitialEmptyState = (
         store.lifecycleState === 'initial'
@@ -20,7 +24,22 @@ export const TranscribedText: React.FC = observer(() => {
     const plainSegments = transcription.visibleTranscript?.segments.map((segment) => ({
         text: formatTranscriptSegment(segment),
         startSeconds: segment.startSec,
+        timecode: segment.endSec === null ?
+            `[${formatSecondsReadable(segment.startSec)}]` :
+            `[${formatSecondsReadable(segment.startSec)} - ${formatSecondsReadable(segment.endSec)}]`,
     })) ?? [];
+    const matches = findTranscriptMatches(plainSegments, searchQuery);
+    const activeMatchIndex = matches.length > 0 ? Math.min(selectedMatchIndex, matches.length - 1) : -1;
+
+    const handleSearchChange = (value: string) => {
+        setSearchQuery(value);
+        setSelectedMatchIndex(0);
+    };
+
+    const moveToMatch = (direction: -1 | 1) => {
+        if (matches.length === 0) return;
+        setSelectedMatchIndex((index) => (Math.min(index, matches.length - 1) + direction + matches.length) % matches.length);
+    };
 
     const handleRegionClick = (event: MouseEvent<HTMLElement>) => {
         const regionElement = (event.target as HTMLElement | null)?.closest('span[data-regions]');
@@ -79,6 +98,12 @@ export const TranscribedText: React.FC = observer(() => {
                         currentTextValue={currentTextValue}
                         showRegions={showRegions}
                         setShowRegions={setShowRegions}
+                        searchQuery={searchQuery}
+                        onSearchChange={handleSearchChange}
+                        matchCount={matches.length}
+                        activeMatchIndex={activeMatchIndex}
+                        onPreviousMatch={() => moveToMatch(-1)}
+                        onNextMatch={() => moveToMatch(1)}
                     />
 
                     {store.lifecycleState === 'transcribing' ? (
@@ -118,8 +143,11 @@ export const TranscribedText: React.FC = observer(() => {
                     ) : null}
                     <TranscribedTextContent
                         showRegions={showRegions}
-                        renderedText={transcription.renderedHtml}
                         plainSegments={plainSegments}
+                        matches={matches}
+                        activeMatchIndex={activeMatchIndex}
+                        searchQuery={searchQuery}
+                        transcriptText={currentTextValue}
                         onRegionClick={handleRegionClick}
                     />
                 </>
