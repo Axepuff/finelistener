@@ -6,6 +6,7 @@ Start with [AppStore](appStore.ts) for a workflow that changes several stores. F
 | --- | --- | --- |
 | Composition and cross-store commands | [AppStore](appStore.ts) | Opening/importing/deleting a session, switching audio, starting/stopping transcription, or clearing the workspace |
 | Session list | [SessionsStore](sessionsStore.ts) | Loading the sidebar, refreshing metadata, handling list errors or stale responses |
+| Recording recovery | [RecordingRecoveryStore](recordingRecoveryStore.ts) | Listing, recovering, or discarding interrupted recordings and coordinating recovery with foreground operations |
 | Active audio, segment and playback | [WorkspaceStore](workspaceStore.ts) | Selecting a segment, switching audio paths, resetting or seeking playback |
 | Transcription execution and output | [TranscriptionStore](transcriptionStore.ts) | Processing streaming events, stopping a run, managing draft/saved output or progress |
 | Models | [WhisperModelStore](whisperModelStore.ts) | Listing/downloading models or importing a local model |
