@@ -6,21 +6,51 @@ import { TranscribedTextContent } from './TranscribedTextContent';
 import { findTranscriptMatches } from './search';
 
 const segments = [
-    { text: 'Hello (world). Hello again.', startSeconds: 1, timecode: '[00:00:01]' },
-    { text: 'Another hello.', startSeconds: 2, timecode: '[00:00:02]' },
+    { text: 'Hello (world). Hello again.', prefix: '', startSeconds: 1, timecode: '[00:00:01]' },
+    { text: 'Another hello.', prefix: '', startSeconds: 2, timecode: '[00:00:02]' },
 ];
 
 describe('transcript search', () => {
     it('finds every literal match without case sensitivity', () => {
         expect(findTranscriptMatches(segments, 'HELLO')).toEqual([
-            { segmentIndex: 0, start: 0, end: 5 },
-            { segmentIndex: 0, start: 15, end: 20 },
-            { segmentIndex: 1, start: 8, end: 13 },
+            { ranges: [{ segmentIndex: 0, start: 0, end: 5 }] },
+            { ranges: [{ segmentIndex: 0, start: 15, end: 20 }] },
+            { ranges: [{ segmentIndex: 1, start: 8, end: 13 }] },
         ]);
         expect(findTranscriptMatches(segments, '(world).')).toEqual([
-            { segmentIndex: 0, start: 6, end: 14 },
+            { ranges: [{ segmentIndex: 0, start: 6, end: 14 }] },
         ]);
         expect(findTranscriptMatches(segments, '   ')).toEqual([]);
+    });
+
+    it.each([false, true])('searches speech across segments without counting source labels in timecode mode: %s', (showRegions) => {
+        const sourceSegments = [
+            { text: 'hello', prefix: 'Microphone: ', startSeconds: 1, timecode: '[00:00:01]' },
+            { text: 'world', prefix: 'System audio: ', startSeconds: 2, timecode: '[00:00:02]' },
+        ];
+        expect(findTranscriptMatches(sourceSegments, 'microphone')).toEqual([]);
+
+        const matches = findTranscriptMatches(sourceSegments, 'hello world');
+        expect(matches).toEqual([{ ranges: [
+            { segmentIndex: 0, start: 0, end: 5 },
+            { segmentIndex: 1, start: 0, end: 5 },
+        ] }]);
+
+        const html = renderToStaticMarkup(createElement(MantineProvider, null,
+            createElement(TranscribedTextContent, {
+                showRegions,
+                plainSegments: sourceSegments,
+                matches,
+                activeMatchIndex: 0,
+                searchQuery: 'hello world',
+                transcriptText: 'hello world',
+                onRegionClick: () => {},
+            })));
+
+        expect(html.match(/<mark /g)).toHaveLength(2);
+        expect(html.match(/data-active="true"/g)).toHaveLength(2);
+        expect(html).toContain('Microphone: ');
+        expect(html).toContain('System audio: ');
     });
 
     it.each([false, true])('highlights recognized text in timecode mode: %s', (showRegions) => {

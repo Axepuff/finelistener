@@ -1,9 +1,8 @@
-import { ActionIcon, Alert, Button, Group, Paper, Progress, Stack, Text } from '@mantine/core';
-import { IconPlus } from '@tabler/icons-react';
+import { ActionIcon, Alert, Button, Group, Paper, Progress, Stack, Text, ThemeIcon } from '@mantine/core';
+import { IconHeadphones, IconPlus } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState, type MouseEvent } from 'react';
-import { formatTranscriptSegment } from 'renderer/src/stores/transcriptFormat';
-import { formatSecondsReadable } from 'renderer/src/shared/lib';
+import { formatTranscriptRegionLabel, formatTranscriptSourcePrefix } from 'renderer/src/stores/transcriptFormat';
 import { useAppStore } from '../../../../../AppContext';
 import { TranscribedTextContent } from './TranscribedTextContent';
 import { TranscribedTextControls } from './TranscribedTextControls';
@@ -21,12 +20,13 @@ export const TranscribedText: React.FC = observer(() => {
         store.lifecycleState === 'initial'
         || store.lifecycleState === 'importing'
     ) && currentTextValue.trim().length === 0;
+    const isReadyEmptyState = store.transcriptionWorkflow.state === 'loaded';
+    const audioTitle = store.workspace.activeSession?.title;
     const plainSegments = transcription.visibleTranscript?.segments.map((segment) => ({
-        text: formatTranscriptSegment(segment),
+        text: segment.text,
+        prefix: formatTranscriptSourcePrefix(segment),
         startSeconds: segment.startSec,
-        timecode: segment.endSec === null ?
-            `[${formatSecondsReadable(segment.startSec)}]` :
-            `[${formatSecondsReadable(segment.startSec)} - ${formatSecondsReadable(segment.endSec)}]`,
+        timecode: formatTranscriptRegionLabel(segment),
     })) ?? [];
     const matches = findTranscriptMatches(plainSegments, searchQuery);
     const activeMatchIndex = matches.length > 0 ? Math.min(selectedMatchIndex, matches.length - 1) : -1;
@@ -141,15 +141,43 @@ export const TranscribedText: React.FC = observer(() => {
                             {'A recording source stopped early. Only the captured audio is available.'}
                         </Alert>
                     ) : null}
-                    <TranscribedTextContent
-                        showRegions={showRegions}
-                        plainSegments={plainSegments}
-                        matches={matches}
-                        activeMatchIndex={activeMatchIndex}
-                        searchQuery={searchQuery}
-                        transcriptText={currentTextValue}
-                        onRegionClick={handleRegionClick}
-                    />
+                    {isReadyEmptyState ? (
+                        <Paper
+                            role="status"
+                            style={{
+                                width: '100%',
+                                minHeight: 0,
+                                flex: 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                            }}
+                        >
+                            <Stack gap={12} align="center" style={{ maxWidth: 360, padding: 16, textAlign: 'center' }}>
+                                <ThemeIcon size={64} variant="light" color="red">
+                                    <IconHeadphones size={30} />
+                                </ThemeIcon>
+                                <Text size="lg" fw={600}>
+                                    {'Audio is ready to transcribe'}
+                                </Text>
+                                <Text size="sm" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
+                                    {audioTitle ?
+                                        `Click "Transcribe" to see the text for ${audioTitle} here.` :
+                                        'Click "Transcribe" to see the text here.'}
+                                </Text>
+                            </Stack>
+                        </Paper>
+                    ) : (
+                        <TranscribedTextContent
+                            showRegions={showRegions}
+                            plainSegments={plainSegments}
+                            matches={matches}
+                            activeMatchIndex={activeMatchIndex}
+                            searchQuery={searchQuery}
+                            transcriptText={currentTextValue}
+                            onRegionClick={handleRegionClick}
+                        />
+                    )}
                 </>
             )}
         </Stack>

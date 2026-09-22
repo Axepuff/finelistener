@@ -1,10 +1,11 @@
 import { Box, Paper } from '@mantine/core';
 import React, { useEffect, useRef, type MouseEvent } from 'react';
-import type { TranscriptMatch } from './search';
+import type { TranscriptMatch, TranscriptMatchRange } from './search';
 import styles from './TranscribedText.module.css';
 
 interface TranscribedSegment {
     text: string;
+    prefix: string;
     startSeconds: number | null;
     timecode: string;
 }
@@ -30,12 +31,14 @@ export const TranscribedTextContent: React.FC<Props> = ({
 }) => {
     const contentRef = useRef<HTMLDivElement>(null);
     const regionTextClassName = `${styles.regionTextContent} ${showRegions ? styles.regionTextPreWrap : styles.regionTextNormalWrap}`;
-    const matchesBySegment = new Map<number, Array<{ match: TranscriptMatch; index: number }>>();
+    const matchesBySegment = new Map<number, Array<{ range: TranscriptMatchRange; index: number }>>();
 
     matches.forEach((match, index) => {
-        const segmentMatches = matchesBySegment.get(match.segmentIndex) ?? [];
-        segmentMatches.push({ match, index });
-        matchesBySegment.set(match.segmentIndex, segmentMatches);
+        match.ranges.forEach((range) => {
+            const segmentMatches = matchesBySegment.get(range.segmentIndex) ?? [];
+            segmentMatches.push({ range, index });
+            matchesBySegment.set(range.segmentIndex, segmentMatches);
+        });
     });
 
     useEffect(() => {
@@ -49,14 +52,14 @@ export const TranscribedTextContent: React.FC<Props> = ({
         const parts: React.ReactNode[] = [];
         let cursor = 0;
 
-        segmentMatches.forEach(({ match, index }) => {
-            parts.push(text.slice(cursor, match.start));
+        segmentMatches.forEach(({ range, index }) => {
+            parts.push(text.slice(cursor, range.start));
             parts.push(
-                <mark key={index} className={styles.searchMatch} data-active={index === activeMatchIndex}>
-                    {text.slice(match.start, match.end)}
+                <mark key={`${index}-${range.start}`} className={styles.searchMatch} data-active={index === activeMatchIndex}>
+                    {text.slice(range.start, range.end)}
                 </mark>,
             );
-            cursor = match.end;
+            cursor = range.end;
         });
         parts.push(text.slice(cursor));
 
@@ -72,11 +75,13 @@ export const TranscribedTextContent: React.FC<Props> = ({
                             <>
                                 <span data-regions={segment.startSeconds?.toString()}>{segment.timecode}</span>
                                 {segment.text ? ' ' : ''}
+                                {segment.text ? segment.prefix : ''}
                                 {renderSegmentText(segment.text, index)}
                                 {'\n'}
                             </>
                         ) : (
                             <span data-regions={segment.startSeconds?.toString()}>
+                                {segment.prefix}
                                 {renderSegmentText(segment.text, index)}
                                 {index < plainSegments.length - 1 ? ' ' : ''}
                             </span>
