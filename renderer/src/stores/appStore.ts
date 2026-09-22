@@ -353,9 +353,6 @@ export class AppStore {
         const audioPath = this.workspace.audioSourcePath;
 
         if (!this.adapter) return commandFailure('Transcription is not available.');
-        if (this.transcription.isDuplicateFilterUpdating) {
-            return commandFailure('Wait for duplicate filtering to finish.');
-        }
         if (!audioPath) return commandFailure('Choose an audio source before transcribing.');
         if (!retryFailed && this.workspace.hasIncompleteSegment) {
             return commandFailure('Set both the start and end of the segment, with the end after the start.');
@@ -495,17 +492,14 @@ export class AppStore {
         if (!this.adapter || !sessionId || !this.transcription.duplicateFilterAvailable) {
             return commandFailure('Duplicate filtering is not available for this transcript.');
         }
-        if (this.operations.isBusy) return commandFailure('Another workspace operation is already running.');
-        if (this.transcription.isDuplicateFilterUpdating) {
-            return commandFailure('Duplicate filtering is already being updated.');
-        }
+        const operation = this.operations.begin('filtering-transcript');
 
-        this.transcription.setDuplicateFilterUpdating(true);
+        if (!operation) return commandFailure('Another workspace operation is already running.');
 
         try {
             const session = await this.adapter.setTranscriptDuplicateFilter(sessionId, enabled);
 
-            if (this.disposed || this.workspace.activeSessionId !== sessionId) {
+            if (!this.operations.owns(operation) || this.disposed || this.workspace.activeSessionId !== sessionId) {
                 return commandFailure('The session was replaced before duplicate filtering finished.');
             }
 
@@ -526,7 +520,7 @@ export class AppStore {
             return commandFailure('Duplicate filtering could not be updated.');
         } finally {
             runInAction(() => {
-                this.transcription.setDuplicateFilterUpdating(false);
+                this.operations.finish(operation);
             });
         }
     }

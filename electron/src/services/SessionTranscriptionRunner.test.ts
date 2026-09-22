@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import type { SessionDetails, SessionTranscriptV1 } from '../types/sessions';
+import { SessionsService } from './SessionsService';
 import { transcribeSessionSources } from './SessionTranscriptionRunner';
 
 const createRepository = () => {
@@ -146,3 +147,81 @@ it('recomputes filtering from the same run after a failed source is retried', as
     ]);
     expect(result.transcript?.sourceRun?.sources[1]).toMatchObject({ status: 'completed' });
 });
+
+it.each([false, true])(
+    'keeps the previous visible transcript when duplicate filtering is set to %s after all new sources fail',
+    async (enabled) => {
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const repository = createRepository();
+        const previousSegments = [{ startSec: 0, endSec: null, text: 'Previously saved important words' }];
+        repository.session.transcript = { version: 1, segments: previousSegments };
+        const transcribe = vi.fn().mockRejectedValue(new Error('Unavailable'));
+
+        await transcribeSessionSources('session', {
+            runId: 1,
+            language: 'en',
+        }, repository, transcribe, new AbortController().signal);
+        expect(repository.session.transcript?.segments).toEqual(previousSegments);
+
+        const service = new SessionsService();
+        vi.spyOn(service, 'getSession').mockImplementation(repository.getSession);
+        vi.spyOn(service, 'saveTranscript').mockImplementation(repository.saveTranscript);
+        await expect(service.setTranscriptDuplicateFilter('session', enabled)).rejects.toThrow(
+            'Transcript has no completed source results',
+        );
+
+        expect(repository.session.transcript?.segments).toEqual(previousSegments);
+    },
+);
+
+it('keeps the previous visible transcript when filtering changes after cancellation before any source completes', async () => {
+    const repository = createRepository();
+    const previousSegments = [{ startSec: 0, endSec: null, text: 'Previously saved important words' }];
+    repository.session.transcript = { version: 1, segments: previousSegments };
+    const operation = new AbortController();
+    const transcribe = vi.fn().mockImplementation(() => {
+        operation.abort();
+
+        return Promise.resolve('Unpublished text');
+    });
+
+    await expect(transcribeSessionSources('session', {
+        runId: 1,
+        language: 'en',
+    }, repository, transcribe, operation.signal)).rejects.toThrow();
+    const service = new SessionsService();
+    vi.spyOn(service, 'getSession').mockImplementation(repository.getSession);
+    vi.spyOn(service, 'saveTranscript').mockImplementation(repository.saveTranscript);
+    await expect(service.setTranscriptDuplicateFilter('session', false)).rejects.toThrow(
+        'Transcript has no completed source results',
+    );
+
+    expect(repository.session.transcript?.segments).toEqual(previousSegments);
+});
+
+it.each([false, true])(
+    'allows duplicate filtering to be set to %s after sources complete with no recognized speech',
+    async (enabled) => {
+        const repository = createRepository();
+        repository.session.transcript = {
+            version: 1,
+            segments: [{ startSec: 0, endSec: null, text: 'Previous text' }],
+        };
+
+        await transcribeSessionSources('session', {
+            runId: 1,
+            language: 'en',
+        }, repository, vi.fn().mockResolvedValue(''), new AbortController().signal);
+        expect(repository.session.transcript?.segments).toEqual([]);
+
+        const service = new SessionsService();
+        vi.spyOn(service, 'getSession').mockImplementation(repository.getSession);
+        vi.spyOn(service, 'saveTranscript').mockImplementation(repository.saveTranscript);
+        await expect(service.setTranscriptDuplicateFilter('session', enabled)).resolves.toMatchObject({
+            transcript: { segments: [] },
+        });
+        expect(repository.session.transcript?.sourceRun?.sources.every(
+            (source) => source.status === 'completed',
+        )).toBe(true);
+    },
+);

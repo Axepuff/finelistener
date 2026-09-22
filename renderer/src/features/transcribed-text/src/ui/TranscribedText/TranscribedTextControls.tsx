@@ -100,7 +100,7 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
                     {store.transcription.duplicateFilterAvailable ? (
                         <Switch
                             checked={store.transcription.duplicateFilterEnabled}
-                            disabled={store.operations.isBusy || store.transcription.isDuplicateFilterUpdating}
+                            disabled={store.operations.isBusy}
                             label="Hide duplicate speech"
                             onChange={(event) => {
                                 void handleDuplicateFilterChange(event.currentTarget.checked);

@@ -73,8 +73,6 @@ export class TranscriptionStore {
 
     private duplicateFilterPreferenceValue = true;
 
-    private duplicateFilterUpdatingValue = false;
-
     private duplicateFilterPreferenceRequestId = 0;
 
     constructor(private readonly adapter: RendererAdapter | null) {
@@ -174,15 +172,11 @@ export class TranscriptionStore {
     }
 
     get duplicateFilterAvailable(): boolean {
-        return Boolean(this.savedTranscriptValue?.sourceRun);
+        return this.hasCompletedSources;
     }
 
     get duplicateFilterFailed(): boolean {
         return this.savedTranscriptValue?.presentation?.duplicateFilter?.status === 'failed';
-    }
-
-    get isDuplicateFilterUpdating(): boolean {
-        return this.duplicateFilterUpdatingValue;
     }
 
     initialize(): void {
@@ -380,10 +374,6 @@ export class TranscriptionStore {
     setDuplicateFilterPreference(enabled: boolean): void {
         this.duplicateFilterPreferenceRequestId += 1;
         this.duplicateFilterPreferenceValue = enabled;
-    }
-
-    setDuplicateFilterUpdating(updating: boolean): void {
-        this.duplicateFilterUpdatingValue = updating;
     }
 
     private beginRun(segment: Segment | undefined, isCurrent: () => boolean): number {

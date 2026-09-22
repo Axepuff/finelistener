@@ -35,6 +35,8 @@ interface WordToken {
     tokenIndex: number;
     start: number;
     end: number;
+    segmentStartSec: number;
+    segmentEndSec: number;
 }
 
 interface SegmentTokens {
@@ -81,6 +83,8 @@ const tokenizeSegments = (segments: SessionTranscriptSegmentV1[]): SegmentTokens
             tokenIndex: tokens.length,
             start,
             end: start + original.length,
+            segmentStartSec: segment.startSec,
+            segmentEndSec: segment.endSec ?? segment.startSec,
         });
     }
 
@@ -206,11 +210,11 @@ const toCandidate = (
     pattern: WordToken[],
     text: WordToken[],
     patternSource: RecordingSource,
-    timeDistance: number,
 ): DuplicateCandidate | null => {
     if (alignment.similarity < TRANSCRIPT_DUPLICATE_FILTER_DEFAULTS.similarityThreshold) return null;
 
     const microphoneTokens: WordToken[] = [];
+    let timeDistance = 0;
 
     for (const step of alignment.steps) {
         const patternToken = step.patternIndex === undefined ? undefined : pattern[step.patternIndex];
@@ -224,8 +228,19 @@ const toCandidate = (
         }
 
         const microphoneToken = patternSource === 'microphone' ? patternToken : textToken;
+        const systemToken = patternSource === 'system' ? patternToken : textToken;
 
-        if (microphoneToken) microphoneTokens.push(microphoneToken);
+        if (microphoneToken && systemToken) {
+            const alignedDistance = systemToken.segmentEndSec < microphoneToken.segmentStartSec ?
+                microphoneToken.segmentStartSec - systemToken.segmentEndSec :
+                microphoneToken.segmentEndSec < systemToken.segmentStartSec ?
+                    systemToken.segmentStartSec - microphoneToken.segmentEndSec :
+                    0;
+
+            if (alignedDistance > TRANSCRIPT_DUPLICATE_FILTER_DEFAULTS.timeToleranceSec) return null;
+            timeDistance = Math.max(timeDistance, alignedDistance);
+            microphoneTokens.push(microphoneToken);
+        }
     }
 
     if (microphoneTokens.length < TRANSCRIPT_DUPLICATE_FILTER_DEFAULTS.minimumMatchingWords) return null;
@@ -253,14 +268,12 @@ const findCandidates = (systemGroups: CandidateGroup[], microphoneGroups: Candid
                 system.tokens,
                 microphone.tokens,
                 'system',
-                timeDistance,
             );
             const microphonePattern = toCandidate(
                 alignPatternToSubstring(microphone.tokens, system.tokens),
                 microphone.tokens,
                 system.tokens,
                 'microphone',
-                timeDistance,
             );
             const candidate = [systemPattern, microphonePattern]
                 .filter((item): item is DuplicateCandidate => item !== null)

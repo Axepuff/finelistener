@@ -75,6 +75,19 @@ describe('transcript duplicate filtering', () => {
         expect(microphoneText(shortReply)).toEqual(['yes']);
     });
 
+    it('uses the timing of the aligned segments instead of the full neighboring group', () => {
+        const run = createRun(
+            [
+                segment('system', 'please send the signed contract today', 0, 1),
+                segment('system', 'then discuss unrelated scheduling topics', 1, 3),
+                segment('system', 'finally move on to another agenda item', 3, 5),
+            ],
+            [segment('microphone', 'please send the signed contract today', 7, 8)],
+        );
+
+        expect(microphoneText(run)).toEqual(['please send the signed contract today']);
+    });
+
     it('preserves unique microphone speech around a matching span', () => {
         const run = createRun(
             [segment('system', 'the shared phrase contains enough words for matching', 5, 8)],

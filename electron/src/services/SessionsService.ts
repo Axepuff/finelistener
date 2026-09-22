@@ -499,6 +499,9 @@ export class SessionsService {
         const sourceRun = session.transcript?.sourceRun;
 
         if (!sourceRun) throw new Error('Session has no source-aware transcript');
+        if (!sourceRun.sources.some((source) => source.status === 'completed')) {
+            throw new Error('Transcript has no completed source results');
+        }
 
         await this.saveTranscript(sessionId, deriveSourceTranscript(structuredClone(sourceRun), enabled));
 

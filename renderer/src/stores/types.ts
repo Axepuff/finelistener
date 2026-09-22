@@ -26,6 +26,7 @@ export type ForegroundOperationKind =
     | 'recovering-recording'
     | 'discarding-recording'
     | 'optimizing-audio'
+    | 'filtering-transcript'
     | 'transcribing';
 
 export interface ForegroundOperation {
