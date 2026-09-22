@@ -207,13 +207,23 @@ export class AppStore {
 
     async deleteSession(sessionId: string): Promise<CommandResult> {
         if (!this.adapter) return commandFailure('Sessions are not available.');
-        if (this.operations.isBusy) return commandFailure('Another workspace operation is already running.');
+        const operation = this.operations.begin('deleting-session');
+
+        if (!operation) return commandFailure('Another workspace operation is already running.');
 
         try {
             await this.adapter.deleteSession(sessionId);
 
+            if (!this.operations.owns(operation) || this.disposed) {
+                return commandFailure('Session deletion is no longer active.');
+            }
+
             if (this.workspace.activeSessionId === sessionId) {
                 await this.adapter.setActiveSession(null);
+
+                if (!this.operations.owns(operation) || this.disposed) {
+                    return commandFailure('Session deletion is no longer active.');
+                }
             }
 
             runInAction(() => {
@@ -232,6 +242,10 @@ export class AppStore {
             console.error('Failed to delete session', error);
 
             return commandFailure('Failed to delete the session.');
+        } finally {
+            runInAction(() => {
+                this.operations.finish(operation);
+            });
         }
     }
 

@@ -25,6 +25,7 @@ export type ForegroundOperationKind =
     | 'processing-recording'
     | 'recovering-recording'
     | 'discarding-recording'
+    | 'deleting-session'
     | 'optimizing-audio'
     | 'filtering-transcript'
     | 'transcribing';

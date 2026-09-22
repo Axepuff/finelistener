@@ -361,6 +361,32 @@ describe('AppStore', () => {
         expect(store.operations.isBusy).toBe(false);
     });
 
+    it('blocks duplicate filtering while the active session is being deleted', async () => {
+        const deletion = createDeferred<boolean>();
+        const setTranscriptDuplicateFilter = vi.fn(() => Promise.resolve(createSession({
+            transcript: sourceTranscript,
+            hasTranscript: true,
+        })));
+        const activeSession = createSession({ transcript: sourceTranscript, hasTranscript: true });
+        const fake = createFakeRendererAdapter({
+            deleteSession: () => deletion.promise,
+            setTranscriptDuplicateFilter,
+        });
+        const store = new AppStore(fake.adapter);
+
+        store.workspace.replaceWorkspace(activeSession);
+        store.transcription.replaceSavedTranscript(sourceTranscript);
+        const deletePromise = store.deleteSession(activeSession.id);
+
+        expect(store.operations.kind).toBe('deleting-session');
+        expect((await store.setTranscriptDuplicateFilterEnabled(true)).ok).toBe(false);
+        expect(setTranscriptDuplicateFilter).not.toHaveBeenCalled();
+
+        deletion.resolve(true);
+        expect((await deletePromise).ok).toBe(true);
+        expect(store.operations.isBusy).toBe(false);
+    });
+
     it('blocks optimization and repeated filter updates while duplicate filtering is pending', async () => {
         const filterUpdate = createDeferred<SessionDetails>();
         const setTranscriptDuplicateFilter = vi.fn(() => filterUpdate.promise);
