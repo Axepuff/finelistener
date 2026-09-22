@@ -61,6 +61,21 @@ export function registerSessionsController(
         return service.optimizeSessionAudio(sessionId);
     });
 
+    ipc.handle('sessions:set-transcript-duplicate-filter', async (
+        _event,
+        sessionId: unknown,
+        enabled: unknown,
+    ) => {
+        if (typeof sessionId !== 'string' || !sessionId.trim()) {
+            throw new Error('Invalid session id');
+        }
+        if (typeof enabled !== 'boolean') {
+            throw new Error('Invalid duplicate filter setting');
+        }
+
+        return service.setTranscriptDuplicateFilter(sessionId, enabled);
+    });
+
     ipc.handle('sessions:reveal-root', async () => {
         return service.revealSessionsFolder();
     });

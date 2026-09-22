@@ -31,10 +31,24 @@ export interface SessionTranscriptSegmentV1 {
     source?: RecordingSource;
 }
 
+export interface TranscriptDuplicateFilterV1 {
+    enabled: boolean;
+    status: 'applied' | 'disabled' | 'failed';
+    algorithm: 'cross-source-word-edit-v1';
+    similarityThreshold: number;
+    minimumMatchingWords: number;
+    timeToleranceSec: number;
+}
+
+export interface SessionTranscriptPresentationV1 {
+    duplicateFilter?: TranscriptDuplicateFilterV1;
+}
+
 export interface SessionTranscriptV1 {
     version: 1;
     segments: SessionTranscriptSegmentV1[];
     sourceRun?: SessionSourceRun;
+    presentation?: SessionTranscriptPresentationV1;
 }
 
 export interface SessionAudioInfo {

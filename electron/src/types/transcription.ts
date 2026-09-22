@@ -42,4 +42,5 @@ export interface TranscriptionProgressEvent {
 export interface SessionTranscribeOpts extends TranscribeOpts {
     retryFailed?: boolean;
     optimized?: boolean;
+    hideDuplicateSpeech?: boolean;
 }

@@ -11,6 +11,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { AppStore } from './appStore';
 import { createFakeRendererAdapter } from './testing/fakeRendererAdapter';
 import { TranscriptionStore } from './transcriptionStore';
+import { deriveSourceTranscript } from '../../../electron/src/services/transcriptDuplicateFilter';
+import {
+    UI_PREFERENCE_DEFAULTS,
+    type UiPreferenceKey,
+    type UiPreferenceValueMap,
+} from '../../../electron/src/types/uiPreferences';
 
 const session: SessionDetails = {
     id: 'recorded', title: 'Recording', createdAt: 1, updatedAt: 1, sourceKind: 'recorded',
@@ -299,4 +305,123 @@ it.each([false, true])('keeps a completed empty source successful when another s
         expect(store.activityLog.content).toContain('Whisper transcription finished');
         expect(store.transcription.runOutcome).toBe('success');
     }
+});
+
+describe('transcript duplicate filter presentation', () => {
+    const sourceRun: NonNullable<SessionTranscriptV1['sourceRun']> = {
+        status: 'completed',
+        settings: options,
+        sources: [
+            {
+                source: 'system',
+                status: 'completed',
+                segments: [{
+                    source: 'system', startSec: 1, endSec: 3,
+                    text: 'This shared phrase contains enough words for duplicate filtering',
+                }],
+            },
+            {
+                source: 'microphone',
+                status: 'completed',
+                segments: [{
+                    source: 'microphone', startSec: 1.2, endSec: 3.2,
+                    text: 'This shared phrase contains enough words for duplicate filtering local reply',
+                }],
+            },
+        ],
+    };
+
+    it('persists the selected mode and keeps display, copy, and export representations consistent', async () => {
+        const unfiltered = deriveSourceTranscript(sourceRun, false);
+        const filtered = deriveSourceTranscript(sourceRun, true);
+        const setTranscriptDuplicateFilter = vi.fn((_sessionId: string, enabled: boolean) => Promise.resolve({
+            ...session,
+            transcript: enabled ? filtered : unfiltered,
+        }));
+        const preferenceWrites: Array<{ key: UiPreferenceKey; value: UiPreferenceValueMap[UiPreferenceKey] }> = [];
+        const setUiPreference = <K extends UiPreferenceKey>(key: K, value: UiPreferenceValueMap[K]) => {
+            preferenceWrites.push({ key, value });
+
+            return Promise.resolve(value);
+        };
+        const fake = createFakeRendererAdapter({ setTranscriptDuplicateFilter, setUiPreference });
+        const store = new AppStore(fake.adapter);
+
+        store.workspace.replaceWorkspace({ ...session, transcript: unfiltered });
+        store.transcription.replaceSavedTranscript(unfiltered);
+
+        const result = await store.setTranscriptDuplicateFilterEnabled(true);
+
+        expect(result.ok).toBe(true);
+        expect(setTranscriptDuplicateFilter).toHaveBeenCalledWith(session.id, true);
+        expect(preferenceWrites).toContainEqual({ key: 'transcriptDuplicateFilterEnabled', value: true });
+        expect(store.transcription.duplicateFilterEnabled).toBe(true);
+        expect(store.transcription.plainText).toBe(
+            'System audio: This shared phrase contains enough words for duplicate filtering\nMicrophone: local reply',
+        );
+        expect(store.transcription.timecodedText).toContain('Microphone: local reply');
+        expect(store.transcription.renderedHtml).toContain('Microphone: local reply');
+        expect(store.transcription.savedTranscript?.sourceRun?.sources[1].segments[0].text)
+            .toContain('duplicate filtering local reply');
+
+        expect((await store.setTranscriptDuplicateFilterEnabled(false)).ok).toBe(true);
+        expect(store.transcription.plainText).toContain(
+            'Microphone: This shared phrase contains enough words for duplicate filtering local reply',
+        );
+        expect((await store.setTranscriptDuplicateFilterEnabled(true)).ok).toBe(true);
+        expect(store.transcription.plainText).toContain('Microphone: local reply');
+    });
+
+    it('uses the remembered preference for subsequent source-aware runs', async () => {
+        const transcribeSession = vi.fn(() => Promise.resolve({
+            ...session,
+            transcript: deriveSourceTranscript(sourceRun, false),
+        }));
+        const getUiPreference = <K extends UiPreferenceKey>(key: K): Promise<UiPreferenceValueMap[K]> => {
+            const value = key === 'transcriptDuplicateFilterEnabled' ? false : UI_PREFERENCE_DEFAULTS[key];
+
+            return Promise.resolve(value as UiPreferenceValueMap[K]);
+        };
+        const fake = createFakeRendererAdapter({
+            getUiPreference,
+            transcribeSession,
+        });
+        const store = new AppStore(fake.adapter);
+
+        store.workspace.replaceWorkspace(session);
+        store.initialize();
+        try {
+            await settle();
+            expect((await store.startTranscription(options)).ok).toBe(true);
+            expect(transcribeSession).toHaveBeenCalledWith(session.id, expect.objectContaining({
+                hideDuplicateSpeech: false,
+            }));
+        } finally {
+            store.dispose();
+        }
+    });
+
+    it('reopens the persisted representation and leaves flattened legacy transcripts unchanged', async () => {
+        const filtered = deriveSourceTranscript(sourceRun, true);
+        const fake = createFakeRendererAdapter({
+            getSession: (sessionId) => Promise.resolve({
+                ...session,
+                id: sessionId,
+                transcript: filtered,
+            }),
+        });
+        const store = new AppStore(fake.adapter);
+
+        expect((await store.openSession(session.id)).ok).toBe(true);
+        expect(store.transcription.duplicateFilterEnabled).toBe(true);
+        expect(store.transcription.plainText).toContain('Microphone: local reply');
+
+        const legacy: SessionTranscriptV1 = {
+            version: 1,
+            segments: [{ startSec: 0, endSec: null, text: 'Historical transcript' }],
+        };
+        store.transcription.replaceSavedTranscript(legacy);
+        expect(store.transcription.duplicateFilterAvailable).toBe(false);
+        expect(store.transcription.plainText).toBe('Historical transcript');
+    });
 });

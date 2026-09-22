@@ -98,3 +98,51 @@ it('treats a range outside a disconnected source as a completed empty result', a
     expect(transcribe).toHaveBeenCalledTimes(1);
     expect(result.transcript?.sourceRun?.sources[0]).toMatchObject({ status: 'completed', segments: [] });
 });
+
+it('filters completed cross-source duplicates without changing the original recognition results', async () => {
+    const repository = createRepository();
+    const duplicated = 'This nearby system phrase contains enough words to filter';
+    const transcribe = vi.fn()
+        .mockResolvedValueOnce(`[00:00:01.000 --> 00:00:03.000] ${duplicated}`)
+        .mockResolvedValueOnce(`[00:00:00.600 --> 00:00:03.000] ${duplicated}, local response.`);
+
+    const result = await transcribeSessionSources('session', {
+        runId: 1,
+        language: 'en',
+        hideDuplicateSpeech: true,
+    }, repository, transcribe, new AbortController().signal);
+
+    expect(result.transcript?.segments.map((item) => [item.source, item.text])).toEqual([
+        ['system', duplicated],
+        ['microphone', 'local response.'],
+    ]);
+    expect(result.transcript?.sourceRun?.sources[1].segments[0].text).toBe(`${duplicated}, local response.`);
+    expect(result.transcript?.sourceRun?.settings).not.toHaveProperty('hideDuplicateSpeech');
+});
+
+it('recomputes filtering from the same run after a failed source is retried', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const repository = createRepository();
+    const duplicated = 'This recovered phrase contains enough words for filtering';
+    const initial = vi.fn().mockResolvedValueOnce(duplicated).mockRejectedValueOnce(new Error('Unavailable'));
+
+    await transcribeSessionSources('session', {
+        runId: 1,
+        language: 'en',
+        hideDuplicateSpeech: true,
+    }, repository, initial, new AbortController().signal);
+    expect(repository.session.transcript?.segments.map((item) => item.text)).toEqual([duplicated]);
+
+    const retry = vi.fn().mockResolvedValue(duplicated);
+    const result = await transcribeSessionSources('session', {
+        runId: 2,
+        language: 'fr',
+        retryFailed: true,
+        hideDuplicateSpeech: true,
+    }, repository, retry, new AbortController().signal);
+
+    expect(result.transcript?.segments.map((item) => [item.source, item.text])).toEqual([
+        ['system', duplicated],
+    ]);
+    expect(result.transcript?.sourceRun?.sources[1]).toMatchObject({ status: 'completed' });
+});

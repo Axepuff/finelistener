@@ -12,6 +12,7 @@ import type {
 } from '../types/sessions';
 import { AudioPreprocessor } from './AudioPreprocessor';
 import type { RecordingResult } from './RecordingService';
+import { deriveSourceTranscript } from './transcriptDuplicateFilter';
 
 const SESSION_FILE_NAME = 'session.json';
 const SESSION_VERSION = 1 as const;
@@ -485,12 +486,23 @@ export class SessionsService {
 
         session.updatedAt = updatedAt;
         session.transcript = { path: TRANSCRIPT_FILE_RELATIVE_PATH };
-        session.transcription = transcription;
+        if (transcription !== undefined) session.transcription = transcription;
 
         const transcriptPath = path.join(sessionDir, TRANSCRIPT_FILE_RELATIVE_PATH);
 
         await writeJsonFile(transcriptPath, transcript);
         await writeJsonFile(sessionFilePath, session);
+    }
+
+    public async setTranscriptDuplicateFilter(sessionId: string, enabled: boolean): Promise<SessionDetails> {
+        const session = await this.getSession(sessionId);
+        const sourceRun = session.transcript?.sourceRun;
+
+        if (!sourceRun) throw new Error('Session has no source-aware transcript');
+
+        await this.saveTranscript(sessionId, deriveSourceTranscript(structuredClone(sourceRun), enabled));
+
+        return this.getSession(sessionId);
     }
 
     private async ensureSessionWavFile(

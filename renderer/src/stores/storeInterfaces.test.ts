@@ -1,4 +1,10 @@
-import type { SessionDetails, SessionListItem, SessionTranscriptSegmentV1, SessionSourceRun } from 'electron/src/types/sessions';
+import type {
+    SessionDetails,
+    SessionListItem,
+    SessionTranscriptPresentationV1,
+    SessionTranscriptSegmentV1,
+    SessionSourceRun,
+} from 'electron/src/types/sessions';
 import type { DeepReadonly } from './types';
 import { expectTypeOf, it } from 'vitest';
 import type { TranscriptionStore } from './transcriptionStore';
@@ -33,6 +39,7 @@ it('exposes transcription state and transcript segments as read-only data', () =
     interface TranscriptView {
         readonly version: 1;
         readonly sourceRun?: DeepReadonly<SessionSourceRun>;
+        readonly presentation?: DeepReadonly<SessionTranscriptPresentationV1>;
         readonly segments: readonly Readonly<SessionTranscriptSegmentV1>[];
     }
 

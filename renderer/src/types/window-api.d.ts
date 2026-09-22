@@ -27,6 +27,7 @@ declare global {
                 delete: (sessionId: string) => Promise<boolean>;
                 importAudio: () => Promise<SessionDetails | null>;
                 optimizeAudio: (sessionId: string) => Promise<SessionDetails>;
+                setTranscriptDuplicateFilter: (sessionId: string, enabled: boolean) => Promise<SessionDetails>;
                 revealFolder: () => Promise<boolean>;
             };
             transcribeStream: (audioPath: string, opts: TranscribeOpts) => Promise<string>;

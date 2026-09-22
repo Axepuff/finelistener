@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { SessionSourceRun } from '../types/sessions';
 import { SessionsService } from './SessionsService';
 
 const environment = vi.hoisted(() => ({ root: '' }));
@@ -98,6 +99,58 @@ it('opens legacy sessions without assigning invented source labels', async () =>
     const session = await new SessionsService().getSession('legacy');
     expect(session.tracks).toBeUndefined();
     expect(session.audioWavPath).toBe(path.join(sessionDir, 'original.wav'));
+});
+
+it('persists reversible duplicate-filter presentations without changing source results', async () => {
+    const sourcePath = path.join(environment.root, 'source.wav');
+    await fs.writeFile(sourcePath, wav(1000));
+    const service = new SessionsService();
+    const session = await service.createSessionFromImport(sourcePath);
+    const duplicated = 'This system phrase contains enough words for duplicate filtering';
+    const sourceRun: SessionSourceRun = {
+        status: 'completed',
+        settings: { language: 'en' },
+        sources: [
+            {
+                source: 'system',
+                status: 'completed',
+                segments: [{ source: 'system', startSec: 1, endSec: 3, text: duplicated }],
+            },
+            {
+                source: 'microphone',
+                status: 'completed',
+                segments: [{
+                    source: 'microphone',
+                    startSec: 1.2,
+                    endSec: 3.2,
+                    text: `${duplicated}, local reply.`,
+                }],
+            },
+        ],
+    };
+    await service.saveTranscript(session.id, {
+        version: 1,
+        segments: sourceRun.sources.flatMap((source) => source.segments),
+        sourceRun,
+    }, { language: 'en', model: 'base' });
+
+    const filtered = await service.setTranscriptDuplicateFilter(session.id, true);
+    expect(filtered.transcript?.segments.map((item) => [item.source, item.text])).toEqual([
+        ['system', duplicated],
+        ['microphone', 'local reply.'],
+    ]);
+    expect(filtered.transcript?.sourceRun).toEqual(sourceRun);
+
+    const restored = await new SessionsService().setTranscriptDuplicateFilter(session.id, false);
+    expect(restored.transcript?.segments.map((item) => item.text)).toEqual([
+        duplicated,
+        `${duplicated}, local reply.`,
+    ]);
+    const manifest = JSON.parse(await fs.readFile(
+        path.join(environment.root, 'sessions', session.id, 'session.json'),
+        'utf8',
+    )) as { transcription?: unknown };
+    expect(manifest.transcription).toEqual({ language: 'en', model: 'base' });
 });
 
 it.each([undefined, null, { wavPath: 42 }, { wavPath: 'cache.wav' }])('opens a valid session alongside a malformed audio manifest: %j', async (audio) => {

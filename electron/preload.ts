@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('api', {
         delete: (sessionId: string) => ipcRenderer.invoke('sessions:delete', sessionId),
         importAudio: () => ipcRenderer.invoke('sessions:import-audio'),
         optimizeAudio: (sessionId: string) => ipcRenderer.invoke('sessions:optimize-audio', sessionId),
+        setTranscriptDuplicateFilter: (sessionId: string, enabled: boolean) =>
+            ipcRenderer.invoke('sessions:set-transcript-duplicate-filter', sessionId, enabled),
         revealFolder: () => ipcRenderer.invoke('sessions:reveal-root'),
     },
     saveText: (content: string) => ipcRenderer.invoke('saveText', content),

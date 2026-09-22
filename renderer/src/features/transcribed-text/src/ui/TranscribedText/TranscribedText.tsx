@@ -106,6 +106,11 @@ export const TranscribedText: React.FC = observer(() => {
                             </Stack>
                         </Alert>
                     ) : null}
+                    {transcription.duplicateFilterFailed ? (
+                        <Alert color="yellow" title="Duplicate filtering unavailable">
+                            {'The unfiltered transcript is shown. Try the filter again.'}
+                        </Alert>
+                    ) : null}
                     {store.workspace.activeSession?.tracks?.some((track) => track.failure) ? (
                         <Alert color="yellow" title="Recording interrupted">
                             {'A recording source stopped early. Only the captured audio is available.'}

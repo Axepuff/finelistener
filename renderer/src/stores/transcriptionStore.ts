@@ -23,6 +23,7 @@ export interface TranscriptionRunRequest {
     readonly sourceAware?: boolean;
     readonly retryFailed?: boolean;
     readonly optimized?: boolean;
+    readonly hideDuplicateSpeech?: boolean;
     readonly segment?: Readonly<Segment>;
     readonly options: Readonly<StartTranscriptionOptions>;
 }
@@ -69,6 +70,12 @@ export class TranscriptionStore {
     private runOutcomeValue: TranscriptionRunOutcome = 'none';
 
     private runErrorMessageValue: string | null = null;
+
+    private duplicateFilterPreferenceValue = true;
+
+    private duplicateFilterUpdatingValue = false;
+
+    private duplicateFilterPreferenceRequestId = 0;
 
     constructor(private readonly adapter: RendererAdapter | null) {
         makeAutoObservable<this, 'adapter' | 'runIsCurrent' | 'unsubscribeFunctions' | 'stopCompletion' | 'stoppingRunId'>(this, {
@@ -156,6 +163,28 @@ export class TranscriptionStore {
         return Boolean(this.visibleTranscript?.segments.length);
     }
 
+    get preferredDuplicateFilterEnabled(): boolean {
+        return this.duplicateFilterPreferenceValue;
+    }
+
+    get duplicateFilterEnabled(): boolean {
+        return this.savedTranscriptValue?.sourceRun ?
+            this.savedTranscriptValue.presentation?.duplicateFilter?.enabled ?? false :
+            this.duplicateFilterPreferenceValue;
+    }
+
+    get duplicateFilterAvailable(): boolean {
+        return Boolean(this.savedTranscriptValue?.sourceRun);
+    }
+
+    get duplicateFilterFailed(): boolean {
+        return this.savedTranscriptValue?.presentation?.duplicateFilter?.status === 'failed';
+    }
+
+    get isDuplicateFilterUpdating(): boolean {
+        return this.duplicateFilterUpdatingValue;
+    }
+
     initialize(): void {
         if (this.initialized) return;
 
@@ -164,6 +193,21 @@ export class TranscriptionStore {
         this.lifecycleId += 1;
 
         if (!this.adapter) return;
+
+        const lifecycleId = this.lifecycleId;
+
+        const preferenceRequestId = ++this.duplicateFilterPreferenceRequestId;
+
+        void this.adapter.getUiPreference('transcriptDuplicateFilterEnabled').then((enabled) => {
+            if (!this.initialized || this.disposed || this.lifecycleId !== lifecycleId
+                || this.duplicateFilterPreferenceRequestId !== preferenceRequestId) return;
+
+            runInAction(() => {
+                this.duplicateFilterPreferenceValue = enabled;
+            });
+        }).catch((error: unknown) => {
+            console.error('Failed to load transcript duplicate filter preference', error);
+        });
 
         this.unsubscribeFunctions = [
             this.adapter.onTranscribeText((event) => this.handleTranscribeText(event)),
@@ -214,6 +258,7 @@ export class TranscriptionStore {
                     ...transcribeOptions,
                     retryFailed: request.retryFailed,
                     optimized: request.optimized,
+                    hideDuplicateSpeech: request.hideDuplicateSpeech,
                 });
 
                 if (request.sourceAware && this.stoppingRunId === runId && this.stopCompletion) await this.stopCompletion;
@@ -330,6 +375,15 @@ export class TranscriptionStore {
 
     clear(): void {
         this.replaceSavedTranscript(null);
+    }
+
+    setDuplicateFilterPreference(enabled: boolean): void {
+        this.duplicateFilterPreferenceRequestId += 1;
+        this.duplicateFilterPreferenceValue = enabled;
+    }
+
+    setDuplicateFilterUpdating(updating: boolean): void {
+        this.duplicateFilterUpdatingValue = updating;
     }
 
     private beginRun(segment: Segment | undefined, isCurrent: () => boolean): number {

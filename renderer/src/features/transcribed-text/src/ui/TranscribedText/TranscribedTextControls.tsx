@@ -1,6 +1,7 @@
-import { ActionIcon, Box, Button, Group, Notification, SegmentedControl, TextInput } from '@mantine/core';
+import { ActionIcon, Box, Button, Group, Notification, SegmentedControl, Switch, TextInput } from '@mantine/core';
 import { IconCopy, IconDownload, IconSearch, IconTextSize, IconClockHour2 } from '@tabler/icons-react';
 import React, { useEffect, useState } from 'react';
+import { observer } from 'mobx-react-lite';
 import { useAppStore } from 'renderer/src/AppContext';
 import styles from './TranscribedText.module.css';
 
@@ -10,7 +11,7 @@ interface Props {
     setShowRegions: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-export const TranscribedTextControls: React.FC<Props> = ({
+export const TranscribedTextControls: React.FC<Props> = observer(({
     currentTextValue,
     showRegions,
     setShowRegions,
@@ -44,6 +45,12 @@ export const TranscribedTextControls: React.FC<Props> = ({
 
     const handleCopyNotificationClose = () => {
         setIsCopyNotificationOpen(false);
+    };
+
+    const handleDuplicateFilterChange = async (enabled: boolean) => {
+        const result = await store.setTranscriptDuplicateFilterEnabled(enabled);
+
+        if (!result.ok) store.activityLog.appendEvent(result.message);
     };
 
     useEffect(() => {
@@ -90,6 +97,16 @@ export const TranscribedTextControls: React.FC<Props> = ({
                 />
 
                 <Group gap={8} align="center" wrap="nowrap" className={styles.actionsGroup}>
+                    {store.transcription.duplicateFilterAvailable ? (
+                        <Switch
+                            checked={store.transcription.duplicateFilterEnabled}
+                            disabled={store.operations.isBusy || store.transcription.isDuplicateFilterUpdating}
+                            label="Hide duplicate speech"
+                            onChange={(event) => {
+                                void handleDuplicateFilterChange(event.currentTarget.checked);
+                            }}
+                        />
+                    ) : null}
                     <TextInput
                         value={searchValue}
                         onChange={(event) => setSearchValue(event.currentTarget.value)}
@@ -126,4 +143,4 @@ export const TranscribedTextControls: React.FC<Props> = ({
             ) : null}
         </>
     );
-};
+});

@@ -1,6 +1,7 @@
 import type { RecordingSource, SessionDetails, SessionSourceRun, SessionTranscriptV1 } from '../types/sessions';
 import type { SessionTranscribeOpts, TranscribeOpts } from '../types/transcription';
 import { parseTranscriptToV1 } from './sessionTranscript';
+import { deriveSourceTranscript } from './transcriptDuplicateFilter';
 
 interface SessionRepository {
     getSession(sessionId: string): Promise<SessionDetails>;
@@ -14,12 +15,9 @@ export interface SourcePass {
     offsetSec: number;
 }
 
-export const mergeSourceTranscript = (run: SessionSourceRun): SessionTranscriptV1 => ({
-    version: 1,
-    segments: run.sources.flatMap((source) => source.status === 'completed' ? source.segments : [])
-        .sort((a, b) => a.startSec - b.startSec),
-    sourceRun: run,
-});
+export const mergeSourceTranscript = (run: SessionSourceRun, hideDuplicateSpeech = false): SessionTranscriptV1 => {
+    return deriveSourceTranscript(run, hideDuplicateSpeech);
+};
 
 export async function transcribeSessionSources(
     sessionId: string,
@@ -34,7 +32,13 @@ export async function transcribeSessionSources(
     if (!tracks?.length) throw new Error('Session has no recording sources');
     const previousRun = session.transcript?.sourceRun;
     if (opts.retryFailed && !previousRun) throw new Error('No incomplete transcription to retry');
-    const { runId: _runId, sessionId: _sessionId, retryFailed: _retryFailed, ...settings } = opts;
+    const {
+        runId: _runId,
+        sessionId: _sessionId,
+        retryFailed: _retryFailed,
+        hideDuplicateSpeech: _hideDuplicateSpeech,
+        ...settings
+    } = opts;
     const run: SessionSourceRun = opts.retryFailed && previousRun ? structuredClone(previousRun) : {
         status: 'incomplete', settings,
         sources: tracks.map((track) => ({ source: track.source, status: 'pending', segments: [] })),
@@ -46,7 +50,7 @@ export async function transcribeSessionSources(
     const pendingSources = run.sources.filter((source) => source.status !== 'completed');
     const save = async () => {
         run.status = run.sources.every((source) => source.status === 'completed') ? 'completed' : 'incomplete';
-        const transcript = mergeSourceTranscript(run);
+        const transcript = mergeSourceTranscript(run, opts.hideDuplicateSpeech ?? true);
         if (!run.sources.some((source) => source.status === 'completed')) {
             transcript.segments = session.transcript?.segments ?? [];
         }

@@ -58,6 +58,7 @@ export const createFakeRendererAdapter = (
         deleteSession: () => Promise.resolve(true),
         importAudio: () => Promise.resolve(null),
         optimizeAudio: unavailable,
+        setTranscriptDuplicateFilter: unavailable,
         revealSessionsFolder: () => Promise.resolve(true),
         transcribe: () => Promise.resolve(''),
         transcribeSession: unavailable,

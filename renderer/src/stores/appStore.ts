@@ -353,6 +353,9 @@ export class AppStore {
         const audioPath = this.workspace.audioSourcePath;
 
         if (!this.adapter) return commandFailure('Transcription is not available.');
+        if (this.transcription.isDuplicateFilterUpdating) {
+            return commandFailure('Wait for duplicate filtering to finish.');
+        }
         if (!audioPath) return commandFailure('Choose an audio source before transcribing.');
         if (!retryFailed && this.workspace.hasIncompleteSegment) {
             return commandFailure('Set both the start and end of the segment, with the end after the start.');
@@ -384,6 +387,7 @@ export class AppStore {
             sourceAware: Boolean(this.workspace.activeSession?.tracks?.length),
             retryFailed,
             optimized: this.workspace.audioMode === 'optimized',
+            hideDuplicateSpeech: this.transcription.preferredDuplicateFilterEnabled,
         };
         const startedAt = performance.now();
         const isCurrent = (): boolean => this.operations.owns(operation) && !this.disposed;
@@ -482,6 +486,48 @@ export class AppStore {
             console.error('Failed to save transcript text', error);
 
             return commandFailure('Failed to save the transcript.');
+        }
+    }
+
+    async setTranscriptDuplicateFilterEnabled(enabled: boolean): Promise<CommandResult> {
+        const sessionId = this.workspace.activeSessionId;
+
+        if (!this.adapter || !sessionId || !this.transcription.duplicateFilterAvailable) {
+            return commandFailure('Duplicate filtering is not available for this transcript.');
+        }
+        if (this.operations.isBusy) return commandFailure('Another workspace operation is already running.');
+        if (this.transcription.isDuplicateFilterUpdating) {
+            return commandFailure('Duplicate filtering is already being updated.');
+        }
+
+        this.transcription.setDuplicateFilterUpdating(true);
+
+        try {
+            const session = await this.adapter.setTranscriptDuplicateFilter(sessionId, enabled);
+
+            if (this.disposed || this.workspace.activeSessionId !== sessionId) {
+                return commandFailure('The session was replaced before duplicate filtering finished.');
+            }
+
+            runInAction(() => {
+                this.transcription.replaceSavedTranscript(session.transcript ?? null);
+                this.transcription.setDuplicateFilterPreference(enabled);
+            });
+            void this.adapter.setUiPreference('transcriptDuplicateFilterEnabled', enabled).catch((error: unknown) => {
+                console.error('Failed to save transcript duplicate filter preference', error);
+                this.activityLog.appendEvent('The duplicate filter preference could not be saved.');
+            });
+            void this.sessions.refresh();
+
+            return commandSuccess(undefined);
+        } catch (error: unknown) {
+            console.error('Failed to update transcript duplicate filtering', error);
+
+            return commandFailure('Duplicate filtering could not be updated.');
+        } finally {
+            runInAction(() => {
+                this.transcription.setDuplicateFilterUpdating(false);
+            });
         }
     }
 
