@@ -21,7 +21,7 @@ const TranscribeControl: React.FC = observer(() => {
     const store = useAppStore();
     const control = store.transcriptionControl;
     const [isCustomModelImporting, setIsCustomModelImporting] = useState(false);
-    const { language: lang, model, useCustomModelFile, customModelFile, maxContext, maxLen, splitOnWord, useVad } = control;
+    const { language: lang, model, useCustomModelFile, customModelFile, maxContext, maxLen, splitOnWord, useVad, microphoneGateEnabled } = control;
 
     const appendLog = useCallback((message: string) => {
         store.activityLog.appendEvent(message);
@@ -130,6 +130,8 @@ const TranscribeControl: React.FC = observer(() => {
                     onChangeSplitOnWord={(value) => control.setSplitOnWord(value)}
                     useVad={useVad}
                     onChangeUseVad={(value) => control.setUseVad(value)}
+                    microphoneGateEnabled={microphoneGateEnabled}
+                    onChangeMicrophoneGateEnabled={(value) => control.setMicrophoneGateEnabled(value)}
                 />
             </Stack>
             <Box>

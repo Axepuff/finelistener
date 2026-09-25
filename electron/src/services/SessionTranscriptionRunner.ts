@@ -48,6 +48,7 @@ export async function transcribeSessionSources(
         !Number.isFinite(segment.start) || !Number.isFinite(segment.end) || segment.start < 0 || segment.end <= segment.start
     ))) throw new Error('Invalid transcription settings');
     const pendingSources = run.sources.filter((source) => source.status !== 'completed');
+    const hasSystemTrack = tracks.some((track) => track.source === 'system');
     const save = async () => {
         run.status = run.sources.every((source) => source.status === 'completed') ? 'completed' : 'incomplete';
         const transcript = mergeSourceTranscript(run, opts.hideDuplicateSpeech ?? true);
@@ -71,6 +72,8 @@ export async function transcribeSessionSources(
             const passOpts: TranscribeOpts = {
                 ...run.settings, runId: opts.runId,
                 segment: end !== undefined ? { start, end } : undefined,
+                microphoneGateEnabled: source.source === 'microphone' && hasSystemTrack
+                    && run.settings.microphoneGateEnabled === true,
             };
             const text = outsideTrack ? '' : await transcribe(track.filePath, passOpts, {
                 source: source.source, index, count: pendingSources.length, offsetSec: offsetSec + start,

@@ -5,7 +5,9 @@ import { TranscriptionControlStore } from './transcriptionControlStore';
 describe('TranscriptionControlStore', () => {
     it('prepares downloaded and custom models without a download intent', () => {
         const store = new TranscriptionControlStore();
-        expect(store.requestStart(true).status).toBe('ready');
+        expect(store.requestStart(true)).toMatchObject({ status: 'ready', options: { microphoneGateEnabled: true } });
+        store.setMicrophoneGateEnabled(false);
+        expect(store.requestStart(true)).toMatchObject({ status: 'ready', options: { microphoneGateEnabled: false } });
         expect(store.pendingDownloadModel).toBeNull();
         store.setUseCustomModelFile(true);
         expect(store.requestStart(false).status).toBe('failed');

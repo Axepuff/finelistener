@@ -18,6 +18,7 @@ export interface ConvertAudioOptions {
     dynanorm?: boolean | DynanormOptions;
     lowPass?: number;
     highPass?: number;
+    microphoneGate?: boolean;
     signal?: AbortSignal;
 }
 
@@ -62,6 +63,7 @@ const DEFAULT_DYNAUDNORM_OPTIONS: Required<DynanormOptions> = {
     p: 0.95,
 };
 const DEFAULT_HIGH_PASS_HZ = 80;
+const MICROPHONE_GATE_FILTER = 'agate=threshold=0.005623:ratio=8:range=0:attack=10:release=150';
 
 export const DEFAULT_WAV_FORMAT: WavFormat = {
     sampleRateHz: 16000,
@@ -151,6 +153,7 @@ export class AudioPreprocessor {
         dynanorm,
         lowPass,
         highPass,
+        microphoneGate,
         signal,
     }: ConvertAudioOptions): Promise<WavResult> {
         signal?.throwIfAborted();
@@ -161,8 +164,14 @@ export class AudioPreprocessor {
 
         try {
             const loudnormFilter = await this.loudnessNormalizer.buildFilter(audioPath, baseFilters, loudnorm);
-            const dynanormFilter = this.buildDynanormFilter(dynanorm);
-            const filterChain = this.buildFilterChain([...baseFilters, loudnormFilter, dynanormFilter]);
+            // Dynamic normalization would amplify speaker bleed left below the gate threshold.
+            const dynanormFilter = microphoneGate ? null : this.buildDynanormFilter(dynanorm);
+            const filterChain = this.buildFilterChain([
+                microphoneGate ? MICROPHONE_GATE_FILTER : null,
+                ...baseFilters,
+                loudnormFilter,
+                dynanormFilter,
+            ]);
             const startTime = Date.now();
 
             await this.runFfmpeg(this.buildWavArgs(audioPath, wavPath, filterChain), signal);

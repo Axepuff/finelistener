@@ -199,7 +199,9 @@ describe('source transcription', () => {
             expect(store.transcription.isIncomplete).toBe(true);
             store.workspace.setSegmentStart(99);
             expect((await store.retryIncompleteTranscription()).ok).toBe(true);
-            expect(transcribeSession).toHaveBeenCalledWith(session.id, expect.objectContaining({ retryFailed: true, segment: { start: 2, end: 9 }, ...options }));
+            expect(transcribeSession).toHaveBeenCalledWith(session.id, expect.objectContaining({
+                retryFailed: true, segment: { start: 2, end: 9 }, microphoneGateEnabled: false, ...options,
+            }));
         } finally { store.dispose(); }
     });
 
@@ -392,9 +394,10 @@ describe('transcript duplicate filter presentation', () => {
         store.initialize();
         try {
             await settle();
-            expect((await store.startTranscription(options)).ok).toBe(true);
+            expect((await store.startTranscription({ ...options, microphoneGateEnabled: false })).ok).toBe(true);
             expect(transcribeSession).toHaveBeenCalledWith(session.id, expect.objectContaining({
                 hideDuplicateSpeech: false,
+                microphoneGateEnabled: false,
             }));
         } finally {
             store.dispose();

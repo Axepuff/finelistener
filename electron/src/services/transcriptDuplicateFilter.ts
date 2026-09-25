@@ -8,8 +8,8 @@ import type {
 
 export const TRANSCRIPT_DUPLICATE_FILTER_DEFAULTS = Object.freeze({
     algorithm: 'cross-source-word-edit-v1' as const,
-    similarityThreshold: 0.9,
-    minimumMatchingWords: 5,
+    similarityThreshold: 0.8,
+    minimumMatchingWords: 4,
     timeToleranceSec: 2.5,
 });
 

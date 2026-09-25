@@ -28,14 +28,40 @@ it('recognizes sources sequentially, preserves overlapping segments and applies 
         .mockResolvedValueOnce('[00:00:00.100 --> 00:00:01.200] Microphone');
     const result = await transcribeSessionSources('session', {
         runId: 1, language: 'en', segment: { start: 3, end: 6 }, optimized: true,
+        microphoneGateEnabled: true,
     }, repository, transcribe, new AbortController().signal);
     expect(transcribe.mock.calls[0][1]).toMatchObject({ segment: { start: 3, end: 6 }, optimized: true });
-    expect(transcribe.mock.calls[1][1]).toMatchObject({ segment: { start: 2.5, end: 5.5 } });
+    expect(transcribe.mock.calls[0][1]).toMatchObject({ microphoneGateEnabled: false });
+    expect(transcribe.mock.calls[1][1]).toMatchObject({ segment: { start: 2.5, end: 5.5 }, microphoneGateEnabled: true });
     expect(result.transcript?.segments).toEqual([
         { source: 'microphone', startSec: 3.1, endSec: 4.2, text: 'Microphone' },
         { source: 'system', startSec: 3.2, endSec: 4, text: 'System' },
     ]);
     expect(result.transcript?.sourceRun?.status).toBe('completed');
+});
+
+it('can disable the microphone gate for a dual-source run', async () => {
+    const repository = createRepository();
+    const transcribe = vi.fn().mockResolvedValue('');
+
+    await transcribeSessionSources('session', {
+        runId: 1, language: 'en', microphoneGateEnabled: false,
+    }, repository, transcribe, new AbortController().signal);
+
+    expect(transcribe.mock.calls[1][1]).toMatchObject({ microphoneGateEnabled: false });
+    expect(repository.session.transcript?.sourceRun?.settings.microphoneGateEnabled).toBe(false);
+});
+
+it('does not gate a microphone-only recording', async () => {
+    const repository = createRepository();
+    repository.session.tracks = repository.session.tracks?.filter((track) => track.source === 'microphone');
+    const transcribe = vi.fn().mockResolvedValue('');
+
+    await transcribeSessionSources('session', {
+        runId: 1, language: 'en', microphoneGateEnabled: true,
+    }, repository, transcribe, new AbortController().signal);
+
+    expect(transcribe.mock.calls[0][1]).toMatchObject({ microphoneGateEnabled: false });
 });
 
 it('persists successful work before the next pass and retries only unfinished sources using the saved settings', async () => {

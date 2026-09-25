@@ -15,6 +15,7 @@ export interface StartTranscriptionOptions {
     maxLen?: number;
     splitOnWord: boolean;
     useVad: boolean;
+    microphoneGateEnabled?: boolean;
 }
 
 export interface TranscriptionRunRequest {
@@ -253,6 +254,7 @@ export class TranscriptionStore {
                     retryFailed: request.retryFailed,
                     optimized: request.optimized,
                     hideDuplicateSpeech: request.hideDuplicateSpeech,
+                    microphoneGateEnabled: request.options.microphoneGateEnabled,
                 });
 
                 if (request.sourceAware && this.stoppingRunId === runId && this.stopCompletion) await this.stopCompletion;

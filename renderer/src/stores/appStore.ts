@@ -360,6 +360,7 @@ export class AppStore {
             maxLen: run.settings.maxLen,
             splitOnWord: run.settings.splitOnWord ?? false,
             useVad: run.settings.useVad ?? false,
+            microphoneGateEnabled: run.settings.microphoneGateEnabled ?? false,
         }, true);
     }
 

@@ -26,6 +26,24 @@ const microphoneText = (run: SessionSourceRun): string[] => deriveSourceTranscri
     .map((item) => item.text);
 
 describe('transcript duplicate filtering', () => {
+    it('filters a nearby four-word echo', () => {
+        const run = createRun(
+            [segment('system', 'please open the document', 1, 3)],
+            [segment('microphone', 'please open the document', 1.3, 3.3)],
+        );
+
+        expect(microphoneText(run)).toEqual([]);
+    });
+
+    it('filters matching echo words despite one unprotected recognition difference', () => {
+        const run = createRun(
+            [segment('system', 'we should review the updated plan today', 1, 4)],
+            [segment('microphone', 'we should review the revised plan today', 1.2, 4.2)],
+        );
+
+        expect(microphoneText(run)).toEqual(['revised']);
+    });
+
     it('filters a long nearby phrase while retaining unchanged source results and metadata', () => {
         const run = createRun(
             [segment('system', 'This is a sufficiently long duplicated system phrase.', 10, 14)],
@@ -44,35 +62,35 @@ describe('transcript duplicate filtering', () => {
         });
     });
 
-    it('uses the 90 percent edit-similarity boundary conservatively', () => {
+    it('uses the 80 percent edit-similarity boundary', () => {
         const aboveBoundary = createRun(
-            [segment('system', 'alpha bravo charlie delta echo foxtrot golf hotel india juliet', 0, 4)],
-            [segment('microphone', 'alpha bravo charlie delta echo foxtrot golf hotel altered juliet', 0.2, 4.2)],
+            [segment('system', 'alpha bravo charlie delta echo', 0, 4)],
+            [segment('microphone', 'alpha bravo charlie altered echo', 0.2, 4.2)],
         );
         const belowBoundary = createRun(
             [segment('system', 'alpha bravo charlie delta echo foxtrot golf hotel india', 0, 4)],
-            [segment('microphone', 'alpha bravo charlie delta echo foxtrot golf altered india', 0.2, 4.2)],
+            [segment('microphone', 'alpha bravo charlie delta echo foxtrot changed altered india', 0.2, 4.2)],
         );
 
         expect(microphoneText(aboveBoundary).join(' ')).toContain('altered');
         expect(microphoneText(aboveBoundary).join(' ')).not.toContain('alpha bravo charlie delta');
         expect(microphoneText(belowBoundary)).toEqual([
-            'alpha bravo charlie delta echo foxtrot golf altered india',
+            'alpha bravo charlie delta echo foxtrot changed altered india',
         ]);
     });
 
-    it('keeps identical phrases outside the time tolerance and short replies', () => {
+    it('keeps identical phrases outside the time tolerance and phrases shorter than four words', () => {
         const farApart = createRun(
             [segment('system', 'a long phrase that should stay separate', 0, 2)],
             [segment('microphone', 'a long phrase that should stay separate', 10, 12)],
         );
         const shortReply = createRun(
-            [segment('system', 'Yes', 1, 2)],
-            [segment('microphone', 'yes', 1.1, 2.1)],
+            [segment('system', 'Yes please continue', 1, 2)],
+            [segment('microphone', 'yes please continue', 1.1, 2.1)],
         );
 
         expect(microphoneText(farApart)).toEqual(['a long phrase that should stay separate']);
-        expect(microphoneText(shortReply)).toEqual(['yes']);
+        expect(microphoneText(shortReply)).toEqual(['yes please continue']);
     });
 
     it('uses the timing of the aligned segments instead of the full neighboring group', () => {

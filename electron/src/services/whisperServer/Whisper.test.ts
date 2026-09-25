@@ -7,7 +7,7 @@ import type { SessionDetails, SessionTranscriptV1 } from '../../types/sessions';
 const mocks = vi.hoisted(() => ({
     spawn: vi.fn(),
     inference: vi.fn(),
-    prepareAudio: vi.fn<() => Promise<{ wavPath: string; cleanup: () => Promise<void> }>>(),
+    prepareAudio: vi.fn<(audioPath: string, segment: unknown, options: unknown) => Promise<{ wavPath: string; cleanup: () => Promise<void> }>>(),
     readFile: vi.fn<() => Promise<Uint8Array>>(),
 }));
 
@@ -19,8 +19,8 @@ vi.mock('../../utils/whisper', () => ({
 }));
 vi.mock('../AudioPreprocessor', () => ({
     AudioPreprocessor: class {
-        prepareAudioFile() {
-            return mocks.prepareAudio();
+        prepareAudioFile(audioPath: string, segment: unknown, options: unknown) {
+            return mocks.prepareAudio(audioPath, segment, options);
         }
     },
 }));
@@ -86,6 +86,17 @@ const silentPreparedWav = (): Buffer => {
     wav.writeUInt32LE(32000, 40);
     return wav;
 };
+
+it('passes the microphone gate into audio preparation', async () => {
+    const runner = new Whisper({});
+    mocks.spawn.mockReturnValue(createProcess());
+    mocks.inference.mockResolvedValue({ ok: true, text: 'Local speech' });
+
+    await runner.transcribe('microphone.wav', { runId: 1, language: 'ru', microphoneGateEnabled: true });
+
+    expect(mocks.prepareAudio).toHaveBeenCalledWith('microphone.wav', undefined,
+        expect.objectContaining({ microphoneGate: true }));
+});
 
 it('completes digital silence without inference and still recognizes the microphone source', async () => {
     const runner = new Whisper({});

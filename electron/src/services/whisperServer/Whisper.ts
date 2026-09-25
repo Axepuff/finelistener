@@ -102,8 +102,8 @@ export class Whisper {
                 audioPath,
                 opts.segment,
                 opts.optimized ?
-                    { highPass: 80, lowPass: 12000, dynanorm: true, signal: operation.signal } :
-                    { highPass: undefined, signal: operation.signal },
+                    { highPass: 80, lowPass: 12000, dynanorm: true, microphoneGate: opts.microphoneGateEnabled, signal: operation.signal } :
+                    { highPass: undefined, microphoneGate: opts.microphoneGateEnabled, signal: operation.signal },
             );
 
             this.activeRunId = opts.runId;

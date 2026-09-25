@@ -24,6 +24,7 @@ export interface TranscribeOpts {
     vadModelPath?: string;
     segment?: Segment;
     optimized?: boolean;
+    microphoneGateEnabled?: boolean;
 }
 
 export interface TranscriptionTextEvent {

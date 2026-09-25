@@ -28,6 +28,7 @@ export class TranscriptionControlStore {
     private maxLenValue: number | null = null;
     private splitOnWordValue = true;
     private useVadValue = true;
+    private microphoneGateEnabledValue = true;
     private pendingStartIntent: PendingModelDownload | null = null;
     private isDownloadingPendingModelValue = false;
     private nextIntentId = 1;
@@ -68,6 +69,10 @@ export class TranscriptionControlStore {
         return this.useVadValue;
     }
 
+    get microphoneGateEnabled(): boolean {
+        return this.microphoneGateEnabledValue;
+    }
+
     get pendingDownloadModel(): WhisperModelName | null {
         return this.pendingStartIntent?.model ?? null;
     }
@@ -106,6 +111,10 @@ export class TranscriptionControlStore {
 
     setUseVad(useVad: boolean): void {
         this.useVadValue = useVad;
+    }
+
+    setMicrophoneGateEnabled(enabled: boolean): void {
+        this.microphoneGateEnabledValue = enabled;
     }
 
     requestStart(isModelDownloaded: boolean): TranscriptionStartPreparation {
@@ -164,6 +173,7 @@ export class TranscriptionControlStore {
                 maxLen: this.maxLenValue ?? undefined,
                 splitOnWord: this.splitOnWordValue,
                 useVad: this.useVadValue,
+                microphoneGateEnabled: this.microphoneGateEnabledValue,
             },
         };
     }
