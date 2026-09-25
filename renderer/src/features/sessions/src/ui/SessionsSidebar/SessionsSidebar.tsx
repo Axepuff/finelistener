@@ -87,32 +87,27 @@ export const SessionsSidebar: React.FC = observer(() => {
                                 const createdLabel = new Date(session.createdAt).toLocaleString();
 
                                 return (
-                                    <UnstyledButton
+                                    <Paper
                                         key={session.id}
-                                        disabled={store.operations.isBusy}
-                                        onClick={() => {
-                                            setOpenedMenuSessionId(null);
-                                            void handleOpenSession(session.id);
-                                        }}
                                         onContextMenu={(event) => {
                                             event.preventDefault();
                                             event.stopPropagation();
                                             setOpenedMenuSessionId(session.id);
                                         }}
-                                        style={{
-                                            width: '100%',
-                                            textAlign: 'left',
-                                        }}
+                                        withBorder={isActive}
+                                        p={10}
+                                        bg={isActive ? 'white' : undefined}
+                                        style={{ borderColor: isActive ? 'var(--mantine-color-gray-5)' : undefined }}
                                     >
-                                        <Paper
-                                            withBorder={isActive}
-                                            p={10}
-                                            bg={isActive ? 'white' : undefined}
-                                            style={{
-                                                borderColor: isActive ? 'var(--mantine-color-gray-5)' : undefined,
-                                            }}
-                                        >
-                                            <Group justify="space-between" align="flex-start" wrap="nowrap" gap={8}>
+                                        <Group justify="space-between" align="flex-start" wrap="nowrap" gap={8}>
+                                            <UnstyledButton
+                                                disabled={store.operations.isBusy}
+                                                onClick={() => {
+                                                    setOpenedMenuSessionId(null);
+                                                    void handleOpenSession(session.id);
+                                                }}
+                                                style={{ minWidth: 0, flex: 1, textAlign: 'left' }}
+                                            >
                                                 <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
                                                     <Group gap={6} align="center" wrap="nowrap">
                                                         <Text size="sm" fw={600} style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -123,53 +118,53 @@ export const SessionsSidebar: React.FC = observer(() => {
                                                         {createdLabel}
                                                     </Text>
                                                 </Stack>
+                                            </UnstyledButton>
 
-                                                <Menu
-                                                    withinPortal={true}
-                                                    position="bottom-end"
-                                                    opened={isMenuOpen}
-                                                    onChange={(opened) => {
-                                                        setOpenedMenuSessionId(opened ? session.id : null);
-                                                    }}
-                                                >
-                                                    <Menu.Target>
-                                                        <ActionIcon
-                                                            variant="subtle"
-                                                            onClick={(event) => {
-                                                                event.stopPropagation();
-                                                            }}
-                                                            aria-label="Session actions"
-                                                        >
-                                                            <IconDotsVertical size={16} />
-                                                        </ActionIcon>
-                                                    </Menu.Target>
-                                                    <Menu.Dropdown>
-                                                        <Menu.Item
-                                                            leftSection={<IconFolder size={16} />}
-                                                            onClick={() => {
-                                                                setOpenedMenuSessionId(null);
-                                                                void handleRevealRoot();
-                                                            }}
-                                                        >
-                                                            {'Reveal sessions folder'}
-                                                        </Menu.Item>
-                                                        <Menu.Divider />
-                                                        <Menu.Item
-                                                            color="red"
-                                                            leftSection={<IconTrash size={16} />}
-                                                            disabled={store.operations.isBusy}
-                                                            onClick={() => {
-                                                                setOpenedMenuSessionId(null);
-                                                                void handleDeleteSession(session.id, session.title);
-                                                            }}
-                                                        >
-                                                            {'Delete session'}
-                                                        </Menu.Item>
-                                                    </Menu.Dropdown>
-                                                </Menu>
-                                            </Group>
-                                        </Paper>
-                                    </UnstyledButton>
+                                            <Menu
+                                                withinPortal={true}
+                                                position="bottom-end"
+                                                opened={isMenuOpen}
+                                                onChange={(opened) => {
+                                                    setOpenedMenuSessionId(opened ? session.id : null);
+                                                }}
+                                            >
+                                                <Menu.Target>
+                                                    <ActionIcon
+                                                        variant="subtle"
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                        }}
+                                                        aria-label="Session actions"
+                                                    >
+                                                        <IconDotsVertical size={16} />
+                                                    </ActionIcon>
+                                                </Menu.Target>
+                                                <Menu.Dropdown>
+                                                    <Menu.Item
+                                                        leftSection={<IconFolder size={16} />}
+                                                        onClick={() => {
+                                                            setOpenedMenuSessionId(null);
+                                                            void handleRevealRoot();
+                                                        }}
+                                                    >
+                                                        {'Reveal sessions folder'}
+                                                    </Menu.Item>
+                                                    <Menu.Divider />
+                                                    <Menu.Item
+                                                        color="red"
+                                                        leftSection={<IconTrash size={16} />}
+                                                        disabled={store.operations.isBusy}
+                                                        onClick={() => {
+                                                            setOpenedMenuSessionId(null);
+                                                            void handleDeleteSession(session.id, session.title);
+                                                        }}
+                                                    >
+                                                        {'Delete session'}
+                                                    </Menu.Item>
+                                                </Menu.Dropdown>
+                                            </Menu>
+                                        </Group>
+                                    </Paper>
                                 );
                             })}
                         </Stack>
