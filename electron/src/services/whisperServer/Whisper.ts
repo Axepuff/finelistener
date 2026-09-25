@@ -10,6 +10,7 @@ import { WhisperServerApiClient } from './WhisperServerApiClient';
 import { WhisperServerProcess } from './WhisperServerProcess';
 import type { TranscriptionCallbacks } from './types';
 import { normalizeChunk } from './utils';
+import { isSilentPcmWav } from './pcmSilence';
 
 const SERVER_HOST = '127.0.0.1';
 const SERVER_PORT = 17895;
@@ -33,6 +34,8 @@ export class Whisper {
     private parseProgress: (value: string) => void = () => undefined;
     private activeRunId: number | null = null;
     private hasRealtimeOutput = false;
+    private noSpeechController: AbortController | null = null;
+    private stderrLineBuffer = '';
     private readonly handleProcessExit = () => {
         this.stopServer();
     };
@@ -81,6 +84,8 @@ export class Whisper {
         }
 
         this.isTranscribing = true;
+        const operation = new AbortController();
+        this.abortController = operation;
 
         try {
             const resolved = resolveWhisperPaths(opts.model, opts.modelPath);
@@ -91,38 +96,48 @@ export class Whisper {
                 vadModelPath: resolved.vadModelPath,
                 useGpu: opts.useGpu,
             });
+            operation.signal.throwIfAborted();
 
             const { wavPath, cleanup } = await this.audioPreprocessor.prepareAudioFile(
                 audioPath,
                 opts.segment,
-                { highPass: undefined },
+                opts.optimized ?
+                    { highPass: 80, lowPass: 12000, dynanorm: true, microphoneGate: opts.microphoneGateEnabled, signal: operation.signal } :
+                    { highPass: undefined, microphoneGate: opts.microphoneGateEnabled, signal: operation.signal },
             );
 
-            this.abortController = new AbortController();
             this.activeRunId = opts.runId;
             this.parseProgress = createProgressParser((value) => {
                 this.callbacks.onProgressPercent?.({ runId: opts.runId, value });
             });
             this.hasRealtimeOutput = false;
+            this.stderrLineBuffer = '';
             this.streamParser.reset();
 
             this.callbacks.onProgressPercent?.({ runId: opts.runId, value: 0 });
 
             try {
+                operation.signal.throwIfAborted();
                 const fileBuffer = await fs.readFile(wavPath);
+                operation.signal.throwIfAborted();
+                if (isSilentPcmWav(fileBuffer)) {
+                    this.callbacks.onProgressPercent?.({ runId: opts.runId, value: 100 });
+                    return '';
+                }
                 const safeBuffer = new Uint8Array(fileBuffer.byteLength);
 
                 safeBuffer.set(fileBuffer);
+                this.noSpeechController = new AbortController();
+                const inferenceSignal = AbortSignal.any([operation.signal, this.noSpeechController.signal]);
                 const inferenceResult = await this.apiClient.inference(
                     {
                         audioBuffer: safeBuffer,
                         fileName: path.basename(wavPath) || 'audio.wav',
                         options: opts,
                     },
-                    this.abortController.signal,
+                    inferenceSignal,
                 );
-
-                this.abortController = null;
+                inferenceSignal.throwIfAborted();
 
                 if (!inferenceResult.ok) {
                     throw new Error(
@@ -145,14 +160,28 @@ export class Whisper {
                     throw new Error('Transcription was stopped by the user');
                 }
 
+                if (!operation.signal.aborted) {
+                    // A failed socket can precede process close; release the server before the next source starts.
+                    this.stopServer();
+                    await this.serverProcess.waitForExit();
+                    operation.signal.throwIfAborted();
+                    if (this.noSpeechController?.signal.aborted) {
+                        this.callbacks.onStderrChunk?.('Whisper detected no speech in this source. Saved an empty transcript.');
+                        this.callbacks.onProgressPercent?.({ runId: opts.runId, value: 100 });
+                        return '';
+                    }
+                }
+
                 throw error instanceof Error ? error : new Error(String(error));
             } finally {
+                this.noSpeechController = null;
                 if (this.abortController) {
                     this.abortController = null;
                 }
                 await cleanup().catch(() => void 0);
             }
         } finally {
+            this.abortController = null;
             this.activeRunId = null;
             this.isTranscribing = false;
         }
@@ -165,7 +194,7 @@ export class Whisper {
     private abortInference(): boolean {
         if (!this.abortController) return false;
 
-        if (!this.stopServer()) return false;
+        this.stopServer();
 
         this.activeRunId = null;
         this.abortController.abort();
@@ -198,6 +227,15 @@ export class Whisper {
 
             if (source === 'stdout') {
                 this.handleStdoutChunk(text);
+            } else if (this.activeRunId !== null && this.noSpeechController) {
+                this.stderrLineBuffer += text;
+                const lines = this.stderrLineBuffer.split('\n');
+                this.stderrLineBuffer = lines.pop() ?? '';
+                for (const line of lines) {
+                    const match = line.match(/^whisper_vad_segments_from_probs: Final speech segments after filtering: (\d+)\s*$/);
+                    // This native result is definitive; avoid its subsequent empty-audio crash or hang.
+                    if (match && Number(match[1]) === 0) this.noSpeechController.abort();
+                }
             }
             this.callbacks.onStderrChunk?.(`[server:${source}] ${text}`);
             if (this.activeRunId !== null) {

@@ -147,9 +147,9 @@ export class WasapiAdapter implements CaptureAdapter {
             // ignore stop errors
         }
 
-        const durationMs = format.sampleRateHz > 0
-            ? Math.round((totalFrames / format.sampleRateHz) * 1000)
-            : undefined;
+        const durationMs = format.sampleRateHz > 0 ?
+            Math.round((totalFrames / format.sampleRateHz) * 1000) :
+            undefined;
 
         try {
             await writer.finalize();
@@ -246,15 +246,15 @@ export class WasapiAdapter implements CaptureAdapter {
         const normalize = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '');
         const titleIncludes = this.resolveWindowTitleIncludes();
         const normalizedTitleIncludes = titleIncludes ? normalize(titleIncludes) : null;
-        const candidates = normalizedTitleIncludes
-            ? windows.filter((win) => normalize(win.title).includes(normalizedTitleIncludes))
-            : windows;
+        const candidates = normalizedTitleIncludes ?
+            windows.filter((win) => normalize(win.title).includes(normalizedTitleIncludes)) :
+            windows;
 
         const appName = app.getName?.();
         const normalizedAppName = appName ? normalize(appName) : '';
-        const withoutSelf = normalizedAppName
-            ? candidates.filter((win) => !normalize(win.title).includes(normalizedAppName))
-            : candidates;
+        const withoutSelf = normalizedAppName ?
+            candidates.filter((win) => !normalize(win.title).includes(normalizedAppName)) :
+            candidates;
         const chosen = withoutSelf[0] ?? candidates[0];
 
         if (!chosen) {
@@ -331,9 +331,9 @@ export class WasapiAdapter implements CaptureAdapter {
 
         if (this.events.onProgress && now - this.lastProgressAt >= this.progressIntervalMs) {
             this.lastProgressAt = now;
-            const durationMs = this.format.sampleRateHz > 0
-                ? Math.round((this.totalFrames / this.format.sampleRateHz) * 1000)
-                : 0;
+            const durationMs = this.format.sampleRateHz > 0 ?
+                Math.round((this.totalFrames / this.format.sampleRateHz) * 1000) :
+                0;
 
             this.events.onProgress({ durationMs, bytesWritten: this.bytesWritten });
         }

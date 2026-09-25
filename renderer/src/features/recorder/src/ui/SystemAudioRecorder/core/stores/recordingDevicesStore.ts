@@ -1,23 +1,24 @@
-import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import { makeAutoObservable, runInAction } from 'mobx';
-import { getErrorMessage, getRecordingDeviceId } from '../recordingUtils';
+import type { UiPreferenceKey } from 'electron/src/types/uiPreferences';
+import { getRecordingDeviceId } from '../recordingUtils';
 import {
     initialDevicesState,
     type RecordingDependencies,
     type RecordingDevicesState,
 } from './recordingStoreTypes';
 
-const FALLBACK_DEVICES_STATE: RecordingDevicesState = {
-    devices: [],
-    selectedDeviceId: '',
-    deviceError: null,
-};
-
 export class RecordingDevicesStore {
     private stateValue: RecordingDevicesState = initialDevicesState;
 
+    private lifecycleId = 0;
+
+    private preferenceWrites = Promise.resolve();
+
     constructor(private readonly dependencies: RecordingDependencies) {
-        makeAutoObservable<this, 'dependencies'>(this, { dependencies: false }, { autoBind: true });
+        makeAutoObservable<this, 'dependencies' | 'preferenceWrites'>(this, {
+            dependencies: false,
+            preferenceWrites: false,
+        }, { autoBind: true });
     }
 
     get state(): Readonly<RecordingDevicesState> {
@@ -28,44 +29,66 @@ export class RecordingDevicesStore {
         this.stateValue = { ...this.stateValue, selectedDeviceId: deviceId };
     }
 
+    selectSource(source: 'system' | 'microphone', deviceId: string | null): void {
+        if (this.stateValue.isLoading) return;
+
+        const field = source === 'system' ? 'systemDeviceId' : 'microphoneDeviceId';
+        const key: UiPreferenceKey = source === 'system' ? 'recordingSystemDevice' : 'recordingMicrophoneDevice';
+
+        this.stateValue = { ...this.stateValue, [field]: deviceId };
+        this.preferenceWrites = this.preferenceWrites.then(async () => {
+            await this.dependencies.adapter?.setUiPreference(key, deviceId);
+        }).catch((error: unknown) => {
+            console.error('Failed to save recording source preference', error);
+            runInAction(() => {
+                this.stateValue = { ...this.stateValue, deviceError: 'Device selection could not be saved.' };
+            });
+        });
+    }
+
     async initialize(): Promise<void> {
+        const lifecycleId = ++this.lifecycleId;
+        const api = this.dependencies.adapter;
+
+        this.stateValue = { ...this.stateValue, isLoading: true };
+        if (!api) {
+            this.stateValue = { ...initialDevicesState, isLoading: false };
+
+            return;
+        }
+
         try {
-            const state = await this.loadDevicesState();
+            const [devices, systemDeviceId, microphoneDeviceId] = await Promise.all([
+                api.listRecordingDevices(),
+                api.runtimePlatform === 'win32' ? api.getUiPreference('recordingSystemDevice') : '',
+                api.runtimePlatform === 'win32' ? api.getUiPreference('recordingMicrophoneDevice') : '',
+            ]);
+
+            if (lifecycleId !== this.lifecycleId) return;
+
+            const preferred = devices.find((device) => device.isDefault) ?? devices[0];
 
             runInAction(() => {
-                this.stateValue = state;
+                this.stateValue = {
+                    devices,
+                    selectedDeviceId: preferred ? getRecordingDeviceId(preferred) : '',
+                    systemDeviceId,
+                    microphoneDeviceId,
+                    deviceError: null,
+                    isLoading: false,
+                };
             });
-        } catch {
+        } catch (error: unknown) {
+            console.error('Failed to load recording devices or preferences', error);
+            if (lifecycleId !== this.lifecycleId) return;
+
             runInAction(() => {
-                this.stateValue = FALLBACK_DEVICES_STATE;
+                this.stateValue = { ...initialDevicesState, isLoading: false, deviceError: 'Recording devices could not be loaded.' };
             });
         }
     }
 
-    private async loadDevicesState(): Promise<RecordingDevicesState> {
-        const api = this.dependencies.adapter;
-
-        if (!api) {
-            return initialDevicesState;
-        }
-
-        try {
-            const list: RecordingDevice[] = await api.listRecordingDevices();
-            const normalized = list ?? [];
-            const preferred = normalized.find((device) => device.isDefault) ?? normalized[0];
-            const selectedDeviceId = preferred ? getRecordingDeviceId(preferred) : '';
-
-            return {
-                devices: normalized,
-                selectedDeviceId,
-                deviceError: null,
-            };
-        } catch (error: unknown) {
-            return {
-                devices: [],
-                selectedDeviceId: '',
-                deviceError: getErrorMessage(error),
-            };
-        }
+    dispose(): void {
+        this.lifecycleId += 1;
     }
 }

@@ -19,6 +19,7 @@ interface SystemAudioRecorderStoreDependencies {
     activityLog: ActivityLogStore;
     operations: ForegroundOperationStore;
     onSessionImported: (session: SessionDetails) => void;
+    onRecoveryChanged: () => void;
 }
 
 export class SystemAudioRecorderStore {
@@ -45,6 +46,7 @@ export class SystemAudioRecorderStore {
             devicesStore: this.devicesStore,
             operations: dependencies.operations,
             onSessionImported: dependencies.onSessionImported,
+            onRecoveryChanged: dependencies.onRecoveryChanged,
         });
         this.supportActionsStore = new RecordingSupportActionsStore({
             ...recordingDependencies,
@@ -72,10 +74,19 @@ export class SystemAudioRecorderStore {
 
     dispose(): void {
         this.sessionStore.dispose();
+        this.devicesStore.dispose();
     }
 
     selectDevice(deviceId: string): void {
+        if (this.session.recordingState !== 'idle' || this.session.isProcessingRecording) return;
+
         this.devicesStore.selectDevice(deviceId);
+    }
+
+    selectSource(source: 'system' | 'microphone', deviceId: string | null): void {
+        if (this.session.recordingState !== 'idle' || this.session.isProcessingRecording) return;
+
+        this.devicesStore.selectSource(source, deviceId);
     }
 
     startRecording(): Promise<CommandResult> {

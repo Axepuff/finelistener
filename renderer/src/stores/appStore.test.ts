@@ -3,6 +3,7 @@ import type { SessionDetails, SessionTranscriptV1 } from 'electron/src/types/ses
 import type { TranscribeOpts } from 'electron/src/types/transcription';
 import { describe, expect, it, vi } from 'vitest';
 import { AppStore } from './appStore';
+import type { RendererAdapter } from './rendererAdapter';
 import { createFakeRendererAdapter } from './testing/fakeRendererAdapter';
 
 const createSession = (overrides: Partial<SessionDetails> = {}): SessionDetails => ({
@@ -24,51 +25,34 @@ const transcriptionOptions = {
     useVad: true,
 };
 
+const createDeferred = <T>() => {
+    let resolve!: (value: T | PromiseLike<T>) => void;
+    const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+    return { promise, resolve };
+};
+
+const finalizeResult = (session: SessionDetails) => ({
+    recordingId: 'recording-1', sessionId: session.id, sourceWarnings: [],
+});
+
+const sourceTranscript: SessionTranscriptV1 = {
+    version: 1,
+    segments: [{ source: 'system', startSec: 0, endSec: 2, text: 'Saved source transcript' }],
+    sourceRun: {
+        status: 'completed',
+        settings: { language: 'en' },
+        sources: [
+            {
+                source: 'system',
+                status: 'completed',
+                segments: [{ source: 'system', startSec: 0, endSec: 2, text: 'Saved source transcript' }],
+            },
+            { source: 'microphone', status: 'completed', segments: [] },
+        ],
+    },
+};
+
 describe('AppStore', () => {
-    it('ignores text and progress from a stopped run while the next run is active', async () => {
-        vi.spyOn(console, 'error').mockImplementation(() => undefined);
-        let resolveTranscription: (value: string) => void = () => undefined;
-        let rejectTranscription: (error: Error) => void = () => undefined;
-        const transcribe = vi.fn((_path: string, _options: TranscribeOpts) => new Promise<string>((resolve, reject) => {
-            resolveTranscription = resolve;
-            rejectTranscription = reject;
-        }));
-        const fake = createFakeRendererAdapter({
-            getSession: () => Promise.resolve(createSession()),
-            transcribe,
-            stopTranscription: () => Promise.resolve(true),
-        });
-        const store = new AppStore(fake.adapter);
-
-        store.initialize();
-        try {
-            await store.openSession('session-1');
-            const firstRun = store.startTranscription(transcriptionOptions);
-            const firstRunId = transcribe.mock.calls[0][1].runId;
-
-            await store.stopTranscription();
-            resolveTranscription('Discarded result');
-            await firstRun;
-
-            const secondRun = store.startTranscription(transcriptionOptions);
-            const secondRunId = transcribe.mock.calls[1][1].runId;
-
-            fake.emitTranscribeText({ runId: secondRunId, chunk: '[00:00:00.000 --> 00:00:01.000] Current draft\n' });
-            fake.emitTranscribeProgress({ runId: secondRunId, value: 20 });
-            fake.emitTranscribeText({ runId: firstRunId, chunk: '[00:00:01.000 --> 00:00:02.000] Old output\n' });
-            fake.emitTranscribeProgress({ runId: firstRunId, value: 99 });
-
-            expect(store.transcription.plainText).toBe('Current draft');
-            expect(store.transcription.progress).toBe(20);
-            rejectTranscription(new Error('Second run failed'));
-            await secondRun;
-            expect(store.transcription.plainText).toBe('Current draft');
-            expect(store.transcription.savedTranscript).toBeNull();
-        } finally {
-            store.dispose();
-        }
-    });
-
     it.each(['recording', 'idle'] as const)(
         'restores recording ownership after reinitialization when capture is %s',
         async (restoredState) => {
@@ -84,8 +68,7 @@ describe('AppStore', () => {
                 emitRecordingState('idle');
 
                 return Promise.resolve({
-                    filePath: 'C:\\audio\\recording.wav',
-                    format: { sampleRateHz: 16000, channels: 1, codec: 'pcm_s16le', bitDepth: 16 },
+                    ...finalizeResult(recordedSession),
                 });
             });
             const fake = createFakeRendererAdapter({
@@ -96,7 +79,7 @@ describe('AppStore', () => {
                     return () => { emitRecordingState = () => undefined; };
                 },
                 stopSystemRecording,
-                importRecording: () => Promise.resolve(recordedSession),
+                getSession: () => Promise.resolve(recordedSession),
             });
             const store = new AppStore(fake.adapter);
 
@@ -136,10 +119,7 @@ describe('AppStore', () => {
     it('releases the workspace after a stopped recording fails to import', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => undefined);
         let emitRecordingState: (state: RecordingState) => void = () => undefined;
-        let rejectImport: (error: Error) => void = () => undefined;
-        const importRecording = vi.fn(() => new Promise<SessionDetails>((_resolve, reject) => {
-            rejectImport = reject;
-        }));
+        let rejectFinalization: (error: Error) => void = () => undefined;
         const fake = createFakeRendererAdapter({
             getRecordingState: () => Promise.resolve('recording'),
             onRecordingState: (callback) => {
@@ -149,14 +129,8 @@ describe('AppStore', () => {
             },
             stopSystemRecording: () => {
                 emitRecordingState('idle');
-
-                return Promise.resolve({
-                    filePath: 'C:\\audio\\recording.wav',
-                    format: { sampleRateHz: 16000, channels: 1, codec: 'pcm_s16le', bitDepth: 16 },
-                    durationMs: 1000,
-                });
+                return new Promise((_resolve, reject) => { rejectFinalization = reject; });
             },
-            importRecording,
             getSession: () => Promise.resolve(createSession()),
         });
         const store = new AppStore(fake.adapter);
@@ -167,12 +141,11 @@ describe('AppStore', () => {
             const stopPromise = store.recording.stopRecording();
 
             await Promise.resolve();
-            expect(importRecording).toHaveBeenCalledOnce();
             expect(store.recording.session.recordingState).toBe('idle');
             expect(store.operations.kind).toBe('processing-recording');
             expect((await store.openSession('session-1')).ok).toBe(false);
 
-            rejectImport(new Error('Session import failed'));
+            rejectFinalization(new Error('Session finalization failed'));
             expect((await stopPromise).ok).toBe(false);
             expect(store.recording.session.isProcessingRecording).toBe(false);
             expect(store.operations.isBusy).toBe(false);
@@ -184,12 +157,10 @@ describe('AppStore', () => {
 
     it('keeps the workspace locked when stopping capture fails', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => undefined);
-        const importRecording = vi.fn();
         const stopSystemRecording = vi.fn(() => Promise.reject(new Error('Capture is still active')));
         const fake = createFakeRendererAdapter({
             getRecordingState: () => Promise.resolve('recording'),
             stopSystemRecording,
-            importRecording,
         });
         const store = new AppStore(fake.adapter);
 
@@ -200,7 +171,6 @@ describe('AppStore', () => {
             expect(store.operations.kind).toBe('recording');
             expect(store.recording.session.isProcessingRecording).toBe(false);
             expect((await store.importAudio()).ok).toBe(false);
-            expect(importRecording).not.toHaveBeenCalled();
 
             await store.recording.stopRecording();
             expect(stopSystemRecording).toHaveBeenCalledTimes(2);
@@ -216,7 +186,7 @@ describe('AppStore', () => {
         store.initialize();
         store.initialize();
 
-        expect(fake.activeListenerCount).toBe(8);
+        expect(fake.activeListenerCount).toBe(9);
 
         store.dispose();
         store.dispose();
@@ -224,80 +194,19 @@ describe('AppStore', () => {
         expect(fake.activeListenerCount).toBe(0);
 
         store.initialize();
-        expect(fake.activeListenerCount).toBe(8);
-
-        store.dispose();
-    });
-
-    it('keeps a saved transcript while a failed run leaves its draft visible', async () => {
-        vi.spyOn(console, 'error').mockImplementation(() => undefined);
-        const savedTranscript: SessionTranscriptV1 = {
-            version: 1,
-            segments: [{ startSec: 1, endSec: 2, text: 'Saved text' }],
-        };
-        let rejectTranscription: (error: Error) => void = () => undefined;
-        const transcribe = vi.fn(() => new Promise<string>((_resolve, reject) => {
-            rejectTranscription = reject;
-        }));
-        const fake = createFakeRendererAdapter({
-            getSession: () => Promise.resolve(createSession({ transcript: savedTranscript, hasTranscript: true })),
-            transcribe,
-        });
-        const store = new AppStore(fake.adapter);
-
-        store.initialize();
-        await store.openSession('session-1');
-        const runPromise = store.startTranscription(transcriptionOptions);
-
-        fake.emitTranscribeText({ runId: 2, chunk: '[00:00:00.000 --> 00:00:01.000] Draft text\n' });
-        rejectTranscription(new Error('whisper crashed'));
-        const result = await runPromise;
-
-        expect(result.ok).toBe(false);
-        expect(store.transcription.savedTranscript).toEqual(savedTranscript);
-        expect(store.transcription.draftTranscript?.segments[0]?.text).toBe('Draft text');
-        expect(store.transcription.visibleTranscript?.segments[0]?.text).toBe('Draft text');
-        expect(store.transcription.runOutcome).toBe('error');
-
-        store.dispose();
-    });
-
-    it('atomically promotes a successful draft to the saved transcript', async () => {
-        let resolveTranscription: (value: string) => void = () => undefined;
-        const fake = createFakeRendererAdapter({
-            getSession: () => Promise.resolve(createSession()),
-            transcribe: () => new Promise<string>((resolve) => {
-                resolveTranscription = resolve;
-            }),
-        });
-        const store = new AppStore(fake.adapter);
-
-        store.initialize();
-        await store.openSession('session-1');
-        const runPromise = store.startTranscription(transcriptionOptions);
-
-        fake.emitTranscribeText({ runId: 2, chunk: '[00:00:02.000 --> 00:00:03.000] Streaming text\n' });
-        expect(store.transcription.draftTranscript?.segments[0]?.text).toBe('Streaming text');
-        expect(store.transcription.savedTranscript).toBeNull();
-
-        resolveTranscription('[00:00:02.000 --> 00:00:03.000] Final text\n');
-        const result = await runPromise;
-
-        expect(result.ok).toBe(true);
-        expect(store.transcription.draftTranscript).toBeNull();
-        expect(store.transcription.savedTranscript?.segments[0]?.text).toBe('Final text');
-        expect(store.transcription.runOutcome).toBe('success');
+        expect(fake.activeListenerCount).toBe(9);
 
         store.dispose();
     });
 
     it('ignores a stale transcription completion after the run is stopped', async () => {
         let resolveTranscription: (value: string) => void = () => undefined;
+        const transcribe = vi.fn<RendererAdapter['transcribe']>(() => new Promise<string>((resolve) => {
+            resolveTranscription = resolve;
+        }));
         const fake = createFakeRendererAdapter({
             getSession: () => Promise.resolve(createSession()),
-            transcribe: () => new Promise<string>((resolve) => {
-                resolveTranscription = resolve;
-            }),
+            transcribe,
             stopTranscription: () => Promise.resolve(true),
         });
         const store = new AppStore(fake.adapter);
@@ -305,11 +214,12 @@ describe('AppStore', () => {
         store.initialize();
         await store.openSession('session-1');
         const runPromise = store.startTranscription(transcriptionOptions);
+        const runId = transcribe.mock.calls[0][1].runId;
 
-        fake.emitTranscribeText({ runId: 2, chunk: '[00:00:00.000 --> 00:00:01.000] Partial text\n' });
+        fake.emitTranscribeText({ runId, chunk: '[00:00:00.000 --> 00:00:01.000] Partial text\n' });
         await store.stopTranscription();
         resolveTranscription('[00:00:00.000 --> 00:00:01.000] Stale final text\n');
-        await runPromise;
+        expect(await runPromise).toEqual({ ok: false, message: 'The transcription run is no longer active.' });
 
         expect(store.transcription.runOutcome).toBe('stopped');
         expect(store.transcriptionWorkflow.outcome).toBe('stopped');
@@ -322,11 +232,12 @@ describe('AppStore', () => {
     it('ignores a delayed stop response after another transcription starts', async () => {
         let resolveTranscription: (value: string) => void = () => undefined;
         let resolveStop: (value: boolean) => void = () => undefined;
+        const transcribe = vi.fn<RendererAdapter['transcribe']>(() => new Promise<string>((resolve) => {
+            resolveTranscription = resolve;
+        }));
         const fake = createFakeRendererAdapter({
             getSession: () => Promise.resolve(createSession()),
-            transcribe: () => new Promise<string>((resolve) => {
-                resolveTranscription = resolve;
-            }),
+            transcribe,
             stopTranscription: () => new Promise<boolean>((resolve) => {
                 resolveStop = resolve;
             }),
@@ -343,10 +254,11 @@ describe('AppStore', () => {
             await firstRun;
             const secondRun = store.startTranscription(transcriptionOptions);
             const secondOperation = store.operations.active;
+            const secondRunId = transcribe.mock.calls[1][1].runId;
 
-            fake.emitTranscribeText({ runId: 3, chunk: '[00:00:00.000 --> 00:00:01.000] Second draft\n' });
+            fake.emitTranscribeText({ runId: secondRunId, chunk: '[00:00:00.000 --> 00:00:01.000] Second draft\n' });
             resolveStop(true);
-            await stopPromise;
+            expect(await stopPromise).toEqual({ ok: false, message: 'The transcription run is no longer active.' });
 
             expect(store.operations.active).toEqual(secondOperation);
             expect(store.transcription.runOutcome).toBe('none');
@@ -360,6 +272,48 @@ describe('AppStore', () => {
         } finally {
             store.dispose();
         }
+    });
+
+    it('does not let a stopped run release the next foreground operation', async () => {
+        const resolvers: Array<(value: string) => void> = [];
+        const transcribe = vi.fn<RendererAdapter['transcribe']>(
+            () => new Promise<string>((resolve) => {
+                resolvers.push(resolve);
+            }),
+        );
+        const fake = createFakeRendererAdapter({ transcribe, stopTranscription: () => Promise.resolve(true) });
+        const store = new AppStore(fake.adapter);
+
+        store.workspace.replaceWorkspace(createSession());
+        const firstRun = store.startTranscription(transcriptionOptions);
+        await store.stopTranscription();
+
+        const secondRun = store.startTranscription(transcriptionOptions);
+        const secondOperation = store.operations.active;
+        resolvers[0]('[00:00:00.000 --> 00:00:01.000] Old result\n');
+
+        expect(await firstRun).toEqual({ ok: false, message: 'The transcription run is no longer active.' });
+        expect(store.operations.active).toEqual(secondOperation);
+
+        resolvers[1]('[00:00:00.000 --> 00:00:01.000] New result\n');
+        expect((await secondRun).ok).toBe(true);
+        expect(store.operations.isBusy).toBe(false);
+    });
+
+    it('refreshes the session list only after the current transcription succeeds', async () => {
+        const listSessions = vi.fn(() => Promise.resolve([]));
+        const fake = createFakeRendererAdapter({
+            listSessions,
+            transcribe: () => Promise.resolve('[00:00:00.000 --> 00:00:01.000] Final text\n'),
+        });
+        const store = new AppStore(fake.adapter);
+
+        store.workspace.replaceWorkspace(createSession());
+        const result = await store.startTranscription(transcriptionOptions);
+
+        expect(result.ok).toBe(true);
+        expect(store.transcription.savedTranscript?.segments[0]?.text).toBe('Final text');
+        expect(listSessions).toHaveBeenCalledOnce();
     });
 
     it('rejects a conflicting foreground operation', async () => {
@@ -384,6 +338,135 @@ describe('AppStore', () => {
         await importPromise;
     });
 
+    it('blocks deletion while the transcript duplicate filter is being updated', async () => {
+        const filterUpdate = createDeferred<SessionDetails>();
+        const deleteSession = vi.fn(() => Promise.resolve(true));
+        const activeSession = createSession({ transcript: sourceTranscript, hasTranscript: true });
+        const fake = createFakeRendererAdapter({
+            setTranscriptDuplicateFilter: () => filterUpdate.promise,
+            deleteSession,
+        });
+        const store = new AppStore(fake.adapter);
+
+        store.workspace.replaceWorkspace(activeSession);
+        store.transcription.replaceSavedTranscript(sourceTranscript);
+        const update = store.setTranscriptDuplicateFilterEnabled(true);
+
+        expect(store.operations.kind).toBe('filtering-transcript');
+        expect((await store.deleteSession(activeSession.id)).ok).toBe(false);
+        expect(deleteSession).not.toHaveBeenCalled();
+
+        filterUpdate.resolve(activeSession);
+        expect((await update).ok).toBe(true);
+        expect(store.operations.isBusy).toBe(false);
+    });
+
+    it('blocks duplicate filtering while the active session is being deleted', async () => {
+        const deletion = createDeferred<boolean>();
+        const setTranscriptDuplicateFilter = vi.fn(() => Promise.resolve(createSession({
+            transcript: sourceTranscript,
+            hasTranscript: true,
+        })));
+        const activeSession = createSession({ transcript: sourceTranscript, hasTranscript: true });
+        const fake = createFakeRendererAdapter({
+            deleteSession: () => deletion.promise,
+            setTranscriptDuplicateFilter,
+        });
+        const store = new AppStore(fake.adapter);
+
+        store.workspace.replaceWorkspace(activeSession);
+        store.transcription.replaceSavedTranscript(sourceTranscript);
+        const deletePromise = store.deleteSession(activeSession.id);
+
+        expect(store.operations.kind).toBe('deleting-session');
+        expect((await store.setTranscriptDuplicateFilterEnabled(true)).ok).toBe(false);
+        expect(setTranscriptDuplicateFilter).not.toHaveBeenCalled();
+
+        deletion.resolve(true);
+        expect((await deletePromise).ok).toBe(true);
+        expect(store.operations.isBusy).toBe(false);
+    });
+
+    it('blocks optimization and repeated filter updates while duplicate filtering is pending', async () => {
+        const filterUpdate = createDeferred<SessionDetails>();
+        const setTranscriptDuplicateFilter = vi.fn(() => filterUpdate.promise);
+        const optimizeAudio = vi.fn(() => Promise.resolve(createSession({
+            audioOptimizedWavPath: 'C:\\audio\\optimized.wav',
+        })));
+        const activeSession = createSession({ transcript: sourceTranscript, hasTranscript: true });
+        const fake = createFakeRendererAdapter({ setTranscriptDuplicateFilter, optimizeAudio });
+        const store = new AppStore(fake.adapter);
+
+        store.workspace.replaceWorkspace(activeSession);
+        store.transcription.replaceSavedTranscript(sourceTranscript);
+        const update = store.setTranscriptDuplicateFilterEnabled(true);
+
+        expect((await store.setAudioMode('optimized')).ok).toBe(false);
+        expect(optimizeAudio).not.toHaveBeenCalled();
+        expect((await store.setTranscriptDuplicateFilterEnabled(false)).ok).toBe(false);
+        expect(setTranscriptDuplicateFilter).toHaveBeenCalledOnce();
+
+        filterUpdate.resolve(activeSession);
+        expect((await update).ok).toBe(true);
+        expect(store.operations.isBusy).toBe(false);
+    });
+
+    it('releases duplicate-filter operation ownership after an error', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const deleteSession = vi.fn(() => Promise.resolve(true));
+        const activeSession = createSession({ transcript: sourceTranscript, hasTranscript: true });
+        const fake = createFakeRendererAdapter({
+            setTranscriptDuplicateFilter: () => Promise.reject(new Error('Write failed')),
+            deleteSession,
+        });
+        const store = new AppStore(fake.adapter);
+
+        store.workspace.replaceWorkspace(activeSession);
+        store.transcription.replaceSavedTranscript(sourceTranscript);
+        const update = store.setTranscriptDuplicateFilterEnabled(true);
+
+        expect(store.operations.kind).toBe('filtering-transcript');
+        expect((await update).ok).toBe(false);
+        expect(store.operations.isBusy).toBe(false);
+        expect((await store.deleteSession(activeSession.id)).ok).toBe(true);
+        expect(deleteSession).toHaveBeenCalledOnce();
+    });
+
+    it('does not apply a delayed duplicate-filter result after disposal and reinitialization', async () => {
+        const filterUpdate = createDeferred<SessionDetails>();
+        const importUpdate = createDeferred<SessionDetails | null>();
+        const activeSession = createSession({ transcript: sourceTranscript, hasTranscript: true });
+        const staleTranscript: SessionTranscriptV1 = {
+            ...sourceTranscript,
+            segments: [{ source: 'system', startSec: 0, endSec: 1, text: 'Stale filtered result' }],
+        };
+        const fake = createFakeRendererAdapter({
+            setTranscriptDuplicateFilter: () => filterUpdate.promise,
+            importAudio: () => importUpdate.promise,
+        });
+        const store = new AppStore(fake.adapter);
+
+        store.workspace.replaceWorkspace(activeSession);
+        store.transcription.replaceSavedTranscript(sourceTranscript);
+        store.initialize();
+        const filterPromise = store.setTranscriptDuplicateFilterEnabled(true);
+        expect(store.operations.kind).toBe('filtering-transcript');
+
+        store.dispose();
+        store.initialize();
+        const importPromise = store.importAudio();
+        expect(store.operations.kind).toBe('importing');
+
+        filterUpdate.resolve({ ...activeSession, transcript: staleTranscript });
+        expect((await filterPromise).ok).toBe(false);
+        expect(store.transcription.plainText).toBe('System audio: Saved source transcript');
+        expect(store.operations.kind).toBe('importing');
+
+        importUpdate.resolve(null);
+        await importPromise;
+        store.dispose();
+    });
+
     it('normalizes segment boundaries and transcribes one active audio source', async () => {
         const transcribe = vi.fn((_audioPath: string, _options: TranscribeOpts) => Promise.resolve(
             '[00:00:00.000 --> 00:00:01.000] Text\n',
@@ -405,5 +488,34 @@ describe('AppStore', () => {
             'C:\\audio\\source.wav',
             expect.objectContaining({ segment: { start: 0, end: 4 } }),
         );
+    });
+
+    it('ignores a recovery result that completes after disposal', async () => {
+        const recovery = createDeferred<ReturnType<typeof finalizeResult>>();
+        const recoveredSession = createSession({ id: 'recovered-session' });
+        const fake = createFakeRendererAdapter({
+            listRecoverableRecordings: () => Promise.resolve([{
+                recordingId: 'recording-1',
+                createdAt: 1,
+                ageMs: 1,
+                sizeBytes: 1,
+                state: 'recoverable',
+                sources: ['system'],
+                sourceWarnings: [],
+                canRecover: true,
+            }]),
+            recoverRecording: () => recovery.promise,
+            getSession: () => Promise.resolve(recoveredSession),
+        });
+        const store = new AppStore(fake.adapter);
+        store.initialize();
+        await vi.waitFor(() => expect(store.recordingRecovery.hasItems).toBe(true));
+
+        const recoveryPromise = store.recordingRecovery.recover('recording-1');
+        store.dispose();
+        recovery.resolve(finalizeResult(recoveredSession));
+        await recoveryPromise;
+
+        expect(store.workspace.activeSessionId).toBeNull();
     });
 });

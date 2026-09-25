@@ -1,8 +1,7 @@
 import { ActionIcon, Box, Button, Checkbox, Group, Loader, Select, Stack, Text } from '@mantine/core';
 import { IconHeadphones, IconPlayerStopFilled, IconBackspaceFilled } from '@tabler/icons-react';
-import type { WhisperModelName } from 'electron/src/types/whisper';
 import { observer } from 'mobx-react-lite';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useAppStore } from '../../../../../AppContext';
 import { TranscribeAdvancedSettings } from '../TranscribeAdvancedSettings/TranscribeAdvancedSettings';
 import { WhisperModelSelect } from '../WhisperModelSelect/WhisperModelSelect';
@@ -16,140 +15,55 @@ const LANGS = [
     { code: 'fr', label: 'French' },
 ];
 
-type TranscribePhase = 'idle' | 'awaiting-download' | 'downloading' | 'transcribing';
+const langData = LANGS.map(({ code, label }) => ({ value: code, label }));
 
 const TranscribeControl: React.FC = observer(() => {
     const store = useAppStore();
-    const [lang, setLang] = useState('ru');
-    const [model, setModel] = useState<WhisperModelName>('large');
-    const [isModelDownloaded, setIsModelDownloaded] = useState(false);
-    const [phase, setPhase] = useState<TranscribePhase>('idle');
-    const [useCustomModelFile, setUseCustomModelFile] = useState(false);
-    const [customModelFile, setCustomModelFile] = useState<{ path: string; fileName: string } | null>(null);
+    const control = store.transcriptionControl;
     const [isCustomModelImporting, setIsCustomModelImporting] = useState(false);
-    const [maxContext, setMaxContext] = useState<number | null>(null);
-    const [maxLen, setMaxLen] = useState<number | null>(null);
-    const [splitOnWord, setSplitOnWord] = useState<boolean>(true);
-    const [useVad, setUseVad] = useState<boolean>(true);
-    const startAttemptIdRef = useRef(0);
-    const langData = useMemo(
-        () => LANGS.map((langOption) => ({ value: langOption.code, label: langOption.label })),
-        [],
-    );
+    const { language: lang, model, useCustomModelFile, customModelFile, maxContext, maxLen, splitOnWord, useVad, microphoneGateEnabled } = control;
 
     const appendLog = useCallback((message: string) => {
         store.activityLog.appendEvent(message);
     }, [store]);
 
-    const handleModelStatusChange = useCallback(
-        (status: { isModelDownloaded: boolean; isDownloadActive: boolean }) => {
-            setIsModelDownloaded(status.isModelDownloaded);
-            if (status.isDownloadActive) {
-                setPhase((prev) => (prev === 'awaiting-download' ? 'downloading' : prev));
-            } else if (!status.isModelDownloaded) {
-                setPhase((prev) => (prev === 'downloading' ? 'idle' : prev));
-            }
-        },
-        [],
-    );
-
-    useEffect(() => {
-        if (phase === 'downloading' && isModelDownloaded) {
-            setPhase('idle');
-            handleStartRef.current?.();
-        }
-    }, [phase, isModelDownloaded]);
-
-    const handleImportCustomModel = useCallback(async () => {
+    const handleImportCustomModel = async () => {
+        if (isCustomModelImporting) return;
         setIsCustomModelImporting(true);
-
         try {
-            const result = await store.importCustomModel();
-
+            const result = await store.whisperModels.importCustomModel();
             if (!result.ok) {
                 appendLog(result.message);
-
-                return;
-            }
-
-            if (result.value) {
-                setCustomModelFile(result.value);
+            } else if (result.value) {
+                control.setCustomModelFile(result.value);
                 appendLog(`Imported model file: ${result.value.fileName}`);
             }
         } finally {
             setIsCustomModelImporting(false);
         }
-    }, [appendLog, store]);
-
-    const handleStartRef = useRef<(() => void) | undefined>(undefined);
-
-    const handleStart = async () => {
-        if (useCustomModelFile && !customModelFile) {
-            appendLog('No custom model file selected.');
-
-            return;
-        }
-        if (!useCustomModelFile && !isModelDownloaded) {
-            setPhase('awaiting-download');
-
-            return;
-        }
-
-        setPhase('transcribing');
-        const attemptId = startAttemptIdRef.current + 1;
-
-        startAttemptIdRef.current = attemptId;
-        const result = await store.startTranscription({
-            language: lang,
-            model,
-            modelPath: useCustomModelFile ? customModelFile?.path : undefined,
-            maxContext: maxContext ?? undefined,
-            maxLen: maxLen ?? undefined,
-            splitOnWord,
-            useVad,
-        });
-
-        if (startAttemptIdRef.current === attemptId) {
-            setPhase('idle');
-
-            if (!result.ok) {
-                appendLog(result.message);
-            }
-        }
     };
 
-    handleStartRef.current = handleStart;
-
-    const handleDownloadComplete = useCallback(() => {
-        // Phase transition and auto-start handled by handleModelStatusChange + effect
-    }, []);
-
-    const handleDownloadCancelled = useCallback(() => {
-        setPhase('idle');
-    }, []);
+    const handleStart = async () => {
+        const result = await store.requestTranscriptionStart();
+        if (!result.ok) appendLog(result.message);
+    };
 
     const handleStop = async () => {
-        startAttemptIdRef.current += 1;
         const result = await store.stopTranscription();
-
-        setPhase('idle');
-        if (!result.ok) {
-            appendLog(result.message);
-        }
+        if (!result.ok) appendLog(result.message);
     };
 
     const handleClear = () => {
         const result = store.clearWorkspace();
-
-        if (!result.ok) {
-            appendLog(result.message);
-        }
+        if (!result.ok) appendLog(result.message);
     };
 
-    const loading = phase === 'transcribing' || phase === 'downloading';
-    const canStart = phase === 'idle'
+    const isTranscribing = store.operations.kind === 'transcribing';
+    const loading = isTranscribing || control.isDownloadingPendingModel;
+    const canStart = !control.pendingDownloadModel
         && !store.operations.isBusy
-        && (useCustomModelFile ? Boolean(customModelFile) : true);
+        && (!store.whisperModels.isDownloadActive || useCustomModelFile || store.whisperModels.isDownloaded(model))
+        && (!useCustomModelFile || Boolean(customModelFile));
 
     return (
         <Stack gap={12} justify="space-between" h="100%">
@@ -161,25 +75,21 @@ const TranscribeControl: React.FC = observer(() => {
                     value={lang}
                     onChange={(value) => {
                         if (!value) return;
-                        setLang(value);
+                        control.setLanguage(value);
                     }}
                 />
 
                 <WhisperModelSelect
                     value={model}
-                    onChange={setModel}
-                    onStatusChange={handleModelStatusChange}
+                    onChange={(value) => control.setModel(value)}
                     onDownloadError={appendLog}
                     disabled={useCustomModelFile}
-                    requestDownload={phase === 'awaiting-download'}
-                    onDownloadComplete={handleDownloadComplete}
-                    onDownloadCancelled={handleDownloadCancelled}
                 />
 
                 <Stack gap={8}>
                     <Checkbox
                         checked={useCustomModelFile}
-                        onChange={(event) => setUseCustomModelFile(event.currentTarget.checked)}
+                        onChange={(event) => control.setUseCustomModelFile(event.currentTarget.checked)}
                         label="Use a local model file"
                     />
                     {useCustomModelFile ? (
@@ -201,7 +111,7 @@ const TranscribeControl: React.FC = observer(() => {
                             {customModelFile ? (
                                 <Button
                                     variant="subtle"
-                                    onClick={() => setCustomModelFile(null)}
+                                    onClick={() => control.setCustomModelFile(null)}
                                     disabled={loading || isCustomModelImporting}
                                 >
                                     {'Clear'}
@@ -213,13 +123,15 @@ const TranscribeControl: React.FC = observer(() => {
 
                 <TranscribeAdvancedSettings
                     maxContext={maxContext}
-                    onChangeMaxContext={setMaxContext}
+                    onChangeMaxContext={(value) => control.setMaxContext(value)}
                     maxLen={maxLen}
-                    onChangeMaxLen={setMaxLen}
+                    onChangeMaxLen={(value) => control.setMaxLen(value)}
                     splitOnWord={splitOnWord}
-                    onChangeSplitOnWord={setSplitOnWord}
+                    onChangeSplitOnWord={(value) => control.setSplitOnWord(value)}
                     useVad={useVad}
-                    onChangeUseVad={setUseVad}
+                    onChangeUseVad={(value) => control.setUseVad(value)}
+                    microphoneGateEnabled={microphoneGateEnabled}
+                    onChangeMicrophoneGateEnabled={(value) => control.setMicrophoneGateEnabled(value)}
                 />
             </Stack>
             <Box>
@@ -232,7 +144,7 @@ const TranscribeControl: React.FC = observer(() => {
                     >
                         {'Transcribe'}
                     </Button>
-                    <ActionIcon onClick={handleStop} color="red" size={36} disabled={phase !== 'transcribing'}>
+                    <ActionIcon onClick={handleStop} color="red" size={36} disabled={!isTranscribing}>
                         <IconPlayerStopFilled size={20} />
                     </ActionIcon>
                     <ActionIcon onClick={handleClear} variant="light" size={36} disabled={store.lifecycleState !== 'ready'}>

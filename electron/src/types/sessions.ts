@@ -1,14 +1,54 @@
+import type { TranscribeOpts } from './transcription';
+
 export type SessionSourceKind = 'imported' | 'recorded';
+export type RecordingSource = 'system' | 'microphone';
+
+export interface SessionSourceTrack {
+    source: RecordingSource;
+    filePath: string;
+    startOffsetMs: number;
+    durationMs?: number;
+    failure?: string;
+}
+
+export interface SessionSourceResult {
+    source: RecordingSource;
+    status: 'pending' | 'completed' | 'failed';
+    segments: SessionTranscriptSegmentV1[];
+    error?: string;
+}
+
+export interface SessionSourceRun {
+    status: 'incomplete' | 'completed';
+    settings: Omit<TranscribeOpts, 'runId' | 'sessionId'> & { optimized?: boolean };
+    sources: SessionSourceResult[];
+}
 
 export interface SessionTranscriptSegmentV1 {
     startSec: number;
     endSec: number | null;
     text: string;
+    source?: RecordingSource;
+}
+
+export interface TranscriptDuplicateFilterV1 {
+    enabled: boolean;
+    status: 'applied' | 'disabled' | 'failed';
+    algorithm: 'cross-source-word-edit-v1';
+    similarityThreshold: number;
+    minimumMatchingWords: number;
+    timeToleranceSec: number;
+}
+
+export interface SessionTranscriptPresentationV1 {
+    duplicateFilter?: TranscriptDuplicateFilterV1;
 }
 
 export interface SessionTranscriptV1 {
     version: 1;
     segments: SessionTranscriptSegmentV1[];
+    sourceRun?: SessionSourceRun;
+    presentation?: SessionTranscriptPresentationV1;
 }
 
 export interface SessionAudioInfo {
@@ -45,6 +85,7 @@ export interface SessionTranscriptionInfo {
 export interface SessionFileV1 {
     version: 1;
     id: string;
+    recordingId?: string;
     title: string;
     createdAt: number;
     updatedAt: number;
@@ -52,6 +93,8 @@ export interface SessionFileV1 {
     audio: SessionAudioInfo;
     transcript?: SessionTranscriptInfo;
     transcription?: SessionTranscriptionInfo;
+    tracks?: SessionSourceTrack[];
+    sourceWarnings?: Array<{ source: RecordingSource; message: string }>;
 }
 
 export interface SessionListItem {
@@ -68,4 +111,6 @@ export interface SessionDetails extends SessionListItem {
     audioWavPath: string;
     audioOptimizedWavPath?: string;
     transcript?: SessionTranscriptV1;
+    tracks?: SessionSourceTrack[];
+    sourceWarnings?: Array<{ source: RecordingSource; message: string }>;
 }

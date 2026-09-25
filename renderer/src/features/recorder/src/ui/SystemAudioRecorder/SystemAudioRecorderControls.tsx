@@ -19,9 +19,15 @@ export const SystemAudioRecorderControls: React.FC = observer(() => {
             recordingDurationMs,
             recordingLevel,
             recordingBytesWritten,
+            sourceLevels,
             devices,
             selectedDeviceId,
             showDeviceSelect,
+            isWindows,
+            sourceSelectionDisabled,
+            systemDeviceId,
+            microphoneDeviceId,
+            onSourceChange,
             onStartRecording,
             onStopRecording,
             onDeviceChange,
@@ -30,9 +36,9 @@ export const SystemAudioRecorderControls: React.FC = observer(() => {
 
     const levelLabel = formatLevel(recordingLevel);
     const durationLabel = formatDuration(recordingDurationMs);
-    const writtenLabel = recordingBytesWritten !== null
-        ? `Written: ${Math.round(recordingBytesWritten / 1024)} KB`
-        : 'Written: N/A';
+    const writtenLabel = recordingBytesWritten !== null ?
+        `Written: ${Math.round(recordingBytesWritten / 1024)} KB` :
+        'Written: N/A';
     const deviceOptions = devices
         .map((device) => {
             const value = getRecordingDeviceId(device);
@@ -42,6 +48,18 @@ export const SystemAudioRecorderControls: React.FC = observer(() => {
             return { value, label: formatDeviceLabel(device) };
         })
         .filter((device): device is { value: string; label: string } => device !== null);
+
+    const sourceOptions = (source: 'system' | 'microphone', selected: string | null) => {
+        const options = devices.filter((device) => (device.source ?? 'system') === source)
+            .map((device) => ({ value: getRecordingDeviceId(device), label: formatDeviceLabel(device) }))
+            .filter((device) => device.value !== '');
+
+        if (selected && !options.some((device) => device.value === selected)) {
+            options.push({ value: selected, label: 'Unavailable device' });
+        }
+
+        return [{ value: '__off__', label: 'Off' }, { value: '', label: 'Default device' }, ...options];
+    };
 
     return (
         <Stack>
@@ -69,7 +87,7 @@ export const SystemAudioRecorderControls: React.FC = observer(() => {
                     >
                         <IconMicrophone />
                     </ActionIcon>
-                    <Text size="sm">{'Record system audio'}</Text>
+                    <Text size="sm">{isWindows ? 'Record audio' : 'Record system audio'}</Text>
                 </Stack>
             )}
 
@@ -78,16 +96,40 @@ export const SystemAudioRecorderControls: React.FC = observer(() => {
                     <Text size="sm" c="dimmed">
                         {`Recording: ${durationLabel}`}
                     </Text>
-                    <Text size="sm" c="dimmed">
-                        {`Level: ${levelLabel}`}
-                    </Text>
+                    {Object.keys(sourceLevels).length > 0 ? (['system', 'microphone'] as const).map((source) => sourceLevels[source] ? (
+                        <Text key={source} size="sm" c="dimmed">
+                            {`${source === 'system' ? 'System audio' : 'Microphone'}: ${formatLevel(sourceLevels[source])}`}
+                        </Text>
+                    ) : null) : (
+                        <Text size="sm" c="dimmed">{`Level: ${levelLabel}`}</Text>
+                    )}
                     <Text size="sm" c="dimmed">
                         {writtenLabel}
                     </Text>
                 </Group>
             ) : null}
 
-            {showDeviceSelect ? (
+            {isWindows ? (
+                <Stack gap={8}>
+                    <Select
+                        label="System audio"
+                        data={sourceOptions('system', systemDeviceId)}
+                        value={systemDeviceId ?? '__off__'}
+                        onChange={(value) => onSourceChange('system', value === '__off__' ? null : value)}
+                        disabled={sourceSelectionDisabled}
+                    />
+                    <Select
+                        label="Microphone"
+                        data={sourceOptions('microphone', microphoneDeviceId)}
+                        value={microphoneDeviceId ?? '__off__'}
+                        onChange={(value) => onSourceChange('microphone', value === '__off__' ? null : value)}
+                        disabled={sourceSelectionDisabled}
+                    />
+                    {systemDeviceId === null && microphoneDeviceId === null ? (
+                        <Text size="sm" c="dimmed">{'Enable at least one recording source.'}</Text>
+                    ) : null}
+                </Stack>
+            ) : showDeviceSelect ? (
                 <Select
                     label="Output device"
                     data={deviceOptions}

@@ -167,13 +167,13 @@ export class WebAudioWaveformAdapter extends PlayerAdapter {
             end: Math.min(1, this.audioBuffer.duration),
         };
         const start =
-            typeof bounds.start === 'number'
-                ? this.clampTime(bounds.start, this.audioBuffer.duration)
-                : currentRegion.start;
+            typeof bounds.start === 'number' ?
+                this.clampTime(bounds.start, this.audioBuffer.duration) :
+                currentRegion.start;
         const end =
-            typeof bounds.end === 'number'
-                ? this.clampTime(bounds.end, this.audioBuffer.duration)
-                : currentRegion.end;
+            typeof bounds.end === 'number' ?
+                this.clampTime(bounds.end, this.audioBuffer.duration) :
+                currentRegion.end;
 
         this.region = {
             start,
@@ -205,8 +205,8 @@ export class WebAudioWaveformAdapter extends PlayerAdapter {
         if (this.audioContext) return this.audioContext;
 
         const AudioContextConstructor =
-            window.AudioContext ||
-            (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+            window.AudioContext
+            || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
 
         if (!AudioContextConstructor) {
             throw new Error('AudioContext is not supported in this environment');
@@ -350,10 +350,10 @@ export class WebAudioWaveformAdapter extends PlayerAdapter {
 
         if (this.waveformData) {
             if (
-                !this.waveformImageData ||
-                !this.waveformImageSize ||
-                this.waveformImageSize.width !== width ||
-                this.waveformImageSize.height !== height
+                !this.waveformImageData
+                || !this.waveformImageSize
+                || this.waveformImageSize.width !== width
+                || this.waveformImageSize.height !== height
             ) {
                 this.renderWaveformImage();
             }

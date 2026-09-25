@@ -287,9 +287,9 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
                         bottom: 0,
                         width: 2,
                         transform: 'translateX(-50%)',
-                        backgroundColor: sidebarState.isSidebarResizing
-                            ? 'var(--mantine-color-gray-5)'
-                            : 'var(--mantine-color-gray-3)',
+                        backgroundColor: sidebarState.isSidebarResizing ?
+                            'var(--mantine-color-gray-5)' :
+                            'var(--mantine-color-gray-3)',
                     }}
                 />
             </Box>

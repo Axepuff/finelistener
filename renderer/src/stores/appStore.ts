@@ -1,8 +1,8 @@
 import type { SessionDetails } from 'electron/src/types/sessions';
-import type { TranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelName } from 'electron/src/types/whisper';
 import { configure, makeAutoObservable, runInAction } from 'mobx';
+import { TranscriptionControlStore } from 'renderer/src/features/transcribe-control';
 import { SystemAudioRecorderStore } from 'renderer/src/features/recorder/src/ui/SystemAudioRecorder/core/recordingStore';
 import {
     evaluateTranscriptionWorkflow,
@@ -12,7 +12,8 @@ import {
 import { ActivityLogStore } from './activityLogStore';
 import { ForegroundOperationStore } from './foregroundOperationStore';
 import type { RendererAdapter } from './rendererAdapter';
-import { TranscriptionStore } from './transcriptionStore';
+import { SessionsStore } from './sessionsStore';
+import { TranscriptionStore, type StartTranscriptionOptions, type TranscriptionRunRequest } from './transcriptionStore';
 import {
     commandFailure,
     commandSuccess,
@@ -21,18 +22,9 @@ import {
 } from './types';
 import { WhisperModelStore } from './whisperModelStore';
 import { WorkspaceStore } from './workspaceStore';
+import { RecordingRecoveryStore } from './recordingRecoveryStore';
 
 configure({ enforceActions: 'always' });
-
-export interface StartTranscriptionOptions {
-    language: string;
-    model: WhisperModelName;
-    modelPath?: string;
-    maxContext?: number;
-    maxLen?: number;
-    splitOnWord: boolean;
-    useVad: boolean;
-}
 
 export class AppStore {
     readonly activityLog = new ActivityLogStore();
@@ -41,11 +33,17 @@ export class AppStore {
 
     readonly workspace = new WorkspaceStore();
 
-    readonly transcription = new TranscriptionStore();
+    readonly sessions: SessionsStore;
+
+    readonly transcription: TranscriptionStore;
+
+    readonly transcriptionControl = new TranscriptionControlStore();
 
     readonly whisperModels: WhisperModelStore;
 
     readonly recording: SystemAudioRecorderStore;
+
+    readonly recordingRecovery: RecordingRecoveryStore;
 
     private unsubscribeFunctions: Array<() => void> = [];
 
@@ -53,26 +51,33 @@ export class AppStore {
 
     private disposed = false;
 
-    private sessionsRequestId = 0;
+    private transcriptionRequestId = 0;
 
     constructor(private readonly adapter: RendererAdapter | null) {
+        this.sessions = new SessionsStore(adapter);
+        this.transcription = new TranscriptionStore(adapter);
         this.whisperModels = new WhisperModelStore(adapter);
         this.recording = new SystemAudioRecorderStore({
             adapter,
             activityLog: this.activityLog,
             operations: this.operations,
             onSessionImported: (session) => this.acceptSession(session),
+            onRecoveryChanged: () => { void this.recordingRecovery.refresh(); },
         });
-        makeAutoObservable<this, 'adapter' | 'unsubscribeFunctions' | 'sessionsRequestId'>(this, {
+        this.recordingRecovery = new RecordingRecoveryStore(adapter, this.operations, (session) => this.acceptSession(session));
+        makeAutoObservable<this, 'adapter' | 'unsubscribeFunctions' | 'transcriptionRequestId'>(this, {
             adapter: false,
             activityLog: false,
             operations: false,
             workspace: false,
+            sessions: false,
             transcription: false,
+            transcriptionControl: false,
+            transcriptionRequestId: false,
             whisperModels: false,
             recording: false,
+            recordingRecovery: false,
             unsubscribeFunctions: false,
-            sessionsRequestId: false,
         }, { autoBind: true });
     }
 
@@ -105,21 +110,21 @@ export class AppStore {
 
         this.initialized = true;
         this.disposed = false;
+        this.sessions.initialize();
+        this.transcription.initialize();
 
         if (this.adapter) {
             this.unsubscribeFunctions = [
-                this.adapter.onTranscribeText((chunk) => this.handleTranscribeText(chunk)),
-                this.adapter.onTranscribeProgress((value) => this.handleTranscribeProgress(value)),
                 this.adapter.onTranscribeLog((line) => this.activityLog.appendProcessOutput(line)),
                 this.adapter.onWhisperModelDownloadProgress((progress) => {
                     this.whisperModels.updateDownloadProgress(progress);
                 }),
             ];
-            void this.refreshSessions();
             void this.whisperModels.refresh();
         }
 
         this.recording.initialize();
+        this.recordingRecovery.initialize();
     }
 
     dispose(): void {
@@ -127,56 +132,15 @@ export class AppStore {
 
         this.initialized = false;
         this.disposed = true;
+        this.transcriptionRequestId += 1;
+        this.transcriptionControl.dispose();
         this.unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
         this.unsubscribeFunctions = [];
+        this.transcription.dispose();
         this.recording.dispose();
+        this.recordingRecovery.dispose();
+        this.sessions.dispose();
         this.operations.cancelActive();
-        this.sessionsRequestId += 1;
-    }
-
-    async refreshSessions(): Promise<CommandResult> {
-        if (!this.adapter) {
-            this.workspace.replaceSessions([]);
-
-            return commandSuccess(undefined);
-        }
-
-        const requestId = this.sessionsRequestId + 1;
-
-        this.sessionsRequestId = requestId;
-        this.workspace.setSessionsLoading(true);
-        this.workspace.setSessionsLoadError(null);
-
-        try {
-            const sessions = await this.adapter.listSessions();
-
-            if (this.disposed || requestId !== this.sessionsRequestId) {
-                return commandFailure('The session list request was replaced.');
-            }
-
-            runInAction(() => {
-                this.workspace.replaceSessions(sessions);
-            });
-
-            return commandSuccess(undefined);
-        } catch (error: unknown) {
-            if (requestId !== this.sessionsRequestId) {
-                return commandFailure('The session list request was replaced.');
-            }
-
-            console.error('Failed to load sessions', error);
-            runInAction(() => {
-                this.workspace.setSessionsLoadError('Failed to load sessions.');
-            });
-
-            return commandFailure('Failed to load sessions.');
-        } finally {
-            if (requestId === this.sessionsRequestId) {
-                runInAction(() => {
-                    this.workspace.setSessionsLoading(false);
-                });
-            }
-        }
     }
 
     async importAudio(): Promise<CommandResult<SessionDetails | null>> {
@@ -243,26 +207,45 @@ export class AppStore {
 
     async deleteSession(sessionId: string): Promise<CommandResult> {
         if (!this.adapter) return commandFailure('Sessions are not available.');
-        if (this.operations.isBusy) return commandFailure('Another workspace operation is already running.');
+        const operation = this.operations.begin('deleting-session');
+
+        if (!operation) return commandFailure('Another workspace operation is already running.');
 
         try {
             await this.adapter.deleteSession(sessionId);
 
+            if (!this.operations.owns(operation) || this.disposed) {
+                return commandFailure('Session deletion is no longer active.');
+            }
+
+            if (this.workspace.activeSessionId === sessionId) {
+                await this.adapter.setActiveSession(null);
+
+                if (!this.operations.owns(operation) || this.disposed) {
+                    return commandFailure('Session deletion is no longer active.');
+                }
+            }
+
             runInAction(() => {
-                this.workspace.removeSession(sessionId);
+                this.sessions.remove(sessionId);
 
                 if (this.workspace.activeSessionId === sessionId) {
+                    this.transcriptionControl.cancelPendingDownload();
                     this.workspace.clearWorkspace();
-                    this.transcription.clearForWorkspaceChange();
+                    this.transcription.clear();
                 }
             });
-            void this.refreshSessions();
+            void this.sessions.refresh();
 
             return commandSuccess(undefined);
         } catch (error: unknown) {
             console.error('Failed to delete session', error);
 
             return commandFailure('Failed to delete the session.');
+        } finally {
+            runInAction(() => {
+                this.operations.finish(operation);
+            });
         }
     }
 
@@ -318,12 +301,75 @@ export class AppStore {
         }
     }
 
-    async startTranscription(options: StartTranscriptionOptions): Promise<CommandResult> {
+    async requestTranscriptionStart(): Promise<CommandResult> {
+        if (this.disposed) return commandFailure('Transcription is not available.');
+        if (this.operations.isBusy) return commandFailure('Another workspace operation is already running.');
+
+        const control = this.transcriptionControl;
+        const preparation = control.requestStart(this.whisperModels.isDownloaded(control.model));
+
+        if (preparation.status === 'failed') return commandFailure(preparation.message);
+        if (preparation.status === 'awaiting-download') return commandSuccess(undefined);
+
+        return this.startPreparedTranscription(preparation.options);
+    }
+
+    async confirmPendingTranscriptionDownload(): Promise<CommandResult> {
+        if (this.disposed) return commandFailure('Model download is not available.');
+        if (this.whisperModels.isDownloadActive) return commandFailure('Model download is already in progress.');
+
+        const intent = this.transcriptionControl.beginPendingDownload();
+
+        if (!intent) return commandFailure('No model download is pending.');
+
+        const result = await this.whisperModels.download(intent.model);
+        const preparation = this.transcriptionControl.completePendingDownload(intent, result);
+
+        if (!preparation) return commandSuccess(undefined);
+        if (preparation.status === 'failed') return commandFailure(preparation.message);
+        if (preparation.status === 'awaiting-download') return commandSuccess(undefined);
+
+        return this.startPreparedTranscription(preparation.options);
+    }
+
+    async downloadWhisperModel(model: WhisperModelName): Promise<CommandResult> {
+        if (this.disposed) return commandFailure('Model download is not available.');
+        if (this.whisperModels.isDownloadActive) return commandFailure('Model download is already in progress.');
+
+        return this.whisperModels.download(model);
+    }
+
+    private async startPreparedTranscription(options: StartTranscriptionOptions, retryFailed = false): Promise<CommandResult> {
+        const requestId = ++this.transcriptionRequestId;
+        const result = await this.startTranscription(options, retryFailed);
+
+        // An intentional stop or reset supersedes the original button request's result.
+        return requestId === this.transcriptionRequestId && !this.disposed ? result : commandSuccess(undefined);
+    }
+
+    async retryIncompleteTranscription(): Promise<CommandResult> {
+        const run = this.transcription.savedTranscript?.sourceRun;
+
+        if (!run || run.status !== 'incomplete') return commandFailure('No incomplete transcription is available.');
+
+        return this.startPreparedTranscription({
+            language: run.settings.language,
+            model: run.settings.model ?? 'base',
+            modelPath: run.settings.modelPath,
+            maxContext: run.settings.maxContext,
+            maxLen: run.settings.maxLen,
+            splitOnWord: run.settings.splitOnWord ?? false,
+            useVad: run.settings.useVad ?? false,
+            microphoneGateEnabled: run.settings.microphoneGateEnabled ?? false,
+        }, true);
+    }
+
+    async startTranscription(options: StartTranscriptionOptions, retryFailed = false): Promise<CommandResult> {
         const audioPath = this.workspace.audioSourcePath;
 
         if (!this.adapter) return commandFailure('Transcription is not available.');
         if (!audioPath) return commandFailure('Choose an audio source before transcribing.');
-        if (this.workspace.hasIncompleteSegment) {
+        if (!retryFailed && this.workspace.hasIncompleteSegment) {
             return commandFailure('Set both the start and end of the segment, with the end after the start.');
         }
 
@@ -331,8 +377,10 @@ export class AppStore {
 
         if (!operation) return commandFailure('Another workspace operation is already running.');
 
-        const selectedSegment = this.workspace.selectedSegment ?? undefined;
-        const runId = this.transcription.beginRun(selectedSegment);
+        const selectedSegment = retryFailed ?
+            this.transcription.savedTranscript?.sourceRun?.settings.segment :
+            this.workspace.selectedSegment ?? undefined;
+        const sessionId = this.workspace.activeSessionId ?? undefined;
         const fileName = audioPath.split(/[/\\]/).pop() || audioPath;
 
         if (selectedSegment) {
@@ -343,44 +391,41 @@ export class AppStore {
             this.activityLog.appendEvent(`Starting Whisper transcription for ${fileName}`);
         }
 
-        const transcribeOptions: TranscribeOpts = {
-            runId,
-            language: options.language,
-            model: options.model,
-            sessionId: this.workspace.activeSessionId ?? undefined,
-            modelPath: options.modelPath,
-            maxContext: options.maxContext ?? -1,
-            maxLen: options.maxLen ?? 0,
-            splitOnWord: options.splitOnWord,
-            useVad: options.useVad,
-            segment: selectedSegment,
+        const request: TranscriptionRunRequest = {
+            audioPath,
+            sessionId,
+            segment: selectedSegment ? { ...selectedSegment } : undefined,
+            options: { ...options },
+            sourceAware: Boolean(this.workspace.activeSession?.tracks?.length),
+            retryFailed,
+            optimized: this.workspace.audioMode === 'optimized',
+            hideDuplicateSpeech: this.transcription.preferredDuplicateFilterEnabled,
         };
         const startedAt = performance.now();
+        const isCurrent = (): boolean => this.operations.owns(operation) && !this.disposed;
 
         try {
-            const transcriptSource = await this.adapter.transcribe(audioPath, transcribeOptions);
+            const result = await this.transcription.start(request, isCurrent);
 
-            if (!this.operations.owns(operation) || !this.transcription.ownsRun(runId) || this.disposed) {
+            if (result.status === 'replaced' || !isCurrent()) {
                 return commandFailure('The transcription run is no longer active.');
             }
+            if (result.status === 'failed') {
+                this.activityLog.appendEvent(`Whisper transcription failed for ${fileName}`);
+                void this.sessions.refresh();
 
-            runInAction(() => {
-                this.transcription.completeRun(runId, transcriptSource);
-            });
+                return commandFailure(result.message);
+            }
+
             const durationSeconds = Math.max(0, performance.now() - startedAt) / 1000;
 
-            this.activityLog.appendEvent(`Whisper transcription finished for ${fileName}`);
+            this.activityLog.appendEvent(result.status === 'incomplete' ?
+                `Whisper transcription is incomplete for ${fileName}` :
+                `Whisper transcription finished for ${fileName}`);
             this.activityLog.appendEvent(`Processed ${fileName}: ${durationSeconds.toFixed(1)} s.`);
-            void this.refreshSessions();
+            void this.sessions.refresh();
 
             return commandSuccess(undefined);
-        } catch (error: unknown) {
-            console.error('Whisper transcription failed', error);
-            runInAction(() => {
-                this.transcription.failRun(runId, 'Transcription failed.');
-            });
-
-            return commandFailure('Transcription failed.');
         } finally {
             runInAction(() => {
                 this.operations.finish(operation);
@@ -397,34 +442,33 @@ export class AppStore {
 
         if (!operation) return commandFailure('No transcription is running.');
 
-        try {
-            const stopped = await this.adapter.stopTranscription();
+        this.transcriptionRequestId += 1;
+        const isCurrent = (): boolean => this.operations.owns(operation) && !this.disposed;
+        const result = await this.transcription.stop(isCurrent);
 
-            if (!this.operations.owns(operation) || this.disposed) {
-                return commandFailure('The transcription run is no longer active.');
-            }
-
-            if (!stopped) return commandFailure('No transcription is running.');
-
-            runInAction(() => {
-                this.transcription.stopRun();
-                this.operations.finish(operation);
-            });
-            this.activityLog.appendEvent('Transcription stopped.');
-
-            return commandSuccess(undefined);
-        } catch (error: unknown) {
-            console.error('Failed to stop Whisper transcription', error);
-
-            return commandFailure('Failed to stop transcription.');
+        if (!isCurrent()) {
+            return commandFailure('The transcription run is no longer active.');
         }
+        if (!result.ok) return result;
+
+        runInAction(() => {
+            this.operations.finish(operation);
+        });
+        this.activityLog.appendEvent('Transcription stopped.');
+
+        return commandSuccess(undefined);
     }
 
     clearWorkspace(): CommandResult {
         if (this.operations.isBusy) return commandFailure('Another workspace operation is already running.');
 
+        this.transcriptionRequestId += 1;
+        this.transcriptionControl.cancelPendingDownload();
+        void this.adapter?.setActiveSession(null).catch((error: unknown) => {
+            console.error('Failed to clear the active session', error);
+        });
         this.workspace.clearWorkspace();
-        this.transcription.clearAll();
+        this.transcription.clear();
 
         return commandSuccess(undefined);
     }
@@ -443,23 +487,6 @@ export class AppStore {
         }
     }
 
-    async importCustomModel(): Promise<CommandResult<{ path: string; fileName: string } | null>> {
-        if (!this.adapter) return commandFailure('Custom model import is not available.');
-
-        try {
-            const result = await this.adapter.importWhisperModelFromFile();
-
-            if (!result) return commandSuccess(null);
-            if (!result.ok) return commandFailure('Failed to import the model file.');
-
-            return commandSuccess({ path: result.path, fileName: result.fileName });
-        } catch (error: unknown) {
-            console.error('Failed to import custom model', error);
-
-            return commandFailure('Failed to import the model file.');
-        }
-    }
-
     async saveText(content: string): Promise<CommandResult> {
         if (!this.adapter) return commandFailure('Saving text is not available.');
 
@@ -471,6 +498,45 @@ export class AppStore {
             console.error('Failed to save transcript text', error);
 
             return commandFailure('Failed to save the transcript.');
+        }
+    }
+
+    async setTranscriptDuplicateFilterEnabled(enabled: boolean): Promise<CommandResult> {
+        const sessionId = this.workspace.activeSessionId;
+
+        if (!this.adapter || !sessionId || !this.transcription.duplicateFilterAvailable) {
+            return commandFailure('Duplicate filtering is not available for this transcript.');
+        }
+        const operation = this.operations.begin('filtering-transcript');
+
+        if (!operation) return commandFailure('Another workspace operation is already running.');
+
+        try {
+            const session = await this.adapter.setTranscriptDuplicateFilter(sessionId, enabled);
+
+            if (!this.operations.owns(operation) || this.disposed || this.workspace.activeSessionId !== sessionId) {
+                return commandFailure('The session was replaced before duplicate filtering finished.');
+            }
+
+            runInAction(() => {
+                this.transcription.replaceSavedTranscript(session.transcript ?? null);
+                this.transcription.setDuplicateFilterPreference(enabled);
+            });
+            void this.adapter.setUiPreference('transcriptDuplicateFilterEnabled', enabled).catch((error: unknown) => {
+                console.error('Failed to save transcript duplicate filter preference', error);
+                this.activityLog.appendEvent('The duplicate filter preference could not be saved.');
+            });
+            void this.sessions.refresh();
+
+            return commandSuccess(undefined);
+        } catch (error: unknown) {
+            console.error('Failed to update transcript duplicate filtering', error);
+
+            return commandFailure('Duplicate filtering could not be updated.');
+        } finally {
+            runInAction(() => {
+                this.operations.finish(operation);
+            });
         }
     }
 
@@ -491,22 +557,12 @@ export class AppStore {
     }
 
     private acceptSession(session: SessionDetails): void {
+        void this.adapter?.setActiveSession(session.id).catch((error: unknown) => {
+            console.error('Failed to update the active session', error);
+        });
         this.workspace.replaceWorkspace(session);
         this.transcription.replaceSavedTranscript(session.transcript ?? null);
-        void this.refreshSessions();
+        void this.sessions.refresh();
     }
 
-    private handleTranscribeText(event: TranscriptionTextEvent): void {
-        if (this.operations.kind !== 'transcribing' || !this.transcription.ownsRun(event?.runId)) return;
-
-        if (typeof event.chunk !== 'string') return;
-
-        this.transcription.appendDraft(event.chunk);
-    }
-
-    private handleTranscribeProgress(event: TranscriptionProgressEvent): void {
-        if (this.operations.kind !== 'transcribing' || !this.transcription.ownsRun(event?.runId)) return;
-
-        this.transcription.setProgress(event.value);
-    }
 }

@@ -6,7 +6,7 @@ import { useAppStore } from 'renderer/src/AppContext';
 
 export const SessionsSidebar: React.FC = observer(() => {
     const store = useAppStore();
-    const { workspace } = store;
+    const { sessions, workspace } = store;
     const [openedMenuSessionId, setOpenedMenuSessionId] = useState<string | null>(null);
 
     const handleRevealRoot = useCallback(async () => {
@@ -41,9 +41,9 @@ export const SessionsSidebar: React.FC = observer(() => {
         }
     }, [store]);
 
-    const emptyStateText = workspace.sessionsLoading
-        ? 'Loading sessions...'
-        : workspace.sessionsLoadError ?? 'No sessions yet.';
+    const emptyStateText = sessions.isLoading ?
+        'Loading sessions...' :
+        sessions.error ?? 'No sessions yet.';
 
     return (
         <Paper bg="gray.0" h="100%" style={{ minHeight: 0, overflow: 'hidden' }}>
@@ -55,15 +55,15 @@ export const SessionsSidebar: React.FC = observer(() => {
                     <Tooltip label="Refresh sessions" withArrow={true}>
                         <ActionIcon
                             variant="subtle"
-                            onClick={() => void store.refreshSessions()}
-                            disabled={workspace.sessionsLoading}
+                            onClick={() => void sessions.refresh()}
+                            disabled={sessions.isLoading}
                         >
                             <IconRefresh size={16} />
                         </ActionIcon>
                     </Tooltip>
                 </Group>
 
-                {workspace.sessionsLoading && workspace.sessions.length === 0 ? (
+                {sessions.isLoading && sessions.items.length === 0 ? (
                     <Group gap={8} align="center">
                         <Loader size={14} />
                         <Text size="sm" c="dimmed">
@@ -72,16 +72,16 @@ export const SessionsSidebar: React.FC = observer(() => {
                     </Group>
                 ) : null}
 
-                {!workspace.sessionsLoading && workspace.sessions.length === 0 ? (
+                {!sessions.isLoading && sessions.items.length === 0 ? (
                     <Text size="sm" c="dimmed">
                         {emptyStateText}
                     </Text>
                 ) : null}
 
-                {workspace.sessions.length > 0 ? (
+                {sessions.items.length > 0 ? (
                     <ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto">
                         <Stack gap={8}>
-                            {workspace.sessions.map((session) => {
+                            {sessions.items.map((session) => {
                                 const isActive = session.id === workspace.activeSessionId;
                                 const isMenuOpen = openedMenuSessionId === session.id;
                                 const createdLabel = new Date(session.createdAt).toLocaleString();
@@ -176,9 +176,9 @@ export const SessionsSidebar: React.FC = observer(() => {
                     </ScrollArea>
                 ) : null}
 
-                {workspace.sessionsLoadError ? (
+                {sessions.error ? (
                     <Text size="sm" c="red">
-                        {workspace.sessionsLoadError}
+                        {sessions.error}
                     </Text>
                 ) : null}
             </Stack>

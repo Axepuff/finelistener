@@ -1,25 +1,45 @@
-import { ActionIcon, Group, Paper, Progress, Stack, Text } from '@mantine/core';
-import { IconPlus } from '@tabler/icons-react';
+import { ActionIcon, Alert, Button, Group, Paper, Progress, Stack, Text, ThemeIcon } from '@mantine/core';
+import { IconHeadphones, IconPlus } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState, type MouseEvent } from 'react';
+import { formatTranscriptRegionLabel, formatTranscriptSourcePrefix } from 'renderer/src/stores/transcriptFormat';
 import { useAppStore } from '../../../../../AppContext';
 import { TranscribedTextContent } from './TranscribedTextContent';
 import { TranscribedTextControls } from './TranscribedTextControls';
+import { findTranscriptMatches } from './search';
 import { parseTimeToSeconds } from './utils';
 
 export const TranscribedText: React.FC = observer(() => {
     const store = useAppStore();
     const { transcription } = store;
     const [showRegions, setShowRegions] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedMatchIndex, setSelectedMatchIndex] = useState(0);
     const currentTextValue = showRegions ? transcription.timecodedText : transcription.plainText;
     const isInitialEmptyState = (
         store.lifecycleState === 'initial'
         || store.lifecycleState === 'importing'
     ) && currentTextValue.trim().length === 0;
+    const isReadyEmptyState = store.transcriptionWorkflow.state === 'loaded';
+    const audioTitle = store.workspace.activeSession?.title;
     const plainSegments = transcription.visibleTranscript?.segments.map((segment) => ({
         text: segment.text,
+        prefix: formatTranscriptSourcePrefix(segment),
         startSeconds: segment.startSec,
+        timecode: formatTranscriptRegionLabel(segment),
     })) ?? [];
+    const matches = findTranscriptMatches(plainSegments, searchQuery);
+    const activeMatchIndex = matches.length > 0 ? Math.min(selectedMatchIndex, matches.length - 1) : -1;
+
+    const handleSearchChange = (value: string) => {
+        setSearchQuery(value);
+        setSelectedMatchIndex(0);
+    };
+
+    const moveToMatch = (direction: -1 | 1) => {
+        if (matches.length === 0) return;
+        setSelectedMatchIndex((index) => (Math.min(index, matches.length - 1) + direction + matches.length) % matches.length);
+    };
 
     const handleRegionClick = (event: MouseEvent<HTMLElement>) => {
         const regionElement = (event.target as HTMLElement | null)?.closest('span[data-regions]');
@@ -78,6 +98,12 @@ export const TranscribedText: React.FC = observer(() => {
                         currentTextValue={currentTextValue}
                         showRegions={showRegions}
                         setShowRegions={setShowRegions}
+                        searchQuery={searchQuery}
+                        onSearchChange={handleSearchChange}
+                        matchCount={matches.length}
+                        activeMatchIndex={activeMatchIndex}
+                        onPreviousMatch={() => moveToMatch(-1)}
+                        onNextMatch={() => moveToMatch(1)}
                     />
 
                     {store.lifecycleState === 'transcribing' ? (
@@ -89,12 +115,69 @@ export const TranscribedText: React.FC = observer(() => {
                         </Group>
                     ) : null}
 
-                    <TranscribedTextContent
-                        showRegions={showRegions}
-                        renderedText={transcription.renderedHtml}
-                        plainSegments={plainSegments}
-                        onRegionClick={handleRegionClick}
-                    />
+                    {transcription.isIncomplete ? (
+                        <Alert color={transcription.allSourcesFailed ? 'red' : 'yellow'} title={transcription.allSourcesFailed ? 'Transcription failed' : 'Incomplete transcription'}>
+                            <Stack gap={8}>
+                                <Text size="sm">{transcription.hasCompletedSources ?
+                                    'Completed sources are saved. Retry to transcribe the remaining sources using the original settings.' :
+                                    'No source was transcribed. Retry using the original settings.'}</Text>
+                                <Button size="compact-sm" variant="light" disabled={store.operations.isBusy} onClick={() => {
+                                    void store.retryIncompleteTranscription().then((result) => {
+                                        if (!result.ok) store.activityLog.appendEvent(result.message);
+                                    });
+                                }}>
+                                    {'Retry remaining sources'}
+                                </Button>
+                            </Stack>
+                        </Alert>
+                    ) : null}
+                    {transcription.duplicateFilterFailed ? (
+                        <Alert color="yellow" title="Duplicate filtering unavailable">
+                            {'The unfiltered transcript is shown. Try the filter again.'}
+                        </Alert>
+                    ) : null}
+                    {store.workspace.activeSession?.tracks?.some((track) => track.failure) ? (
+                        <Alert color="yellow" title="Recording interrupted">
+                            {'A recording source stopped early. Only the captured audio is available.'}
+                        </Alert>
+                    ) : null}
+                    {isReadyEmptyState ? (
+                        <Paper
+                            role="status"
+                            style={{
+                                width: '100%',
+                                minHeight: 0,
+                                flex: 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                            }}
+                        >
+                            <Stack gap={12} align="center" style={{ maxWidth: 360, padding: 16, textAlign: 'center' }}>
+                                <ThemeIcon size={64} variant="light" color="red">
+                                    <IconHeadphones size={30} />
+                                </ThemeIcon>
+                                <Text size="lg" fw={600}>
+                                    {'Audio is ready to transcribe'}
+                                </Text>
+                                <Text size="sm" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
+                                    {audioTitle ?
+                                        `Click "Transcribe" to see the text for ${audioTitle} here.` :
+                                        'Click "Transcribe" to see the text here.'}
+                                </Text>
+                            </Stack>
+                        </Paper>
+                    ) : (
+                        <TranscribedTextContent
+                            showRegions={showRegions}
+                            plainSegments={plainSegments}
+                            matches={matches}
+                            activeMatchIndex={activeMatchIndex}
+                            searchQuery={searchQuery}
+                            transcriptText={currentTextValue}
+                            onRegionClick={handleRegionClick}
+                        />
+                    )}
                 </>
             )}
         </Stack>

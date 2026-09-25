@@ -4,6 +4,7 @@ import {
     UI_PREFERENCE_DEFAULTS,
     isUiPreferenceKey,
     isUiPreferenceValue,
+    type UiPreferenceKey,
     type UiPreferenceValueMap,
 } from '../types/uiPreferences';
 
@@ -11,6 +12,8 @@ const uiPreferencesStore = new Store<UiPreferenceValueMap>({
     name: 'ui-preferences',
     defaults: UI_PREFERENCE_DEFAULTS,
 });
+
+export const getUiPreferenceValue = <K extends UiPreferenceKey>(key: K): UiPreferenceValueMap[K] => uiPreferencesStore.get(key);
 
 export function registerUiPreferencesController(ipc: IpcMain, _getMainWindow: () => BrowserWindow | null): void {
     // IPC channel to read a persisted UI preference from electron-store.

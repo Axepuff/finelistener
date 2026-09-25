@@ -53,6 +53,22 @@ export const parseTranscript = (
     return { version: 1, segments };
 };
 
+export const formatTranscriptSourcePrefix = (segment: DeepReadonly<SessionTranscriptSegmentV1>): string => {
+    const label = segment.source === 'system' ? 'System audio' : segment.source === 'microphone' ? 'Microphone' : null;
+
+    return label ? `${label}: ` : '';
+};
+
+export const formatTranscriptSegment = (segment: DeepReadonly<SessionTranscriptSegmentV1>): string =>
+    `${formatTranscriptSourcePrefix(segment)}${segment.text}`;
+
+export const formatTranscriptRegionLabel = (segment: DeepReadonly<SessionTranscriptSegmentV1>): string => {
+    const startLabel = formatSecondsReadable(segment.startSec);
+    const endLabel = segment.endSec === null ? null : formatSecondsReadable(segment.endSec);
+
+    return endLabel ? `[${startLabel} - ${endLabel}]` : `[${startLabel}]`;
+};
+
 export const transcriptToTimecodedText = (transcript: DeepReadonly<SessionTranscriptV1> | null): string => {
     if (!transcript) return '';
 
@@ -61,7 +77,7 @@ export const transcriptToTimecodedText = (transcript: DeepReadonly<SessionTransc
         const endLabel = segment.endSec === null ? null : formatSecondsReadable(segment.endSec);
         const label = endLabel ? `[${startLabel} --> ${endLabel}]` : `[${startLabel}]`;
 
-        return `${label} ${segment.text}`.trimEnd();
+        return `${label} ${formatTranscriptSegment(segment)}`.trimEnd();
     });
 
     return lines.length > 0 ? `${lines.join('\n')}\n` : '';
@@ -71,12 +87,10 @@ export const transcriptToHtml = (transcript: DeepReadonly<SessionTranscriptV1> |
     if (!transcript) return '';
 
     const lines = transcript.segments.map((segment) => {
-        const startLabel = formatSecondsReadable(segment.startSec);
-        const endLabel = segment.endSec === null ? null : formatSecondsReadable(segment.endSec);
-        const label = endLabel ? `[${startLabel} - ${endLabel}]` : `[${startLabel}]`;
+        const label = formatTranscriptRegionLabel(segment);
         const region = Number.isFinite(segment.startSec) ? segment.startSec.toFixed(3) : '0';
 
-        return `<span data-regions="${escapeHtml(region)}">${escapeHtml(label)}</span>${segment.text ? ` ${escapeHtml(segment.text)}` : ''}`;
+        return `<span data-regions="${escapeHtml(region)}">${escapeHtml(label)}</span>${segment.text ? ` ${escapeHtml(formatTranscriptSegment(segment))}` : ''}`;
     });
 
     return lines.length > 0 ? `${lines.join('\n')}\n` : '';

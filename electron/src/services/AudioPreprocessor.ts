@@ -18,6 +18,8 @@ export interface ConvertAudioOptions {
     dynanorm?: boolean | DynanormOptions;
     lowPass?: number;
     highPass?: number;
+    microphoneGate?: boolean;
+    signal?: AbortSignal;
 }
 
 export interface WavFormat {
@@ -61,6 +63,7 @@ const DEFAULT_DYNAUDNORM_OPTIONS: Required<DynanormOptions> = {
     p: 0.95,
 };
 const DEFAULT_HIGH_PASS_HZ = 80;
+const MICROPHONE_GATE_FILTER = 'agate=threshold=0.005623:ratio=8:range=0:attack=10:release=150';
 
 export const DEFAULT_WAV_FORMAT: WavFormat = {
     sampleRateHz: 16000,
@@ -100,7 +103,8 @@ export class AudioPreprocessor {
         });
     }
 
-    public async trimAudio(audioPath: string, segment?: Segment): Promise<TrimResult> {
+    public async trimAudio(audioPath: string, segment?: Segment, signal?: AbortSignal): Promise<TrimResult> {
+        signal?.throwIfAborted();
         if (!segment) {
             return { path: audioPath };
         }
@@ -128,7 +132,7 @@ export class AudioPreprocessor {
                 'copy',
                 '-vn',
                 trimmedPath,
-            ]);
+            ], signal);
         } catch (error: unknown) {
             await this.removeDirSafe(tmpDir);
             const message = error instanceof Error ? error.message : String(error);
@@ -149,7 +153,10 @@ export class AudioPreprocessor {
         dynanorm,
         lowPass,
         highPass,
+        microphoneGate,
+        signal,
     }: ConvertAudioOptions): Promise<WavResult> {
+        signal?.throwIfAborted();
         const filters = this.resolveFilterOptions({ lowPass, highPass });
         const baseFilters = this.buildFrequencyFilters(filters);
         const tmpDir = await this.createTempDir();
@@ -157,11 +164,17 @@ export class AudioPreprocessor {
 
         try {
             const loudnormFilter = await this.loudnessNormalizer.buildFilter(audioPath, baseFilters, loudnorm);
-            const dynanormFilter = this.buildDynanormFilter(dynanorm);
-            const filterChain = this.buildFilterChain([...baseFilters, loudnormFilter, dynanormFilter]);
+            // Dynamic normalization would amplify speaker bleed left below the gate threshold.
+            const dynanormFilter = microphoneGate ? null : this.buildDynanormFilter(dynanorm);
+            const filterChain = this.buildFilterChain([
+                microphoneGate ? MICROPHONE_GATE_FILTER : null,
+                ...baseFilters,
+                loudnormFilter,
+                dynanormFilter,
+            ]);
             const startTime = Date.now();
 
-            await this.runFfmpeg(this.buildWavArgs(audioPath, wavPath, filterChain));
+            await this.runFfmpeg(this.buildWavArgs(audioPath, wavPath, filterChain), signal);
             console.log('audio converted: ', Date.now() - startTime, ' ms');
         } catch (error) {
             await this.removeDirSafe(tmpDir);
@@ -182,7 +195,7 @@ export class AudioPreprocessor {
         segment?: Segment,
         convertOptions: Omit<ConvertAudioOptions, 'audioPath'> = {},
     ): Promise<PreparedAudioResult> {
-        const { path: trimmedPath, cleanup: trimCleanup } = await this.trimAudio(audioPath, segment);
+        const { path: trimmedPath, cleanup: trimCleanup } = await this.trimAudio(audioPath, segment, convertOptions.signal);
         const { path: wavPath, cleanup: wavCleanup } = await this.convertAudio({
             audioPath: trimmedPath,
             ...convertOptions,
@@ -222,8 +235,30 @@ export class AudioPreprocessor {
         }
     }
 
-    protected async runFfmpeg(args: string[]): Promise<void> {
-        await this.executeFfmpeg(args);
+    public async mixSources(
+        tracks: Array<{ filePath: string; startOffsetMs: number }>,
+    ): Promise<WavResult> {
+        if (tracks.length === 0) throw new Error('No audio sources');
+        const tmpDir = await this.createTempDir();
+        const outputPath = path.join(tmpDir, 'mix.wav');
+        const filters = tracks.map((track, index) =>
+            `[${index}:a]adelay=${Math.round(track.startOffsetMs)}:all=1[a${index}]`);
+        filters.push(`${tracks.map((_, index) => `[a${index}]`).join('')}amix=inputs=${tracks.length}:duration=longest:dropout_transition=0:normalize=1[mix]`);
+        try {
+            await this.runFfmpeg([
+                '-y', ...tracks.flatMap((track) => ['-i', track.filePath]),
+                '-filter_complex', filters.join(';'), '-map', '[mix]',
+                '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outputPath,
+            ]);
+        } catch (error) {
+            await this.removeDirSafe(tmpDir);
+            throw error;
+        }
+        return { path: outputPath, cleanup: () => this.removeDirSafe(tmpDir) };
+    }
+
+    protected async runFfmpeg(args: string[], signal?: AbortSignal): Promise<void> {
+        await this.executeFfmpeg(args, signal);
     }
 
     protected async runFfmpegWithStderr(args: string[]): Promise<string> {
@@ -346,11 +381,12 @@ export class AudioPreprocessor {
         return value;
     }
 
-    private async executeFfmpeg(args: string[]): Promise<string> {
+    private async executeFfmpeg(args: string[], signal?: AbortSignal): Promise<string> {
+        signal?.throwIfAborted();
         const ffmpegExecutable = this.getFfmpegExecutable();
 
         return new Promise<string>((resolve, reject) => {
-            const ffmpeg = spawn(ffmpegExecutable, args, { windowsHide: true });
+            const ffmpeg = spawn(ffmpegExecutable, args, { windowsHide: true, signal });
             let stderr = '';
 
             ffmpeg.stderr?.on('data', (chunk: unknown) => {

@@ -14,3 +14,5 @@ miniaudio-loopback/*.sln
 miniaudio-loopback/*.vcxproj*
 CONTEXT.md
 docs/
+outputs/
+.artifact-work/

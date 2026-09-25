@@ -16,6 +16,8 @@ interface Props {
     onChangeSplitOnWord: (value: boolean) => void;
     useVad: boolean;
     onChangeUseVad: (value: boolean) => void;
+    microphoneGateEnabled: boolean;
+    onChangeMicrophoneGateEnabled: (value: boolean) => void;
 }
 
 const parseNumberInputValue = (value: string | number): number | null => {
@@ -34,6 +36,8 @@ export const TranscribeAdvancedSettings: React.FC<Props> = ({
     onChangeSplitOnWord,
     useVad,
     onChangeUseVad,
+    microphoneGateEnabled,
+    onChangeMicrophoneGateEnabled,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
 
@@ -67,6 +71,12 @@ export const TranscribeAdvancedSettings: React.FC<Props> = ({
                         checked={useVad}
                         onChange={(event) => onChangeUseVad(event.currentTarget.checked)}
                         label="Use voice activity detection"
+                    />
+                    <Checkbox
+                        checked={microphoneGateEnabled}
+                        onChange={(event) => onChangeMicrophoneGateEnabled(event.currentTarget.checked)}
+                        label="Reduce speaker bleed in microphone transcription"
+                        description="Applied on the next transcription when both recording tracks are available."
                     />
                 </Stack>
             </Collapse>

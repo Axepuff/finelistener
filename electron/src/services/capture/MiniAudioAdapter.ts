@@ -4,12 +4,13 @@ import fsp from 'fs/promises';
 import path from 'path';
 import { app } from 'electron';
 import type { WavFormat } from '../AudioPreprocessor';
-import type { RecordingResult } from '../RecordingService';
+import type { RecordingResult, RecordingSourceFailure, RecordingTrack } from '../RecordingService';
 import type {
     CaptureAdapter,
     CaptureAdapterEvents,
     CaptureAdapterStartOptions,
     RecordingDevice,
+    RecordingSourceKind,
 } from './CaptureAdapter';
 
 export const MINIAUDIO_WAV_FORMAT: WavFormat = {
@@ -24,9 +25,12 @@ export interface MiniAudioAdapterConfig {
 }
 
 type HelperMessage =
+    | { type: 'ready' }
+    | { type: 'finished'; durationMs: number }
+    | { type: 'source-error'; source: RecordingSourceKind; message: string }
     | { type: 'progress'; durationMs: number; bytesWritten?: number }
-    | { type: 'level'; rms: number; peak: number; clipped?: boolean }
-    | { type: 'error'; message: string }
+    | { type: 'level'; source?: RecordingSourceKind; rms: number; peak: number; clipped?: boolean }
+    | { type: 'error'; message: string; recoverable?: boolean }
     | { type: 'format'; sampleRateHz: number; channels: number; bitDepth: number; codec: string };
 
 export class MiniAudioAdapter implements CaptureAdapter {
@@ -41,8 +45,17 @@ export class MiniAudioAdapter implements CaptureAdapter {
     private stdoutBuffer = '';
     private stderrBuffer = '';
     private lastHelperError: string | null = null;
+    private lastHelperErrorRecoverable = false;
     private lastBytesWritten: number | undefined;
     private isStopping = false;
+    private ready = false;
+    private resolveReady: (() => void) | null = null;
+    private rejectReady: ((error: Error) => void) | null = null;
+    private tracks: RecordingTrack[] = [];
+    private sourceFailures: RecordingSourceFailure[] = [];
+    private durationMs = 0;
+    private finished = false;
+    private lastResult: RecordingResult | null = null;
 
     constructor(config: MiniAudioAdapterConfig = {}) {
         this.config = config;
@@ -114,7 +127,9 @@ export class MiniAudioAdapter implements CaptureAdapter {
 
             if (!id && !name) continue;
 
-            devices.push({ id, name, isDefault, index });
+            const source = record.source === 'microphone' ? 'microphone' : 'system';
+
+            devices.push({ id, name, isDefault, index, source });
         }
 
         return devices;
@@ -142,8 +157,26 @@ export class MiniAudioAdapter implements CaptureAdapter {
         this.stdoutBuffer = '';
         this.stderrBuffer = '';
         this.lastHelperError = null;
+        this.lastHelperErrorRecoverable = false;
         this.lastBytesWritten = undefined;
         this.isStopping = false;
+        this.ready = false;
+        this.finished = false;
+        this.lastResult = null;
+        this.durationMs = 0;
+        this.sourceFailures = [];
+        const sources = options.sources ?? { system: this.resolveDeviceId(options.deviceId) ?? '' };
+
+        this.tracks = [];
+        if (typeof sources.system === 'string') this.tracks.push({ source: 'system', filePath: options.outputPath, startOffsetMs: 0 });
+        if (typeof sources.microphone === 'string') {
+            this.tracks.push({
+                source: 'microphone',
+                filePath: this.tracks.length ? path.join(path.dirname(options.outputPath), 'microphone.wav') : options.outputPath,
+                startOffsetMs: 0,
+            });
+        }
+        if (!this.tracks.length) throw new Error('Select at least one recording source.');
 
         await fsp.mkdir(path.dirname(options.outputPath), { recursive: true });
 
@@ -151,18 +184,52 @@ export class MiniAudioAdapter implements CaptureAdapter {
         const proc = spawn(helperPath, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
 
         this.process = proc;
+        const readyPromise = new Promise<void>((resolve, reject) => {
+            this.resolveReady = resolve;
+            this.rejectReady = reject;
+        });
         this.exitPromise = this.createExitPromise(proc);
-
-        proc.stdin?.end();
+        // The process may fail before the user asks to stop. Observe rejection now.
+        void this.exitPromise.catch((error: unknown) => {
+            console.error('MiniAudio capture process failed:', error);
+        });
+        proc.stdin.on('error', (error) => console.error('MiniAudio control pipe failed:', error));
         proc.stdout?.setEncoding('utf8');
         proc.stdout?.on('data', this.handleStdout);
 
         proc.stderr?.setEncoding('utf8');
         proc.stderr?.on('data', this.handleStderr);
+        const readyTimeout = setTimeout(() => {
+            this.rejectReady?.(new Error('Recording devices did not become ready.'));
+            proc.stdin.end('stop\n');
+        }, 15000);
+
+        try {
+            await readyPromise;
+        } catch (error) {
+            const exitPromise = this.exitPromise;
+            const failedPaths = this.tracks.map((track) => track.filePath);
+            const timeout = setTimeout(() => proc.kill(), 5000);
+
+            try {
+                await exitPromise;
+            } catch (exitError) {
+                console.error('MiniAudio start cleanup:', exitError);
+            } finally {
+                clearTimeout(timeout);
+                await Promise.all(failedPaths.map((filePath) => fsp.rm(filePath, { force: true })));
+            }
+            throw error;
+        } finally {
+            clearTimeout(readyTimeout);
+            this.resolveReady = null;
+            this.rejectReady = null;
+        }
     }
 
     public async stopRecording(): Promise<RecordingResult> {
         if (!this.process || !this.exitPromise) {
+            if (this.lastResult) return this.lastResult;
             throw new Error('Recording process is not running.');
         }
 
@@ -171,19 +238,12 @@ export class MiniAudioAdapter implements CaptureAdapter {
 
         this.isStopping = true;
 
-        try {
-            proc.kill('SIGINT');
-        } catch {
-            // ignore stop errors
-        }
+        // Windows kill signals terminate immediately without finalizing WAV headers.
+        if (!proc.stdin.destroyed && !proc.stdin.writableEnded) proc.stdin.end('stop\n');
 
         const killTimeout = setTimeout(() => {
             if (this.process === proc) {
-                try {
-                    proc.kill('SIGTERM');
-                } catch {
-                    // ignore kill errors
-                }
+                proc.kill();
             }
         }, 5000);
 
@@ -236,14 +296,15 @@ export class MiniAudioAdapter implements CaptureAdapter {
             String(options.format.bitDepth),
         ];
 
-        const deviceId = this.resolveDeviceId(options.deviceId);
+        const sources = options.sources ?? { system: this.resolveDeviceId(options.deviceId) ?? '' };
 
-        if (deviceId) {
-            if (/^\d+$/.test(deviceId)) {
-                args.push('--device-index', deviceId);
-            } else {
-                args.push('--device-id', deviceId);
-            }
+        if (typeof sources.system !== 'string') args.push('--system-off');
+        else if (sources.system) args.push('--device-id', sources.system);
+        const microphone = this.tracks.find((track) => track.source === 'microphone');
+
+        if (microphone) {
+            args.push('--microphone-output', microphone.filePath);
+            if (sources.microphone) args.push('--microphone-device-id', sources.microphone);
         }
 
         return args;
@@ -290,9 +351,9 @@ export class MiniAudioAdapter implements CaptureAdapter {
             path.resolve(resourcesPath, 'miniaudio-loopback', exeName),
             path.resolve(resourcesPath, 'miniaudio-loopback', 'bin', exeName),
         ];
-        const candidates = app.isPackaged
-            ? packagedCandidates.concat(devCandidates)
-            : devCandidates.concat(packagedCandidates);
+        const candidates = app.isPackaged ?
+            packagedCandidates.concat(devCandidates) :
+            devCandidates.concat(packagedCandidates);
 
         for (const candidate of candidates) {
             if (fs.existsSync(candidate)) {
@@ -341,77 +402,66 @@ export class MiniAudioAdapter implements CaptureAdapter {
     private createExitPromise(proc: ChildProcessWithoutNullStreams): Promise<RecordingResult> {
         return new Promise((resolve, reject) => {
             let settled = false;
-            const finalize = () => {
+            const succeed = (sourceFailures: RecordingSourceFailure[]): void => {
+                if (settled) return;
+                settled = true;
+                this.sourceFailures = sourceFailures;
+                const result: RecordingResult = {
+                    filePath: this.outputPath!,
+                    format: this.format!,
+                    durationMs: this.durationMs,
+                    bytesWritten: this.lastBytesWritten,
+                    tracks: this.tracks.map((track) => ({
+                        ...track,
+                        durationMs: this.durationMs,
+                        failure: sourceFailures.find((failure) => failure.source === track.source)?.message,
+                    })),
+                    sourceFailures,
+                };
+                const events = this.events;
+                const automatic = !this.isStopping;
+
+                this.lastResult = result;
                 this.process = null;
                 this.exitPromise = null;
                 this.events = {};
-                this.outputPath = null;
-                this.format = null;
-                this.stdoutBuffer = '';
-                this.stderrBuffer = '';
-                this.lastHelperError = null;
-                this.lastBytesWritten = undefined;
-                this.isStopping = false;
-            };
-            const rejectOnce = (error: Error, reportError: boolean): void => {
-                if (settled) return;
-                settled = true;
-                if (reportError) {
-                    this.events.onError?.(error);
-                }
-                finalize();
-                reject(error);
-            };
-            const resolveOnce = (result: RecordingResult): void => {
-                if (settled) return;
-                settled = true;
-                finalize();
                 resolve(result);
+                if (automatic) events.onFinished?.(result);
+            };
+            const fail = (error: Error): void => {
+                if (settled) return;
+                settled = true;
+                const wasReady = this.ready;
+                const events = this.events;
+
+                this.rejectReady?.(error);
+                this.process = null;
+                this.exitPromise = null;
+                this.events = {};
+                reject(error);
+                if (wasReady && !this.isStopping) events.onError?.(error);
             };
 
-            proc.on('error', (error) => {
-                rejectOnce(error, true);
-            });
-
+            proc.on('error', fail);
             proc.on('close', (code, signal) => {
-                const outputPath = this.outputPath;
-                const format = this.format;
-                const stderr = this.stderrBuffer.trim();
-                const helperError = this.lastHelperError;
+                if (settled) return;
+                if (this.ready && this.lastHelperErrorRecoverable) {
+                    const sourceFailures = this.tracks.map((track) =>
+                        this.sourceFailures.find((failure) => failure.source === track.source) ?? {
+                            source: track.source,
+                            message: 'Recording source may be incomplete.',
+                        });
 
-                if (!outputPath || !format) {
-                    rejectOnce(new Error('Recording output is missing.'), true);
-
-                    return;
-                }
-
-                if (this.isStopping && (signal === 'SIGINT' || signal === 'SIGTERM')) {
-                    resolveOnce({
-                        filePath: outputPath,
-                        format,
-                        bytesWritten: this.lastBytesWritten,
-                    });
+                    succeed(sourceFailures);
 
                     return;
                 }
-
-                if (code !== 0 || signal) {
-                    const details = this.formatExitDetails(code, signal, stderr);
-                    const message = helperError
-                        ? `${helperError}${details ? ` ${details}` : ''}`
-                        : `MiniAudio helper exited.${details}`;
-                    const error = new Error(message);
-
-                    rejectOnce(error, !helperError);
+                if (code !== 0 || signal || !this.ready || !this.finished || this.lastHelperError) {
+                    fail(new Error(this.lastHelperError ?? `MiniAudio helper exited before finalizing.${this.formatExitDetails(code, signal, this.stderrBuffer.trim())}`));
 
                     return;
                 }
-
-                resolveOnce({
-                    filePath: outputPath,
-                    format,
-                    bytesWritten: this.lastBytesWritten,
-                });
+                succeed(this.sourceFailures);
             });
         });
     }
@@ -458,13 +508,31 @@ export class MiniAudioAdapter implements CaptureAdapter {
         }
 
         switch (message.type) {
+            case 'ready':
+                this.ready = true;
+                this.resolveReady?.();
+
+                return;
+            case 'finished':
+                this.finished = true;
+                this.durationMs = message.durationMs;
+
+                return;
+            case 'source-error':
+                if (message.source !== 'system' && message.source !== 'microphone') return;
+                this.sourceFailures = [...this.sourceFailures.filter((failure) => failure.source !== message.source), { source: message.source, message: message.message }];
+                this.events.onProgress?.({ durationMs: this.durationMs, sourceFailures: this.sourceFailures });
+
+                return;
             case 'progress':
+                this.durationMs = message.durationMs;
                 if (typeof message.bytesWritten === 'number') {
                     this.lastBytesWritten = message.bytesWritten;
                 }
                 this.events.onProgress?.({
                     durationMs: message.durationMs,
                     bytesWritten: message.bytesWritten,
+                    sourceFailures: this.sourceFailures,
                 });
 
                 return;
@@ -473,12 +541,14 @@ export class MiniAudioAdapter implements CaptureAdapter {
                     rms: message.rms,
                     peak: message.peak,
                     clipped: Boolean(message.clipped),
+                    source: message.source,
                 });
 
                 return;
             case 'error':
                 this.lastHelperError = message.message;
-                this.events.onError?.(new Error(message.message));
+                this.lastHelperErrorRecoverable = message.recoverable === true;
+                this.rejectReady?.(new Error(message.message));
 
                 return;
             case 'format':

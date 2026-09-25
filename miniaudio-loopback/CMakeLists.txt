@@ -8,6 +8,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_executable(miniaudio-loopback src/main.cpp)
 
 target_include_directories(miniaudio-loopback PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(miniaudio-loopback PRIVATE ole32 uuid)
+
+enable_testing()
+add_executable(capture-timeline-test src/timeline.test.cpp)
+add_test(NAME capture-timeline COMMAND capture-timeline-test)
 
 set_target_properties(miniaudio-loopback PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin

@@ -28,7 +28,8 @@ TypeScript, React, React Hooks, and import checks. CI uses the same command.
 
 `npm run lint:fix` applies available safe lint fixes. `npm run format` is an alias
 for this command; it does not format whitespace or sort imports. The former
-ESLint Stylistic rules and `import/order` are no longer enforced. The unsupported
+ESLint Stylistic rules are no longer enforced except for operator placement;
+`import/order` is also not enforced. The unsupported
 `react/jsx-no-leaked-render` rule and the nursery `react/require-render-return`
 rule are also omitted. TypeScript checks cover the
 removed strict-mode checks; JSX variable usage is covered by Oxlint's

@@ -23,7 +23,11 @@ export type ForegroundOperationKind =
     | 'opening-session'
     | 'recording'
     | 'processing-recording'
+    | 'recovering-recording'
+    | 'discarding-recording'
+    | 'deleting-session'
     | 'optimizing-audio'
+    | 'filtering-transcript'
     | 'transcribing';
 
 export interface ForegroundOperation {
