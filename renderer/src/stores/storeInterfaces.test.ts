@@ -1,9 +1,7 @@
 import type {
     SessionDetails,
     SessionListItem,
-    SessionTranscriptPresentationV1,
-    SessionTranscriptSegmentV1,
-    SessionSourceRun,
+    SessionTranscriptV1,
 } from 'electron/src/types/sessions';
 import type { DeepReadonly } from './types';
 import { expectTypeOf, it } from 'vitest';
@@ -36,12 +34,7 @@ it('exposes session list state as read-only data', () => {
 
 it('exposes transcription state and transcript segments as read-only data', () => {
     type RunState = Pick<TranscriptionStore, 'progress' | 'runOutcome' | 'runErrorMessage'>;
-    interface TranscriptView {
-        readonly version: 1;
-        readonly sourceRun?: DeepReadonly<SessionSourceRun>;
-        readonly presentation?: DeepReadonly<SessionTranscriptPresentationV1>;
-        readonly segments: readonly Readonly<SessionTranscriptSegmentV1>[];
-    }
+    type TranscriptView = DeepReadonly<SessionTranscriptV1>;
 
     expectTypeOf<RunState>().toEqualTypeOf<Readonly<RunState>>();
     expectTypeOf<TranscriptionStore['savedTranscript']>().toEqualTypeOf<TranscriptView | null>();

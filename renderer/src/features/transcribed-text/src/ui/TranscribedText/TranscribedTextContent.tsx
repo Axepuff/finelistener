@@ -1,13 +1,17 @@
-import { Box, Paper } from '@mantine/core';
+import { ActionIcon, Box, Paper } from '@mantine/core';
+import { IconUserEdit } from '@tabler/icons-react';
+import type { SessionRawSpan } from 'electron/src/types/sessions';
 import React, { useEffect, useRef, type MouseEvent } from 'react';
 import type { TranscriptMatch, TranscriptMatchRange } from './search';
 import styles from './TranscribedText.module.css';
 
 interface TranscribedSegment {
+    id: string;
     text: string;
     prefix: string;
     startSeconds: number | null;
     timecode: string;
+    rawSpan?: SessionRawSpan;
 }
 
 interface Props {
@@ -18,6 +22,7 @@ interface Props {
     searchQuery: string;
     transcriptText: string;
     onRegionClick: (event: MouseEvent<HTMLElement>) => void;
+    onEditSpeaker?: (span: SessionRawSpan) => void;
 }
 
 export const TranscribedTextContent: React.FC<Props> = ({
@@ -28,6 +33,7 @@ export const TranscribedTextContent: React.FC<Props> = ({
     searchQuery,
     transcriptText,
     onRegionClick,
+    onEditSpeaker,
 }) => {
     const contentRef = useRef<HTMLDivElement>(null);
     const regionTextClassName = `${styles.regionTextContent} ${showRegions ? styles.regionTextPreWrap : styles.regionTextNormalWrap}`;
@@ -70,19 +76,21 @@ export const TranscribedTextContent: React.FC<Props> = ({
         <Paper style={{ padding: 18, overflowY: 'auto', width: '100%', minHeight: 0, flex: 1 }}>
             <Box ref={contentRef} component="div" className={regionTextClassName} onClick={onRegionClick}>
                 {plainSegments.map((segment, index) => (
-                    <React.Fragment key={`${index}-${segment.startSeconds ?? 'na'}`}>
+                    <React.Fragment key={segment.id}>
                         {showRegions ? (
                             <>
                                 <span data-regions={segment.startSeconds?.toString()}>{segment.timecode}</span>
                                 {segment.text ? ' ' : ''}
                                 {segment.text ? segment.prefix : ''}
                                 {renderSegmentText(segment.text, index)}
+                                {segment.rawSpan && onEditSpeaker ? <ActionIcon size="xs" variant="subtle" aria-label="Assign speaker" onClick={(event) => { event.stopPropagation(); if (segment.rawSpan) onEditSpeaker(segment.rawSpan); }}><IconUserEdit size={14} /></ActionIcon> : null}
                                 {'\n'}
                             </>
                         ) : (
                             <span data-regions={segment.startSeconds?.toString()}>
                                 {segment.prefix}
                                 {renderSegmentText(segment.text, index)}
+                                {segment.rawSpan && onEditSpeaker ? <ActionIcon size="xs" variant="subtle" aria-label="Assign speaker" onClick={(event) => { event.stopPropagation(); if (segment.rawSpan) onEditSpeaker(segment.rawSpan); }}><IconUserEdit size={14} /></ActionIcon> : null}
                                 {index < plainSegments.length - 1 ? ' ' : ''}
                             </span>
                         )}

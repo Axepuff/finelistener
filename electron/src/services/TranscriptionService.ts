@@ -5,8 +5,12 @@ import { resolveWhisperPaths } from '../utils/whisper';
 import type { TranscriptionCallbacks } from './whisperServer/types';
 import type { SessionsService } from './SessionsService';
 import { transcribeSessionSources, type SourcePass } from './SessionTranscriptionRunner';
+import type { StructuredTranscriptionResult } from './whisperServer/utils';
 
 export class TranscriptionService {
+    public get isBusy(): boolean {
+        return this.activeOperation !== null;
+    }
     private readonly serverRunner: Whisper;
     private readonly callbacks: TranscriptionCallbacks;
     private activeOperation: AbortController | null = null;
@@ -41,13 +45,17 @@ export class TranscriptionService {
     }
 
     public async transcribe(audioPath: string, opts: TranscribeOpts): Promise<string> {
+        return (await this.transcribeResult(audioPath, opts)).text;
+    }
+
+    public async transcribeResult(audioPath: string, opts: TranscribeOpts): Promise<StructuredTranscriptionResult> {
         if (this.activeOperation) throw new Error('Previous transcription is not finished yet');
         this.activeOperation = new AbortController();
         this.operationFinished = new Promise((resolve) => { this.finishOperation = resolve; });
         try {
-            const text = await this.serverRunner.transcribe(audioPath, opts);
+            const result = await this.serverRunner.transcribeResult(audioPath, opts);
             this.activeOperation.signal.throwIfAborted();
-            return text;
+            return result;
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
 
@@ -75,7 +83,7 @@ export class TranscriptionService {
                 operation.signal.throwIfAborted();
                 this.sourcePass = pass;
                 try {
-                    return await this.serverRunner.transcribe(audioPath, options);
+                    return await this.serverRunner.transcribeResult(audioPath, options);
                 } catch (error) {
                     if (!operation.signal.aborted) {
                         const message = error instanceof Error ? error.message : String(error);

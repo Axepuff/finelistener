@@ -1,4 +1,4 @@
-import { ActionIcon, Box, Button, Checkbox, Group, Loader, Select, Stack, Text } from '@mantine/core';
+import { ActionIcon, Alert, Box, Button, Checkbox, Group, Loader, Modal, NumberInput, Progress, Select, Stack, Switch, Text } from '@mantine/core';
 import { IconHeadphones, IconPlayerStopFilled, IconBackspaceFilled } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useState } from 'react';
@@ -21,6 +21,7 @@ const TranscribeControl: React.FC = observer(() => {
     const store = useAppStore();
     const control = store.transcriptionControl;
     const [isCustomModelImporting, setIsCustomModelImporting] = useState(false);
+    const [confirmReplaceSpeakers, setConfirmReplaceSpeakers] = useState(false);
     const { language: lang, model, useCustomModelFile, customModelFile, maxContext, maxLen, splitOnWord, useVad, microphoneGateEnabled } = control;
 
     const appendLog = useCallback((message: string) => {
@@ -43,8 +44,8 @@ const TranscribeControl: React.FC = observer(() => {
         }
     };
 
-    const handleStart = async () => {
-        const result = await store.requestTranscriptionStart();
+    const handleStart = async (replaceSpeakerLabels = false) => {
+        const result = await store.requestTranscriptionStart(replaceSpeakerLabels);
         if (!result.ok) appendLog(result.message);
     };
 
@@ -58,12 +59,27 @@ const TranscribeControl: React.FC = observer(() => {
         if (!result.ok) appendLog(result.message);
     };
 
+    const handlePrepareCuda = async () => {
+        const result = await store.prepareSpeakerAssets(true);
+        if (!result.ok) appendLog(result.message);
+    };
+
+    const handleCancelSpeakerPreparation = async () => {
+        const result = await store.stopSpeakerAnalysis();
+        if (!result.ok) appendLog(result.message);
+    };
+
     const isTranscribing = store.operations.kind === 'transcribing';
     const loading = isTranscribing || control.isDownloadingPendingModel;
     const canStart = !control.pendingDownloadModel
         && !store.operations.isBusy
         && (!store.whisperModels.isDownloadActive || useCustomModelFile || store.whisperModels.isDownloaded(model))
         && (!useCustomModelFile || Boolean(customModelFile));
+    const hasSystemAudio = store.workspace.activeSession?.sourceKind === 'imported'
+        || store.workspace.activeSession?.tracks?.some((track) => track.source === 'system');
+    const preparingSpeakerAssets = store.operations.kind === 'preparing-speaker-assets';
+    const canPrepareCuda = store.speakers.enabled && hasSystemAudio
+        && store.speakers.assets?.cudaAvailable && !store.speakers.assets.cudaReady;
 
     return (
         <Stack gap={12} justify="space-between" h="100%">
@@ -133,12 +149,57 @@ const TranscribeControl: React.FC = observer(() => {
                     microphoneGateEnabled={microphoneGateEnabled}
                     onChangeMicrophoneGateEnabled={(value) => control.setMicrophoneGateEnabled(value)}
                 />
+                <Switch
+                    checked={store.speakers.enabled}
+                    disabled={store.operations.isBusy}
+                    onChange={(event) => { void store.speakers.setEnabled(event.currentTarget.checked); }}
+                    label="Add speaker labels after transcription"
+                    description="Recognition is saved first. Speaker analysis can be retried separately."
+                />
+                {store.speakers.enabled && hasSystemAudio ? (
+                    <NumberInput
+                        label="System or file speakers"
+                        description="Leave empty for automatic counting. The microphone speaker is excluded."
+                        min={1}
+                        allowDecimal={false}
+                        value={store.speakers.speakerCount ?? ''}
+                        onChange={(value) => store.speakers.setSpeakerCount(typeof value === 'number' ? value : null)}
+                        disabled={store.operations.isBusy}
+                    />
+                ) : null}
+                {canPrepareCuda ? (
+                    <Stack gap={6}>
+                        <Text size="xs" c="dimmed">CUDA is optional. Prepare its component before transcription, or continue on CPU.</Text>
+                        <Group gap={8}>
+                            <Button size="compact-sm" variant="light" disabled={store.operations.isBusy} onClick={() => { void handlePrepareCuda(); }}>
+                                Prepare CUDA component
+                            </Button>
+                            {preparingSpeakerAssets ? (
+                                <Button size="compact-sm" color="red" variant="light" onClick={() => { void handleCancelSpeakerPreparation(); }}>Cancel</Button>
+                            ) : null}
+                        </Group>
+                        {preparingSpeakerAssets ? (
+                            <Group gap={8} wrap="nowrap" role="status">
+                                <Text size="xs">{store.speakers.phase === 'downloading' ? 'Downloading CUDA component' : 'Preparing CUDA component'}</Text>
+                                {store.speakers.phase === 'downloading' && store.speakers.totalBytes > 0 ? (
+                                    <Progress value={100 * store.speakers.downloadedBytes / store.speakers.totalBytes} size="sm" style={{ flex: 1 }} />
+                                ) : <Loader size="xs" />}
+                            </Group>
+                        ) : null}
+                        {store.speakers.status === 'error' && store.speakers.errorMessage ? (
+                            <Alert color="yellow" title="Component preparation failed">{store.speakers.errorMessage}</Alert>
+                        ) : null}
+                    </Stack>
+                ) : null}
             </Stack>
             <Box>
                 <Group gap={8} wrap="nowrap">
                     <Button
                         fullWidth={true}
-                        onClick={handleStart}
+                        onClick={() => {
+                            if (store.transcription.savedTranscript?.speakers) setConfirmReplaceSpeakers(true);
+                            else void handleStart();
+                        }}
                         disabled={loading || !canStart}
                         leftSection={loading ? <Loader size={12} /> : <IconHeadphones size={16} />}
                     >
@@ -152,6 +213,18 @@ const TranscribeControl: React.FC = observer(() => {
                     </ActionIcon>
                 </Group>
             </Box>
+            <Modal opened={confirmReplaceSpeakers} onClose={() => setConfirmReplaceSpeakers(false)} title="Replace speaker labels?" centered={true}>
+                <Stack gap="sm">
+                    <Text size="sm">A new transcription will replace speaker names, assignments, and merges in this session.</Text>
+                    <Group justify="flex-end">
+                        <Button variant="default" onClick={() => setConfirmReplaceSpeakers(false)}>Cancel</Button>
+                        <Button color="red" onClick={() => {
+                            setConfirmReplaceSpeakers(false);
+                            void handleStart(true);
+                        }}>Replace and transcribe</Button>
+                    </Group>
+                </Stack>
+            </Modal>
         </Stack>
     );
 });

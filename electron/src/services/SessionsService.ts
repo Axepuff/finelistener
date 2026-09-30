@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import { app, shell } from 'electron';
@@ -13,6 +13,7 @@ import type {
 import { AudioPreprocessor } from './AudioPreprocessor';
 import type { RecordingResult } from './RecordingService';
 import { deriveSourceTranscript } from './transcriptDuplicateFilter';
+import { deriveSpeakerTranscript, materializeRecognitionTranscript } from './sessionTranscript';
 
 const SESSION_FILE_NAME = 'session.json';
 const SESSION_VERSION = 1 as const;
@@ -57,13 +58,19 @@ const readJsonFile = async <T>(filePath: string): Promise<T> => {
     return JSON.parse(raw) as T;
 };
 
-const writeJsonFile = async (filePath: string, value: unknown): Promise<void> => {
+const writeJsonFile = async (filePath: string, value: unknown, signal?: AbortSignal): Promise<void> => {
     const dir = path.dirname(filePath);
 
     await fs.mkdir(dir, { recursive: true });
     const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
-    await fs.writeFile(temporaryPath, JSON.stringify(value, null, 2), 'utf8');
-    await fs.rename(temporaryPath, filePath);
+    try {
+        await fs.writeFile(temporaryPath, JSON.stringify(value, null, 2), 'utf8');
+        signal?.throwIfAborted();
+        await fs.rename(temporaryPath, filePath);
+    } catch (error) {
+        await fs.rm(temporaryPath, { force: true });
+        throw error;
+    }
 };
 
 const toListItem = (session: SessionFileV1): SessionListItem => ({
@@ -78,7 +85,39 @@ const toListItem = (session: SessionFileV1): SessionListItem => ({
 export class SessionsService {
     private readonly audioPreprocessor = new AudioPreprocessor();
     private readonly derivedGeneration = new Map<string, Promise<void>>();
+    private readonly transcriptWrites = new Map<string, Promise<void>>();
     private activeSessionId: string | null = null;
+    private activeSessionGeneration = 0;
+
+    public getActiveSessionId(): string | null {
+        return this.activeSessionId;
+    }
+
+    public getActiveSessionGeneration(): number {
+        return this.activeSessionGeneration;
+    }
+
+    public recognitionFingerprint(transcript: SessionTranscriptV1): string {
+        const materialized = materializeRecognitionTranscript(transcript);
+        const recognition = materialized.sourceRun ?? materialized.recognitionSegments ?? materialized.segments;
+
+        return createHash('sha256').update(JSON.stringify([materialized.recognitionRevision, recognition])).digest('hex');
+    }
+
+    private async withTranscriptWrite<T>(sessionId: string, write: () => Promise<T>): Promise<T> {
+        const preceding = this.transcriptWrites.get(sessionId) ?? Promise.resolve();
+        let finish!: () => void;
+        const current = new Promise<void>((resolve) => { finish = resolve; });
+
+        this.transcriptWrites.set(sessionId, current);
+        await preceding;
+        try {
+            return await write();
+        } finally {
+            finish();
+            if (this.transcriptWrites.get(sessionId) === current) this.transcriptWrites.delete(sessionId);
+        }
+    }
 
     constructor(private readonly derivedCacheBudgetBytes = 1024 * 1024 * 1024) {}
 
@@ -210,6 +249,7 @@ export class SessionsService {
             audioWavPath,
             audioOptimizedWavPath,
             transcript,
+            transcription: resolvedSession.transcription,
             tracks: resolvedSession.tracks?.map((track) => ({
                 ...track,
                 filePath: this.resolveTrackPath(sessionDir, track.filePath),
@@ -337,6 +377,7 @@ export class SessionsService {
 
     public async setActiveSession(sessionId: string | null): Promise<void> {
         if (sessionId !== null) this.resolveSessionDir(sessionId);
+        if (this.activeSessionId !== sessionId) this.activeSessionGeneration += 1;
         this.activeSessionId = sessionId;
         await this.enforceDerivedCacheBudget(new Set());
     }
@@ -473,6 +514,55 @@ export class SessionsService {
         transcript: SessionTranscriptV1,
         transcription?: SessionTranscriptionInfo,
     ): Promise<void> {
+        await this.withTranscriptWrite(sessionId, () => this.writeTranscript(sessionId, transcript, transcription));
+    }
+
+    public async replaceTranscriptIfCurrent(
+        sessionId: string,
+        expectedFingerprint: string,
+        replacement: SessionTranscriptV1,
+        signal?: AbortSignal,
+        expectedActiveGeneration?: number,
+    ): Promise<boolean> {
+        return this.withTranscriptWrite(sessionId, async () => {
+            signal?.throwIfAborted();
+            const current = await this.readTranscriptForUpdate(sessionId);
+            if (this.recognitionFingerprint(current) !== expectedFingerprint) return false;
+            if (expectedActiveGeneration !== undefined && this.activeSessionGeneration !== expectedActiveGeneration) return false;
+            if (this.activeSessionId !== null && this.activeSessionId !== sessionId) return false;
+            signal?.throwIfAborted();
+            await this.writeTranscript(sessionId,
+                deriveSpeakerTranscript({ ...current, speakers: replacement.speakers }), undefined, signal);
+            return true;
+        });
+    }
+
+    public async updateTranscript(
+        sessionId: string,
+        update: (transcript: SessionTranscriptV1) => SessionTranscriptV1,
+    ): Promise<SessionDetails> {
+        await this.withTranscriptWrite(sessionId, async () => {
+            const current = await this.readTranscriptForUpdate(sessionId);
+            await this.writeTranscript(sessionId, update(current));
+        });
+        return this.getSession(sessionId);
+    }
+
+    private async readTranscriptForUpdate(sessionId: string): Promise<SessionTranscriptV1> {
+        const sessionDir = this.resolveSessionDir(sessionId);
+        const session = await readJsonFile<SessionFileV1>(path.join(sessionDir, SESSION_FILE_NAME));
+        if (!session?.transcript?.path) throw new Error('Session has no transcript');
+        const transcript = await readJsonFile<SessionTranscriptV1>(path.join(sessionDir, session.transcript.path));
+        if (transcript?.version !== 1) throw new Error('Invalid session transcript');
+        return transcript;
+    }
+
+    private async writeTranscript(
+        sessionId: string,
+        transcript: SessionTranscriptV1,
+        transcription?: SessionTranscriptionInfo,
+        signal?: AbortSignal,
+    ): Promise<void> {
         const sessionDir = this.resolveSessionDir(sessionId);
         const sessionFilePath = path.join(sessionDir, SESSION_FILE_NAME);
 
@@ -490,22 +580,20 @@ export class SessionsService {
 
         const transcriptPath = path.join(sessionDir, TRANSCRIPT_FILE_RELATIVE_PATH);
 
-        await writeJsonFile(transcriptPath, transcript);
+        await writeJsonFile(transcriptPath, transcript, signal);
         await writeJsonFile(sessionFilePath, session);
     }
 
     public async setTranscriptDuplicateFilter(sessionId: string, enabled: boolean): Promise<SessionDetails> {
-        const session = await this.getSession(sessionId);
-        const sourceRun = session.transcript?.sourceRun;
-
-        if (!sourceRun) throw new Error('Session has no source-aware transcript');
-        if (!sourceRun.sources.some((source) => source.status === 'completed')) {
-            throw new Error('Transcript has no completed source results');
-        }
-
-        await this.saveTranscript(sessionId, deriveSourceTranscript(structuredClone(sourceRun), enabled));
-
-        return this.getSession(sessionId);
+        return this.updateTranscript(sessionId, (current) => {
+            const sourceRun = current.sourceRun;
+            if (!sourceRun) throw new Error('Session has no source-aware transcript');
+            if (!sourceRun.sources.some((source) => source.status === 'completed')) {
+                throw new Error('Transcript has no completed source results');
+            }
+            const filtered = deriveSourceTranscript(structuredClone(sourceRun), enabled);
+            return deriveSpeakerTranscript({ ...current, presentation: filtered.presentation });
+        });
     }
 
     private async ensureSessionWavFile(

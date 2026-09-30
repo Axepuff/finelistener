@@ -112,7 +112,7 @@ describe('transcript duplicate filtering', () => {
             [segment('microphone', 'My answer: the shared phrase contains enough words for matching, thanks.', 5.2, 8.3)],
         );
 
-        expect(microphoneText(run)).toEqual(['My answer: thanks.']);
+        expect(microphoneText(run)).toEqual(['My answer:', 'thanks.']);
     });
 
     it.each([

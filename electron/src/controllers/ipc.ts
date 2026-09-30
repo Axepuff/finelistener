@@ -7,6 +7,7 @@ import { registerSessionsController } from './sessionsController';
 import { registerTranscriptionController } from './transcriptionController';
 import { registerUiPreferencesController } from './uiPreferencesController';
 import { registerWhisperModelController } from './whisperModelController';
+import { registerSpeakerController } from './speakerController';
 import { SessionsService } from '../services/SessionsService';
 import { RecordingArchive } from '../services/RecordingArchive';
 import { getUiPreferenceValue } from './uiPreferencesController';
@@ -18,7 +19,10 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
         recoveryQuotaBytes: getUiPreferenceValue('recordingRecoveryQuotaBytes'),
     });
     registerFileController(ipcMain, getMainWindow);
-    registerTranscriptionController(ipcMain, getMainWindow, sessionsService);
+    let speakerBusy = () => false;
+    const transcriptionService = registerTranscriptionController(ipcMain, getMainWindow, sessionsService, () => speakerBusy());
+    const speakerWorkflow = registerSpeakerController(ipcMain, getMainWindow, sessionsService, () => transcriptionService.isBusy);
+    speakerBusy = () => speakerWorkflow.isBusy;
     registerRecordingController(ipcMain, getMainWindow, recordingArchive);
     registerSessionsController(ipcMain, getMainWindow, sessionsService);
     registerDebugController(ipcMain, getMainWindow);

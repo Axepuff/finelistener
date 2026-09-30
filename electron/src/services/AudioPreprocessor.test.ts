@@ -69,3 +69,22 @@ it('gates quiet speaker bleed while retaining louder microphone speech and the o
         await fs.rm(directory, { recursive: true, force: true });
     }
 });
+
+it('prepares an unselected speaker range without speech-altering filters', async () => {
+    class ObservedAudioPreprocessor extends AudioPreprocessor {
+        args: string[] = [];
+
+        protected override runFfmpeg(args: string[]): Promise<void> {
+            this.args = args;
+            return Promise.resolve();
+        }
+    }
+    const preprocessor = new ObservedAudioPreprocessor();
+    const prepared = await preprocessor.prepareAudioSegmentExactly('original.wav', undefined);
+
+    try {
+        expect(preprocessor.args).not.toContain('-af');
+    } finally {
+        await prepared.cleanup();
+    }
+});

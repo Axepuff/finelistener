@@ -59,8 +59,24 @@ export const formatTranscriptSourcePrefix = (segment: DeepReadonly<SessionTransc
     return label ? `${label}: ` : '';
 };
 
-export const formatTranscriptSegment = (segment: DeepReadonly<SessionTranscriptSegmentV1>): string =>
-    `${formatTranscriptSourcePrefix(segment)}${segment.text}`;
+export const formatTranscriptPrefix = (
+    segment: DeepReadonly<SessionTranscriptSegmentV1>,
+    transcript?: DeepReadonly<SessionTranscriptV1> | null,
+): string => {
+    const source = formatTranscriptSourcePrefix(segment);
+
+    if (!transcript?.speakers) return source;
+
+    const speaker = transcript.speakers.speakers.find((identity) => identity.id === segment.speakerId);
+    const label = speaker?.name ?? 'Unknown speaker';
+
+    return source ? `${source.slice(0, -2)} · ${label}: ` : `${label}: `;
+};
+
+export const formatTranscriptSegment = (
+    segment: DeepReadonly<SessionTranscriptSegmentV1>,
+    transcript?: DeepReadonly<SessionTranscriptV1> | null,
+): string => `${formatTranscriptPrefix(segment, transcript)}${segment.text}`;
 
 export const formatTranscriptRegionLabel = (segment: DeepReadonly<SessionTranscriptSegmentV1>): string => {
     const startLabel = formatSecondsReadable(segment.startSec);
@@ -77,7 +93,7 @@ export const transcriptToTimecodedText = (transcript: DeepReadonly<SessionTransc
         const endLabel = segment.endSec === null ? null : formatSecondsReadable(segment.endSec);
         const label = endLabel ? `[${startLabel} --> ${endLabel}]` : `[${startLabel}]`;
 
-        return `${label} ${formatTranscriptSegment(segment)}`.trimEnd();
+        return `${label} ${formatTranscriptSegment(segment, transcript)}`.trimEnd();
     });
 
     return lines.length > 0 ? `${lines.join('\n')}\n` : '';
@@ -90,7 +106,7 @@ export const transcriptToHtml = (transcript: DeepReadonly<SessionTranscriptV1> |
         const label = formatTranscriptRegionLabel(segment);
         const region = Number.isFinite(segment.startSec) ? segment.startSec.toFixed(3) : '0';
 
-        return `<span data-regions="${escapeHtml(region)}">${escapeHtml(label)}</span>${segment.text ? ` ${escapeHtml(formatTranscriptSegment(segment))}` : ''}`;
+        return `<span data-regions="${escapeHtml(region)}">${escapeHtml(label)}</span>${segment.text ? ` ${escapeHtml(formatTranscriptSegment(segment, transcript))}` : ''}`;
     });
 
     return lines.length > 0 ? `${lines.join('\n')}\n` : '';

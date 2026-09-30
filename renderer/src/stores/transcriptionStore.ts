@@ -123,7 +123,11 @@ export class TranscriptionStore {
     get draftTranscript(): DeepReadonly<SessionTranscriptV1> | null {
         if (Object.keys(this.sourceDrafts).length > 0) {
             const segments: SessionTranscriptSegmentV1[] = this.isRetryRun ?
-                (this.savedTranscriptValue?.segments.map((segment) => ({ ...segment })) ?? []) : [];
+                (this.savedTranscriptValue?.segments.map((segment) => ({
+                    ...segment,
+                    words: segment.words?.map((word) => ({ ...word })),
+                    rawSpan: segment.rawSpan ? { ...segment.rawSpan } : undefined,
+                })) ?? []) : [];
 
             for (const source of ['system', 'microphone'] as const) {
                 const draft = this.sourceDrafts[source];
@@ -151,7 +155,8 @@ export class TranscriptionStore {
     get plainText(): string {
         const segments = this.visibleTranscript?.segments ?? [];
 
-        return segments.map(formatTranscriptSegment).join(segments.some((segment) => segment.source) ? '\n' : ' ');
+        return segments.map((segment) => formatTranscriptSegment(segment, this.visibleTranscript))
+            .join(segments.some((segment) => segment.source || this.visibleTranscript?.speakers) ? '\n' : ' ');
     }
 
     get renderedHtml(): string {

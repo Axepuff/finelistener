@@ -13,6 +13,12 @@ miniaudio-loopback/build/
 miniaudio-loopback/*.sln
 miniaudio-loopback/*.vcxproj*
 CONTEXT.md
-docs/
+docs/*
+!docs/adr/
+docs/adr/*
+!docs/adr/0005-add-session-scoped-speaker-diarization.md
+!docs/testing/
+docs/testing/*
+!docs/testing/sherpa-acceptance.md
 outputs/
 .artifact-work/

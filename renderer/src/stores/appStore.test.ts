@@ -186,7 +186,7 @@ describe('AppStore', () => {
         store.initialize();
         store.initialize();
 
-        expect(fake.activeListenerCount).toBe(9);
+        expect(fake.activeListenerCount).toBe(10);
 
         store.dispose();
         store.dispose();
@@ -194,7 +194,7 @@ describe('AppStore', () => {
         expect(fake.activeListenerCount).toBe(0);
 
         store.initialize();
-        expect(fake.activeListenerCount).toBe(9);
+        expect(fake.activeListenerCount).toBe(10);
 
         store.dispose();
     });
@@ -281,7 +281,10 @@ describe('AppStore', () => {
                 resolvers.push(resolve);
             }),
         );
-        const fake = createFakeRendererAdapter({ transcribe, stopTranscription: () => Promise.resolve(true) });
+        const fake = createFakeRendererAdapter({
+            transcribe, stopTranscription: () => Promise.resolve(true),
+            getSession: () => Promise.resolve(createSession()),
+        });
         const store = new AppStore(fake.adapter);
 
         store.workspace.replaceWorkspace(createSession());
@@ -305,6 +308,7 @@ describe('AppStore', () => {
         const fake = createFakeRendererAdapter({
             listSessions,
             transcribe: () => Promise.resolve('[00:00:00.000 --> 00:00:01.000] Final text\n'),
+            getSession: () => Promise.resolve(createSession()),
         });
         const store = new AppStore(fake.adapter);
 

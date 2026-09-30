@@ -106,7 +106,7 @@ it('completes digital silence without inference and still recognizes the microph
     const result = await transcribeSessionSources('recording', { runId: 1, language: 'ru', useVad: true }, createSourceSession(),
         (audioPath, opts) => runner.transcribe(audioPath, opts), new AbortController().signal);
     expect(mocks.inference).toHaveBeenCalledTimes(1);
-    expect(result.transcript?.segments).toEqual([
+    expect(result.transcript?.segments).toMatchObject([
         { startSec: 0, endSec: null, text: 'Microphone speech', source: 'microphone' },
     ]);
     expect(result.transcript?.sourceRun?.status).toBe('completed');
@@ -129,7 +129,7 @@ it('completes an empty VAD source and restarts the failed server before recogniz
     });
     const result = await transcribeSessionSources('recording', { runId: 1, language: 'ru', useVad: true }, repository,
         (audioPath, opts) => runner.transcribe(audioPath, opts), new AbortController().signal);
-    expect(result.transcript?.segments).toEqual([
+    expect(result.transcript?.segments).toMatchObject([
         { startSec: 0, endSec: 1, text: 'Microphone speech', source: 'microphone' },
     ]);
     expect(result.transcript?.sourceRun?.status).toBe('completed');

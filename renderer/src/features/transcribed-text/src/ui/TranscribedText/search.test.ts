@@ -6,8 +6,8 @@ import { TranscribedTextContent } from './TranscribedTextContent';
 import { findTranscriptMatches } from './search';
 
 const segments = [
-    { text: 'Hello (world). Hello again.', prefix: '', startSeconds: 1, timecode: '[00:00:01]' },
-    { text: 'Another hello.', prefix: '', startSeconds: 2, timecode: '[00:00:02]' },
+    { id: 'first', text: 'Hello (world). Hello again.', prefix: '', startSeconds: 1, timecode: '[00:00:01]' },
+    { id: 'second', text: 'Another hello.', prefix: '', startSeconds: 2, timecode: '[00:00:02]' },
 ];
 
 describe('transcript search', () => {
@@ -25,8 +25,8 @@ describe('transcript search', () => {
 
     it.each([false, true])('searches speech across segments without counting source labels in timecode mode: %s', (showRegions) => {
         const sourceSegments = [
-            { text: 'hello', prefix: 'Microphone: ', startSeconds: 1, timecode: '[00:00:01]' },
-            { text: 'world', prefix: 'System audio: ', startSeconds: 2, timecode: '[00:00:02]' },
+            { id: 'mic', text: 'hello', prefix: 'Microphone: ', startSeconds: 1, timecode: '[00:00:01]' },
+            { id: 'system', text: 'world', prefix: 'System audio: ', startSeconds: 2, timecode: '[00:00:02]' },
         ];
         expect(findTranscriptMatches(sourceSegments, 'microphone')).toEqual([]);
 

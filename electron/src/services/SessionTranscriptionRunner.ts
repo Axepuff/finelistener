@@ -1,7 +1,9 @@
+import { randomUUID } from 'crypto';
 import type { RecordingSource, SessionDetails, SessionSourceRun, SessionTranscriptV1 } from '../types/sessions';
 import type { SessionTranscribeOpts, TranscribeOpts } from '../types/transcription';
-import { parseTranscriptToV1 } from './sessionTranscript';
+import { deriveSpeakerTranscript, materializeRecognitionTranscript, transcriptionResultToTranscript } from './sessionTranscript';
 import { deriveSourceTranscript } from './transcriptDuplicateFilter';
+import type { StructuredTranscriptionResult } from './whisperServer/utils';
 
 interface SessionRepository {
     getSession(sessionId: string): Promise<SessionDetails>;
@@ -23,7 +25,7 @@ export async function transcribeSessionSources(
     sessionId: string,
     opts: SessionTranscribeOpts,
     repository: SessionRepository,
-    transcribe: (audioPath: string, options: TranscribeOpts, pass: SourcePass) => Promise<string>,
+    transcribe: (audioPath: string, options: TranscribeOpts, pass: SourcePass) => Promise<string | StructuredTranscriptionResult>,
     signal: AbortSignal,
 ): Promise<SessionDetails> {
     if (!Number.isFinite(opts?.runId)) throw new Error('Invalid transcription request');
@@ -37,6 +39,8 @@ export async function transcribeSessionSources(
         sessionId: _sessionId,
         retryFailed: _retryFailed,
         hideDuplicateSpeech: _hideDuplicateSpeech,
+        labelSpeakers: _labelSpeakers,
+        speakerCount: _speakerCount,
         ...settings
     } = opts;
     const run: SessionSourceRun = opts.retryFailed && previousRun ? structuredClone(previousRun) : {
@@ -49,12 +53,26 @@ export async function transcribeSessionSources(
     ))) throw new Error('Invalid transcription settings');
     const pendingSources = run.sources.filter((source) => source.status !== 'completed');
     const hasSystemTrack = tracks.some((track) => track.source === 'system');
+    let recognitionRevision = opts.retryFailed && session.transcript ?
+        materializeRecognitionTranscript(session.transcript).recognitionRevision : undefined;
+    let recognizedSnapshot = JSON.stringify(opts.retryFailed && previousRun ?
+        previousRun.sources.filter((source) => source.status === 'completed') : []);
     const save = async () => {
         run.status = run.sources.every((source) => source.status === 'completed') ? 'completed' : 'incomplete';
-        const transcript = mergeSourceTranscript(run, opts.hideDuplicateSpeech ?? true);
-        if (!run.sources.some((source) => source.status === 'completed')) {
-            transcript.segments = session.transcript?.segments ?? [];
+        const hasCompleted = run.sources.some((source) => source.status === 'completed');
+        // Keep the previous recognition until the replacement has a completed source.
+        if (!hasCompleted && session.transcript) return;
+        const snapshot = JSON.stringify(run.sources.filter((source) => source.status === 'completed'));
+        if (snapshot !== recognizedSnapshot) {
+            recognitionRevision = randomUUID();
+            recognizedSnapshot = snapshot;
         }
+        const transcript = hasCompleted ? deriveSpeakerTranscript(materializeRecognitionTranscript({
+            ...mergeSourceTranscript(run, opts.hideDuplicateSpeech ?? true),
+            recognitionRevision,
+            speakers: recognitionRevision === session.transcript?.recognitionRevision ?
+                session.transcript?.speakers : undefined,
+        })) : { ...(session.transcript ?? { version: 1 as const, segments: [] }), sourceRun: run };
         await repository.saveTranscript(sessionId, transcript);
     };
     signal.throwIfAborted();
@@ -75,12 +93,14 @@ export async function transcribeSessionSources(
                 microphoneGateEnabled: source.source === 'microphone' && hasSystemTrack
                     && run.settings.microphoneGateEnabled === true,
             };
-            const text = outsideTrack ? '' : await transcribe(track.filePath, passOpts, {
+            const result = outsideTrack ? { text: '', segments: [] } : await transcribe(track.filePath, passOpts, {
                 source: source.source, index, count: pendingSources.length, offsetSec: offsetSec + start,
             });
             signal.throwIfAborted();
-            source.segments = parseTranscriptToV1(text, offsetSec + start).segments.map((item) => ({
-                ...item, source: source.source,
+            const parsed = transcriptionResultToTranscript(typeof result === 'string' ? { text: result } : result,
+                offsetSec + start);
+            source.segments = parsed.recognitionSegments!.map((item) => ({
+                ...item, id: `${source.source}:${item.id}`, source: source.source,
             }));
             source.status = 'completed';
             delete source.error;

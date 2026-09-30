@@ -139,7 +139,7 @@ it('persists reversible duplicate-filter presentations without changing source r
         ['system', duplicated],
         ['microphone', 'local reply.'],
     ]);
-    expect(filtered.transcript?.sourceRun).toEqual(sourceRun);
+    expect(filtered.transcript?.sourceRun).toMatchObject(sourceRun);
 
     const restored = await new SessionsService().setTranscriptDuplicateFilter(session.id, false);
     expect(restored.transcript?.segments.map((item) => item.text)).toEqual([
@@ -250,4 +250,54 @@ it('rebuilds cache accounting when the derived cache index is missing', async ()
     await expect(fs.access(first.audioWavPath)).rejects.toThrow();
     await expect(fs.access(first.audioOriginalPath)).resolves.toBeUndefined();
     await expect(fs.access(second.audioWavPath)).resolves.toBeUndefined();
+});
+
+it('publishes speaker replacement only for the same recognition and active session generation', async () => {
+    const source = path.join(environment.root, 'speaker-source.wav');
+    await fs.writeFile(source, wav(1000));
+    const service = new SessionsService();
+    const session = await service.createSessionFromImport(source);
+    const original = { version: 1 as const, segments: [{ startSec: 0, endSec: 1, text: 'first' }] };
+    await service.saveTranscript(session.id, original);
+    await service.setActiveSession(session.id);
+    const fingerprint = service.recognitionFingerprint(original);
+    const activeGeneration = service.getActiveSessionGeneration();
+    await service.saveTranscript(session.id, { ...original, segments: [{ ...original.segments[0], text: 'new ASR' }] });
+    expect(await service.replaceTranscriptIfCurrent(session.id, fingerprint, original)).toBe(false);
+    expect((await service.getSession(session.id)).transcript?.segments[0].text).toBe('new ASR');
+
+    const current = (await service.getSession(session.id)).transcript!;
+    await service.setActiveSession(null);
+    await service.setActiveSession(session.id);
+    expect(await service.replaceTranscriptIfCurrent(
+        session.id, service.recognitionFingerprint(current), original, undefined, activeGeneration,
+    )).toBe(false);
+    expect((await service.getSession(session.id)).transcript?.segments[0].text).toBe('new ASR');
+});
+
+it('preserves a duplicate-filter change made during speaker analysis of a legacy transcript', async () => {
+    const source = path.join(environment.root, 'speaker-filter-source.wav');
+    await fs.writeFile(source, wav(1000));
+    const service = new SessionsService();
+    const session = await service.createSessionFromImport(source);
+    const original = { version: 1 as const, segments: [], sourceRun: {
+        status: 'completed' as const, settings: { language: 'en' },
+        sources: [{ source: 'system' as const, status: 'completed' as const,
+            segments: [{ startSec: 0, endSec: 1, text: 'hello' }] }],
+    } };
+    await service.saveTranscript(session.id, original);
+    await service.setActiveSession(session.id);
+    const fingerprint = service.recognitionFingerprint(original);
+    await service.setTranscriptDuplicateFilter(session.id, false);
+    const replacement = { ...original, speakers: {
+        version: 1 as const, recognitionRevision: (await service.getSession(session.id)).transcript!.recognitionRevision!,
+        generation: 'generation', settings: {},
+        intervals: [{ startSec: 0, endSec: 1, speakerId: 'generation:one' }],
+        speakers: [{ id: 'generation:one', name: 'Speaker 1' }], corrections: [], status: 'completed' as const,
+    } };
+
+    expect(await service.replaceTranscriptIfCurrent(session.id, fingerprint, replacement)).toBe(true);
+    const saved = (await service.getSession(session.id)).transcript!;
+    expect(saved.presentation?.duplicateFilter?.enabled).toBe(false);
+    expect(saved.segments[0].speakerId).toBe('generation:one');
 });

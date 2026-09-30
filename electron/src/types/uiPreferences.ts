@@ -2,6 +2,7 @@ export const UI_PREFERENCE_KEYS = [
     'homeSidebarWidth', 'homeRightSidebarWidth', 'recordingSystemDevice', 'recordingMicrophoneDevice',
     'recordingRecoveryWarningDays', 'recordingRecoveryQuotaBytes', 'recordingDerivedCacheBudgetBytes',
     'transcriptDuplicateFilterEnabled',
+    'speakerLabelsEnabled',
 ] as const;
 
 export type UiPreferenceKey = (typeof UI_PREFERENCE_KEYS)[number];
@@ -15,6 +16,7 @@ export interface UiPreferenceValueMap {
     recordingRecoveryQuotaBytes: number;
     recordingDerivedCacheBudgetBytes: number;
     transcriptDuplicateFilterEnabled: boolean;
+    speakerLabelsEnabled: boolean;
 }
 
 export const UI_PREFERENCE_DEFAULTS: UiPreferenceValueMap = {
@@ -26,6 +28,7 @@ export const UI_PREFERENCE_DEFAULTS: UiPreferenceValueMap = {
     recordingRecoveryQuotaBytes: 2 * 1024 * 1024 * 1024,
     recordingDerivedCacheBudgetBytes: 1024 * 1024 * 1024,
     transcriptDuplicateFilterEnabled: true,
+    speakerLabelsEnabled: false,
 };
 
 export const isUiPreferenceKey = (value: unknown): value is UiPreferenceKey => {
@@ -46,7 +49,7 @@ export const isUiPreferenceValue = <K extends UiPreferenceKey>(
         return value === null || typeof value === 'string';
     }
 
-    if (key === 'transcriptDuplicateFilterEnabled') return typeof value === 'boolean';
+    if (key === 'transcriptDuplicateFilterEnabled' || key === 'speakerLabelsEnabled') return typeof value === 'boolean';
 
     return false;
 };

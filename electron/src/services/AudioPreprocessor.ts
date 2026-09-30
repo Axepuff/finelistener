@@ -216,6 +216,33 @@ export class AudioPreprocessor {
         return { wavPath, cleanup };
     }
 
+    public async prepareAudioSegmentExactly(
+        audioPath: string, segment: Segment | undefined, signal?: AbortSignal,
+    ): Promise<PreparedAudioResult> {
+        signal?.throwIfAborted();
+        if (!segment) {
+            const converted = await this.convertAudio({ audioPath, highPass: undefined, dynanorm: false, signal });
+            return { wavPath: converted.path, cleanup: converted.cleanup };
+        }
+        if (!Number.isFinite(segment.start) || !Number.isFinite(segment.end)
+            || segment.start < 0 || segment.end <= segment.start) throw new Error('Invalid audio segment');
+        const directory = await this.createTempDir();
+        const wavPath = path.join(directory, `${randomUUID()}.wav`);
+        try {
+            await this.runFfmpeg([
+                '-y', '-ss', String(segment.start), '-i', audioPath,
+                '-t', String(segment.end - segment.start), '-vn',
+                '-ar', String(DEFAULT_WAV_FORMAT.sampleRateHz),
+                '-ac', String(DEFAULT_WAV_FORMAT.channels),
+                '-c:a', DEFAULT_WAV_FORMAT.codec, wavPath,
+            ], signal);
+        } catch (error) {
+            await this.removeDirSafe(directory);
+            throw error;
+        }
+        return { wavPath, cleanup: () => this.removeDirSafe(directory) };
+    }
+
     protected async createTempDir(): Promise<string> {
         const dir = await fs.mkdtemp(path.join(tmpdir(), this.tmpDirPrefix));
 
@@ -388,6 +415,7 @@ export class AudioPreprocessor {
         return new Promise<string>((resolve, reject) => {
             const ffmpeg = spawn(ffmpegExecutable, args, { windowsHide: true, signal });
             let stderr = '';
+            let processError: Error | null = null;
 
             ffmpeg.stderr?.on('data', (chunk: unknown) => {
                 const data = typeof chunk === 'string' ? chunk : Buffer.isBuffer(chunk) ? chunk.toString('utf8') : '';
@@ -395,9 +423,13 @@ export class AudioPreprocessor {
                 stderr += data;
             });
 
-            ffmpeg.on('error', reject);
+            ffmpeg.on('error', (error) => { processError = error; });
             ffmpeg.on('close', (code) => {
-                if (code === 0) {
+                if (signal?.aborted) {
+                    reject(new Error('Audio preparation cancelled'));
+                } else if (processError) {
+                    reject(processError);
+                } else if (code === 0) {
                     resolve(stderr);
                 } else {
                     reject(new Error(`ffmpeg exited with code ${code}${stderr ? `: ${stderr}` : ''}`));

@@ -86,6 +86,13 @@ jobs:
         shell: bash
         run: npm run prebuild:assets:win-gpu
 
+      - name: Verify CUDA release component
+        run: python scripts/verify-sherpa-release.py build-assets/release-components/finelistener-sherpa-cuda-v1.13.8-win-x64.zip build-assets/win-x64-gpu/sherpa/cuda-component.json
+
+      - name: Stage CUDA release manifest
+        shell: pwsh
+        run: Copy-Item -LiteralPath build-assets/win-x64-gpu/sherpa/cuda-component.json -Destination build-assets/release-components/cuda-component.json
+
       - name: Build and package
         shell: bash
         run: npm run make:win-gpu
@@ -95,6 +102,14 @@ jobs:
         with:
           name: finelistener-win-x64-gpu
           path: out/make/**/*
+          if-no-files-found: error
+
+      - name: Upload CUDA component and embedded manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: finelistener-sherpa-cuda
+          path: build-assets/release-components/
+          compression-level: 0
           if-no-files-found: error
 
   build-win-cpu:
@@ -132,12 +147,18 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+
+      - name: Verify downloaded CUDA release component
+        run: python3 scripts/verify-sherpa-release.py artifacts/finelistener-sherpa-cuda/finelistener-sherpa-cuda-v1.13.8-win-x64.zip artifacts/finelistener-sherpa-cuda/cuda-component.json --release-tag "$GITHUB_REF_NAME"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
+          fail_on_unmatched_files: true
           generate_release_notes: true

@@ -44,4 +44,23 @@ export interface SessionTranscribeOpts extends TranscribeOpts {
     retryFailed?: boolean;
     optimized?: boolean;
     hideDuplicateSpeech?: boolean;
+    labelSpeakers?: boolean;
+    speakerCount?: number;
+}
+
+export interface AnalyzeSpeakersOptions {
+    speakerCount?: number;
+}
+
+export interface SpeakerAnalysisProgressEvent {
+    sessionId: string;
+    phase: 'preparing' | 'downloading' | 'converting' | 'analyzing' | 'saving' | 'fallback';
+    downloadedBytes?: number;
+    totalBytes?: number;
+}
+
+export interface SpeakerAssetStatus {
+    cpuReady: boolean;
+    cudaReady: boolean;
+    cudaAvailable: boolean;
 }
