@@ -155,6 +155,11 @@ export const TranscribedText: React.FC = observer(() => {
                             </Stack>
                         </Alert>
                     ) : null}
+                    {transcription.runOutcome === 'error' && !transcription.isIncomplete ? (
+                        <Alert color="red" title="Transcription failed">
+                            {transcription.runErrorMessage}
+                        </Alert>
+                    ) : null}
                     <Modal opened={confirmRetrySpeakers !== null} onClose={() => setConfirmRetrySpeakers(null)} title="Replace speaker labels?" centered={true}>
                         <Stack gap="sm">
                             <Text size="sm">A successful retry may replace speaker names, assignments, and merges in this session.</Text>

@@ -114,5 +114,8 @@ export async function transcribeSessionSources(
         await save();
     }
     signal.throwIfAborted();
+    if (session.transcript && !run.sources.some((source) => source.status === 'completed')) {
+        throw new Error('Transcription failed for all recording sources. The previous transcript was kept.');
+    }
     return repository.getSession(sessionId);
 }

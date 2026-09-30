@@ -206,3 +206,30 @@ it('does not replace an existing result after cancellation', async () => {
     expect(replaceTranscriptIfCurrent).not.toHaveBeenCalled();
     expect(session.transcript.speakers?.speakers[0].name).toBe('Custom');
 });
+
+it('does not report cancellation after speaker labels have been saved', async () => {
+    let session = sessionFor(microphoneTranscript);
+    let finishRead: (value: SessionDetails) => void = () => undefined;
+    const getSession = vi.fn(() => getSession.mock.calls.length === 1 ? Promise.resolve(session) :
+        new Promise<SessionDetails>((resolve) => { finishRead = resolve; }));
+    const sessions = {
+        getSession,
+        getActiveSessionId: () => 'one',
+        getActiveSessionGeneration: () => 0,
+        recognitionFingerprint: () => 'original',
+        replaceTranscriptIfCurrent: vi.fn((_id: string, _fingerprint: string, replacement: SessionTranscriptV1) => {
+            session = sessionFor(replacement);
+            return Promise.resolve(true);
+        }),
+    } as unknown as SessionsService;
+    const runtime = { getAssetStatus: vi.fn(), prepareAssets: vi.fn(), analyze: vi.fn() };
+    const workflow = new SessionSpeakerWorkflow(sessions, runtime, vi.fn());
+
+    const pending = workflow.analyze('one', {});
+    await vi.waitFor(() => expect(getSession).toHaveBeenCalledTimes(2));
+    const stopping = workflow.stopAndWait();
+    finishRead(session);
+
+    await expect(stopping).resolves.toBe(false);
+    await expect(pending).resolves.toMatchObject({ transcript: { speakers: { status: 'completed' } } });
+});

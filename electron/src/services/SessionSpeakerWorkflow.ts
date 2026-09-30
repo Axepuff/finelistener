@@ -31,8 +31,13 @@ interface SpeakerRuntime {
 const validCount = (count: unknown): boolean => count === undefined
     || (typeof count === 'number' && Number.isSafeInteger(count) && count > 0);
 
+interface SpeakerOperation {
+    controller: AbortController;
+    committed: boolean;
+}
+
 export class SessionSpeakerWorkflow {
-    private active: AbortController | null = null;
+    private active: SpeakerOperation | null = null;
     private finished: Promise<void> = Promise.resolve();
 
     constructor(
@@ -49,14 +54,14 @@ export class SessionSpeakerWorkflow {
         return this.runtime.getAssetStatus();
     }
 
-    private async runExclusive<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    private async runExclusive<T>(work: (signal: AbortSignal, markCommitted: () => void) => Promise<T>): Promise<T> {
         if (this.active) throw new Error('Another speaker operation is in progress');
-        const controller = new AbortController();
-        this.active = controller;
+        const operation = { controller: new AbortController(), committed: false };
+        this.active = operation;
         let finish!: () => void;
         this.finished = new Promise<void>((resolve) => { finish = resolve; });
         try {
-            return await work(controller.signal);
+            return await work(operation.controller.signal, () => { operation.committed = true; });
         } finally {
             this.active = null;
             finish();
@@ -64,10 +69,12 @@ export class SessionSpeakerWorkflow {
     }
 
     public async stopAndWait(): Promise<boolean> {
-        if (!this.active) return false;
-        this.active.abort();
-        await this.finished;
-        return true;
+        const operation = this.active;
+        if (!operation) return false;
+        const finished = this.finished;
+        if (!operation.committed) operation.controller.abort();
+        await finished;
+        return !operation.committed;
     }
 
     public async prepareAssets(includeCuda: boolean): Promise<SpeakerAssetStatus> {
@@ -84,7 +91,7 @@ export class SessionSpeakerWorkflow {
 
     public async analyze(sessionId: string, options: AnalyzeSpeakersOptions): Promise<SessionDetails> {
         if (!validCount(options?.speakerCount)) throw new Error('Invalid speaker count');
-        return this.runExclusive(async (signal) => {
+        return this.runExclusive(async (signal, markCommitted) => {
             const activeSessionId = this.sessions.getActiveSessionId();
             if (activeSessionId !== null && activeSessionId !== sessionId) {
                 throw new Error('Session is no longer active');
@@ -159,6 +166,7 @@ export class SessionSpeakerWorkflow {
                 sessionId, fingerprint, replacement, signal, activeGeneration,
             );
             if (!saved) throw new Error('Recognition or active session changed during speaker analysis');
+            markCommitted();
             return this.sessions.getSession(sessionId);
         });
     }

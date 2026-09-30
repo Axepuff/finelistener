@@ -77,12 +77,14 @@ describe('TranscriptionStore', () => {
             const runId = transcribe.mock.calls[0][1].runId;
             fake.emitTranscribeText({ runId, chunk: '[00:00:00.000 --> 00:00:01.000] Draft text\n' });
 
+            fake.emitTranscribeProgress({ runId, value: 100 });
             rejectTranscription(new Error('Whisper crashed'));
             expect(await run).toEqual({ status: 'failed', message: 'Transcription failed.' });
             expect(store.savedTranscript).toEqual(savedTranscript);
             expect(store.draftTranscript?.segments[0]?.text).toBe('Draft text');
             expect(store.visibleTranscript?.segments[0]?.text).toBe('Draft text');
             expect(store.runOutcome).toBe('error');
+            expect(store.progress).toBe(0);
         } finally {
             store.dispose();
         }

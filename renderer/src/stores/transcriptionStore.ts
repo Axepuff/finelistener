@@ -413,6 +413,7 @@ export class TranscriptionStore {
     private failRun(runId: number, message: string): void {
         if (this.activeRunId !== runId) return;
 
+        this.progressValue = 0;
         this.runOutcomeValue = 'error';
         this.runErrorMessageValue = message;
         this.activeRunId = null;

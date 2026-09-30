@@ -140,6 +140,31 @@ describe('speaker analysis in the renderer', () => {
         expect(store.transcription.savedTranscript?.speakers?.generation).toBe('generation-1');
     });
 
+    it('reports a failed replacement without labeling the previous recognition', async () => {
+        const transcribeSession = vi.fn(() => Promise.reject(new Error('All new sources failed')));
+        const analyzeSpeakers = vi.fn();
+        const fake = createFakeRendererAdapter({ transcribeSession, analyzeSpeakers });
+        const store = new AppStore(fake.adapter);
+        store.workspace.replaceWorkspace(session(transcript, 'recorded'));
+        store.transcription.replaceSavedTranscript(transcript);
+        await store.speakers.setEnabled(true);
+        const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        try {
+            const result = await store.startTranscription({
+                language: 'en', model: 'base', splitOnWord: true, useVad: true,
+            });
+
+            expect(result).toEqual({ ok: false, message: 'Transcription failed.' });
+            expect(store.transcription.savedTranscript).toEqual(transcript);
+            expect(store.transcription.runOutcome).toBe('error');
+            expect(store.transcription.progress).not.toBe(100);
+            expect(analyzeSpeakers).not.toHaveBeenCalled();
+        } finally {
+            error.mockRestore();
+        }
+    });
+
     it('keeps the speaker option selected at transcription start', async () => {
         let finishRecognition: (value: string) => void = () => undefined;
         const transcribe = vi.fn(() => new Promise<string>((resolve) => { finishRecognition = resolve; }));

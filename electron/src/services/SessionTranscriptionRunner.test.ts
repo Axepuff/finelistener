@@ -267,10 +267,12 @@ it.each([false, true])(
         repository.session.transcript = { version: 1, segments: previousSegments };
         const transcribe = vi.fn().mockRejectedValue(new Error('Unavailable'));
 
-        await transcribeSessionSources('session', {
+        await expect(transcribeSessionSources('session', {
             runId: 1,
             language: 'en',
-        }, repository, transcribe, new AbortController().signal);
+        }, repository, transcribe, new AbortController().signal)).rejects.toThrow(
+            'Transcription failed for all recording sources. The previous transcript was kept.',
+        );
         expect(repository.session.transcript?.segments).toEqual(previousSegments);
 
         const service = createFilterService(repository);
