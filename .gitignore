@@ -20,5 +20,6 @@ docs/adr/*
 !docs/testing/
 docs/testing/*
 !docs/testing/sherpa-acceptance.md
+!docs/testing/diarization-timestamps.md
 outputs/
 .artifact-work/
