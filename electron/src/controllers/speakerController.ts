@@ -2,7 +2,7 @@ import type { BrowserWindow, IpcMain } from 'electron';
 import { SessionSpeakerWorkflow } from '../services/SessionSpeakerWorkflow';
 import { SpeakerDiarizationService } from '../services/SpeakerDiarizationService';
 import type { SessionsService } from '../services/SessionsService';
-import type { SessionRawSpan } from '../types/sessions';
+import type { SessionRawSpan, SessionSpeakerAssignment } from '../types/sessions';
 
 const sessionIdFrom = (value: unknown): string => {
     if (typeof value !== 'string' || !value.trim()) throw new Error('Invalid session id');
@@ -64,7 +64,7 @@ export function registerSpeakerController(
         ensureEditable();
         if (!span || typeof span !== 'object' || Array.isArray(span)) throw new Error('Invalid transcript span');
         if (speakerId !== null) speakerIdFrom(speakerId);
-        return workflow.assign(sessionIdFrom(sessionId), span as SessionRawSpan, speakerId as string | null);
+        return workflow.assign(sessionIdFrom(sessionId), span as SessionRawSpan | SessionSpeakerAssignment, speakerId as string | null);
     }));
     ipc.handle('sessions:merge-speakers', (_event, sessionId: unknown, sourceId: unknown, targetId: unknown) => safe('merge', () => {
         ensureEditable();

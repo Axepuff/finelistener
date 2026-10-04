@@ -49,8 +49,13 @@ describe('transcript search', () => {
 
         expect(html.match(/<mark /g)).toHaveLength(2);
         expect(html.match(/data-active="true"/g)).toHaveLength(2);
-        expect(html).toContain('Microphone: ');
-        expect(html).toContain('System audio: ');
+        if (showRegions) {
+            expect(html).toContain('Microphone: ');
+            expect(html).toContain('System audio: ');
+        } else {
+            expect(html).not.toContain('Microphone: ');
+            expect(html).not.toContain('System audio: ');
+        }
     });
 
     it.each([false, true])('highlights recognized text in timecode mode: %s', (showRegions) => {

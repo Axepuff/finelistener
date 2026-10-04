@@ -79,7 +79,7 @@ const TranscribeControl: React.FC = observer(() => {
         || store.workspace.activeSession?.tracks?.some((track) => track.source === 'system');
     const preparingSpeakerAssets = store.operations.kind === 'preparing-speaker-assets';
     const canPrepareCuda = store.speakers.enabled && hasSystemAudio
-        && store.speakers.assets?.cudaAvailable && !store.speakers.assets.cudaReady;
+        && (!store.speakers.assets?.cpuReady || (store.speakers.assets.cudaAvailable && !store.speakers.assets.cudaReady));
 
     return (
         <Stack gap={12} justify="space-between" h="100%">
@@ -169,10 +169,11 @@ const TranscribeControl: React.FC = observer(() => {
                 ) : null}
                 {canPrepareCuda ? (
                     <Stack gap={6}>
-                        <Text size="xs" c="dimmed">CUDA is optional. Prepare its component before transcription, or continue on CPU.</Text>
+                        <Text size="xs" c="dimmed">Community-1 runs locally. Its component is downloaded on first use; recognition is saved first.</Text>
+                        {store.speakers.assets?.downloadBytes ? <Text size="xs">Download size: {(store.speakers.assets.downloadBytes / 1_000_000).toFixed(0)} MB</Text> : <Text size="xs">The release component is unavailable in this build.</Text>}
                         <Group gap={8}>
                             <Button size="compact-sm" variant="light" disabled={store.operations.isBusy} onClick={() => { void handlePrepareCuda(); }}>
-                                Prepare CUDA component
+                                Prepare speaker component
                             </Button>
                             {preparingSpeakerAssets ? (
                                 <Button size="compact-sm" color="red" variant="light" onClick={() => { void handleCancelSpeakerPreparation(); }}>Cancel</Button>
@@ -180,7 +181,7 @@ const TranscribeControl: React.FC = observer(() => {
                         </Group>
                         {preparingSpeakerAssets ? (
                             <Group gap={8} wrap="nowrap" role="status">
-                                <Text size="xs">{store.speakers.phase === 'downloading' ? 'Downloading CUDA component' : 'Preparing CUDA component'}</Text>
+                                <Text size="xs">{store.speakers.phase === 'downloading' ? 'Downloading speaker component' : 'Preparing speaker component'}</Text>
                                 {store.speakers.phase === 'downloading' && store.speakers.totalBytes > 0 ? (
                                     <Progress value={100 * store.speakers.downloadedBytes / store.speakers.totalBytes} size="sm" style={{ flex: 1 }} />
                                 ) : <Loader size="xs" />}

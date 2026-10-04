@@ -90,7 +90,7 @@ export const createFakeRendererAdapter = (
         importWhisperModelFromFile: () => Promise.resolve(null),
         openDevTools: () => Promise.resolve(true),
         getUiPreference: <K extends UiPreferenceKey>(key: K) => (
-            Promise.resolve(UI_PREFERENCE_DEFAULTS[key])
+            Promise.resolve((key === 'speakerLabelsEnabled' ? false : UI_PREFERENCE_DEFAULTS[key]) as UiPreferenceValueMap[K])
         ),
         setUiPreference: <K extends UiPreferenceKey>(
             _key: K,

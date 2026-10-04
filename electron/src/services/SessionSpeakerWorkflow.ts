@@ -2,6 +2,8 @@ import { randomUUID } from 'crypto';
 import type {
     SessionDetails,
     SessionRawSpan,
+    SessionSpeakerAssignment,
+    SessionSpeakerProvenance,
     SessionSpeakerInterval,
     SessionTranscriptV1,
 } from '../types/sessions';
@@ -25,7 +27,7 @@ interface SpeakerRuntime {
         options: { startSec: number; endSec?: number; speakerCount?: number; preferCuda?: boolean },
         signal: AbortSignal,
         onProgress?: (progress: { phase: 'converting' | 'analyzing' | 'fallback'; percent?: number }) => void,
-    ): Promise<{ intervals: SessionSpeakerInterval[]; backend: 'cpu' | 'cuda'; fallbackUsed: boolean }>;
+    ): Promise<{ intervals: SessionSpeakerInterval[]; regularIntervals?: SessionSpeakerInterval[]; modelRevision?: string; runtimeRevision?: string; backend: 'cpu' | 'cuda'; fallbackUsed: boolean }>;
 }
 
 const validCount = (count: unknown): boolean => count === undefined
@@ -103,17 +105,22 @@ export class SessionSpeakerWorkflow {
                 && !session.transcript.sourceRun.sources.some((source) => source.status === 'completed')) {
                 throw new Error('Session has no completed recognition');
             }
+            if (options.recognitionRevision !== undefined && options.recognitionRevision !== session.transcript.recognitionRevision) throw new Error('Recognition changed before speaker analysis');
+            const audioMode = options.audioMode ?? session.audioMode ?? 'optimized';
+            if (audioMode !== 'original' && audioMode !== 'optimized') throw new Error('Invalid audio mode');
             const fingerprint = this.sessions.recognitionFingerprint(session.transcript);
             const transcript = materializeRecognitionTranscript(session.transcript);
             const generation = randomUUID();
-            const range = session.sourceKind === 'recorded' ?
+            const range = options.range ?? (session.sourceKind === 'recorded' ?
                 transcript.sourceRun?.settings.segment :
-                session.transcription?.segment;
+                session.transcription?.segment);
+            if (range && (!Number.isFinite(range.start) || range.start < 0 || !Number.isFinite(range.end) || range.end <= range.start)) throw new Error('Invalid speaker range');
             const settings = {
                 ...(options.speakerCount === undefined ? {} : { speakerCount: options.speakerCount }),
                 ...(range ? { range } : {}),
             };
             const intervals: SessionSpeakerInterval[] = [];
+            let provenance: SessionSpeakerProvenance | undefined;
             const completedSystem = transcript.sourceRun?.sources.some((source) =>
                 source.source === 'system' && source.status === 'completed' && source.segments.length > 0);
             const hasImportedText = session.sourceKind === 'imported'
@@ -140,12 +147,23 @@ export class SessionSpeakerWorkflow {
                     });
                     signal.throwIfAborted();
                     const assets = await this.runtime.getAssetStatus();
-                    const result = await this.runtime.analyze(audioPath, {
+                    const selectedAudio = await this.sessions.prepareSourceAudio(audioPath, audioMode, signal);
+                    const result = await this.runtime.analyze(selectedAudio, {
                         startSec, endSec, speakerCount: options.speakerCount,
                         preferCuda: assets.cudaReady && assets.cudaAvailable,
                     }, signal, (event) => this.progress({ sessionId, ...event }));
                     signal.throwIfAborted();
                     if (result.fallbackUsed) this.progress({ sessionId, phase: 'fallback' });
+                    const mapIntervals = (items: SessionSpeakerInterval[]) => items.map((interval) => ({
+                        startSec: offsetSec + startSec + interval.startSec,
+                        endSec: offsetSec + startSec + interval.endSec,
+                        speakerId: generation + ':' + interval.speakerId,
+                    }));
+                    if (result.modelRevision && result.runtimeRevision) provenance = {
+                        version: 1, engine: 'pyannote-community-1', modelRevision: result.modelRevision,
+                        runtimeRevision: result.runtimeRevision, audioMode, backend: result.backend, ...settings,
+                        regularIntervals: mapIntervals(result.regularIntervals ?? []), exclusiveIntervals: mapIntervals(result.intervals),
+                    };
                     for (const interval of result.intervals) {
                         if (!Number.isFinite(interval.startSec) || !Number.isFinite(interval.endSec)
                             || interval.endSec <= interval.startSec) continue;
@@ -161,6 +179,7 @@ export class SessionSpeakerWorkflow {
             signal.throwIfAborted();
             this.progress({ sessionId, phase: 'saving' });
             const speakers = createSpeakerMetadata(transcript, intervals, settings, generation);
+            if (provenance) speakers.provenance = provenance;
             const replacement = deriveSpeakerTranscript({ ...transcript, speakers });
             const saved = await this.sessions.replaceTranscriptIfCurrent(
                 sessionId, fingerprint, replacement, signal, activeGeneration,
@@ -175,7 +194,10 @@ export class SessionSpeakerWorkflow {
         sessionId: string,
         change: (transcript: SessionTranscriptV1) => SessionTranscriptV1,
     ): Promise<SessionDetails> {
+        const activeGeneration = this.sessions.getActiveSessionGeneration();
+        if (this.sessions.getActiveSessionId() !== null && this.sessions.getActiveSessionId() !== sessionId) throw new Error('Session is no longer active');
         return this.sessions.updateTranscript(sessionId, (current) => {
+            if (this.sessions.getActiveSessionGeneration() !== activeGeneration) throw new Error('Session changed before speaker edit');
             if (!current.speakers) throw new Error('Session has no speaker labels');
             if (current.speakers.recognitionRevision !== current.recognitionRevision) {
                 throw new Error('Speaker labels belong to an older recognition');
@@ -195,23 +217,29 @@ export class SessionSpeakerWorkflow {
         });
     }
 
-    public assign(sessionId: string, span: SessionRawSpan, speakerId: string | null): Promise<SessionDetails> {
-        if (!span || typeof span.segmentId !== 'string' || !Number.isSafeInteger(span.startChar)
-            || !Number.isSafeInteger(span.endChar) || span.startChar < 0 || span.endChar <= span.startChar) {
-            throw new Error('Invalid transcript span');
+    public assign(sessionId: string, request: SessionRawSpan | SessionSpeakerAssignment, speakerId: string | null): Promise<SessionDetails> {
+        const spans = request && 'spans' in request ? request.spans : [request];
+        if (!Array.isArray(spans) || spans.length === 0 || spans.length > 10000 || spans.some((span) =>
+            !span || typeof span.segmentId !== 'string' || !Number.isSafeInteger(span.startChar)
+            || !Number.isSafeInteger(span.endChar) || span.startChar < 0 || span.endChar <= span.startChar)) {
+            throw new Error('Invalid transcript spans');
         }
         return this.updateSpeakers(sessionId, (transcript) => {
             const metadata = transcript.speakers!;
-            if (speakerId !== null && !metadata.speakers.some((item) => item.id === speakerId)) {
-                throw new Error('Unknown speaker');
+            if ('spans' in request && (request.recognitionRevision !== transcript.recognitionRevision
+                || request.generation !== metadata.generation)) throw new Error('Stale speaker assignment');
+            if (speakerId !== null && !metadata.speakers.some((item) => item.id === speakerId)) throw new Error('Unknown speaker');
+            const raw = transcript.sourceRun?.sources.flatMap((source) => source.segments) ?? transcript.recognitionSegments ?? [];
+            // Validate every member before changing any corrections; persistence is one transaction.
+            for (const span of spans) {
+                const segment = raw.find((item) => item.id === span.segmentId);
+                if (!segment || span.endChar > segment.text.length) throw new Error('Unknown transcript span');
             }
-            const raw = transcript.sourceRun?.sources.flatMap((source) => source.segments) ??
-                transcript.recognitionSegments ?? [];
-            const segment = raw.find((item) => item.id === span.segmentId);
-            if (!segment || span.endChar > segment.text.length) throw new Error('Unknown transcript span');
-            metadata.corrections = metadata.corrections.filter((item) =>
-                item.segmentId !== span.segmentId || item.startChar !== span.startChar || item.endChar !== span.endChar);
-            metadata.corrections.push({ ...span, speakerId });
+            for (const span of spans) {
+                metadata.corrections = metadata.corrections.filter((item) =>
+                    item.segmentId !== span.segmentId || item.startChar !== span.startChar || item.endChar !== span.endChar);
+                metadata.corrections.push({ ...span, speakerId });
+            }
             return transcript;
         });
     }

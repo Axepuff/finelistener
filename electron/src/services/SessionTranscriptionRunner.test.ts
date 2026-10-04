@@ -40,7 +40,7 @@ it('recognizes sources sequentially, preserves overlapping segments and applies 
         runId: 1, language: 'en', segment: { start: 3, end: 6 }, optimized: true,
         microphoneGateEnabled: true,
     }, repository, transcribe, new AbortController().signal);
-    expect(transcribe.mock.calls[0][1]).toMatchObject({ segment: { start: 3, end: 6 }, optimized: true });
+    expect(transcribe.mock.calls[0][1]).toMatchObject({ segment: { start: 3, end: 6 }, optimized: false });
     expect(transcribe.mock.calls[0][1]).toMatchObject({ microphoneGateEnabled: false });
     expect(transcribe.mock.calls[1][1]).toMatchObject({ segment: { start: 2.5, end: 5.5 }, microphoneGateEnabled: true });
     expect(result.transcript?.segments).toMatchObject([
@@ -130,7 +130,7 @@ it('persists successful work before the next pass and retries only unfinished so
     expect(retry).toHaveBeenCalledTimes(1);
     expect(retry.mock.calls[0][0]).toBe('microphone.wav');
     expect(retry.mock.calls[0][1]).toMatchObject({
-        runId: 2, language: 'en', modelPath: 'original-model', optimized: true, segment: { start: 1.5, end: 4.5 },
+        runId: 2, language: 'en', modelPath: 'original-model', optimized: false, segment: { start: 1.5, end: 4.5 },
     });
     expect(result.transcript?.sourceRun?.status).toBe('completed');
     expect(result.transcript?.segments).toHaveLength(1);

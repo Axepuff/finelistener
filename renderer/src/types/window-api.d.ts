@@ -7,7 +7,7 @@ import type {
 import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResult } from 'electron/src/types/recordingArchive';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
-import type { SessionDetails, SessionListItem, SessionRawSpan } from 'electron/src/types/sessions';
+import type { SessionDetails, SessionListItem, SessionRawSpan, SessionSpeakerAssignment } from 'electron/src/types/sessions';
 import type { AnalyzeSpeakersOptions, SpeakerAnalysisProgressEvent, SpeakerAssetStatus, TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
@@ -26,14 +26,14 @@ declare global {
                 setActive: (sessionId: string | null) => Promise<boolean>;
                 delete: (sessionId: string) => Promise<boolean>;
                 importAudio: () => Promise<SessionDetails | null>;
-                optimizeAudio: (sessionId: string) => Promise<SessionDetails>;
+                optimizeAudio: (sessionId: string, mode?: 'original' | 'optimized') => Promise<SessionDetails>;
                 setTranscriptDuplicateFilter: (sessionId: string, enabled: boolean) => Promise<SessionDetails>;
                 analyzeSpeakers: (sessionId: string, options: AnalyzeSpeakersOptions) => Promise<SessionDetails>;
                 stopSpeakerAnalysis: () => Promise<boolean>;
                 getSpeakerAssets: () => Promise<SpeakerAssetStatus>;
                 prepareSpeakerAssets: (includeCuda: boolean) => Promise<SpeakerAssetStatus>;
                 renameSpeaker: (sessionId: string, speakerId: string, name: string) => Promise<SessionDetails>;
-                assignSpeaker: (sessionId: string, span: SessionRawSpan, speakerId: string | null) => Promise<SessionDetails>;
+                assignSpeaker: (sessionId: string, span: SessionRawSpan | SessionSpeakerAssignment, speakerId: string | null) => Promise<SessionDetails>;
                 mergeSpeakers: (sessionId: string, sourceId: string, targetId: string) => Promise<SessionDetails>;
                 revealFolder: () => Promise<boolean>;
             };

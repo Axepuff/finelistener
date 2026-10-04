@@ -28,7 +28,7 @@ export const UI_PREFERENCE_DEFAULTS: UiPreferenceValueMap = {
     recordingRecoveryQuotaBytes: 2 * 1024 * 1024 * 1024,
     recordingDerivedCacheBudgetBytes: 1024 * 1024 * 1024,
     transcriptDuplicateFilterEnabled: true,
-    speakerLabelsEnabled: false,
+    speakerLabelsEnabled: true,
 };
 
 export const isUiPreferenceKey = (value: unknown): value is UiPreferenceKey => {

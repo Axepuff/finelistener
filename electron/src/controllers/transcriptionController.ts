@@ -22,7 +22,10 @@ export function registerTranscriptionController(
             throw new Error('Invalid audioPath');
         }
 
-        const result = await service.transcribeResult(audioPath, opts);
+        const session = opts.sessionId ? await sessionsService.getSession(opts.sessionId) : null;
+        const mode = opts.optimized === false ? 'original' : 'optimized';
+        const result = await service.transcribeResult(audioPath, opts, session ?
+            (signal) => sessionsService.prepareSourceAudio(session.audioOriginalPath, mode, signal) : undefined);
 
         const sessionId = opts?.sessionId;
 
@@ -35,10 +38,6 @@ export function registerTranscriptionController(
                 language: opts.language,
                 model: modelLabel ? String(modelLabel) : undefined,
                 segment: opts.segment ? { start: opts.segment.start, end: opts.segment.end } : undefined,
-            }).catch((error: unknown) => {
-                const message = error instanceof Error ? error.message : String(error);
-
-                getMainWindow()?.webContents.send('transcribe:log', `Failed to save session transcript: ${message}`);
             });
         }
 

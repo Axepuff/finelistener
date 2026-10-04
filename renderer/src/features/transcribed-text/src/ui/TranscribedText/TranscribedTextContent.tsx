@@ -1,9 +1,10 @@
 import { ActionIcon, Box, Paper } from '@mantine/core';
 import { IconUserEdit } from '@tabler/icons-react';
-import type { SessionRawSpan } from 'electron/src/types/sessions';
+import type { SessionSpeakerAssignment, SessionTranscriptSegmentV1 } from 'electron/src/types/sessions';
 import React, { useEffect, useRef, type MouseEvent } from 'react';
 import type { TranscriptMatch, TranscriptMatchRange } from './search';
 import styles from './TranscribedText.module.css';
+import type { DeepReadonly } from 'renderer/src/stores/types';
 
 interface TranscribedSegment {
     id: string;
@@ -11,7 +12,8 @@ interface TranscribedSegment {
     prefix: string;
     startSeconds: number | null;
     timecode: string;
-    rawSpan?: SessionRawSpan;
+    assignment?: SessionSpeakerAssignment;
+    children?: Array<{ segment: DeepReadonly<SessionTranscriptSegmentV1> }>;
 }
 
 interface Props {
@@ -22,7 +24,7 @@ interface Props {
     searchQuery: string;
     transcriptText: string;
     onRegionClick: (event: MouseEvent<HTMLElement>) => void;
-    onEditSpeaker?: (span: SessionRawSpan) => void;
+    onEditSpeaker?: (span: SessionSpeakerAssignment) => void;
 }
 
 export const TranscribedTextContent: React.FC<Props> = ({
@@ -83,15 +85,16 @@ export const TranscribedTextContent: React.FC<Props> = ({
                                 {segment.text ? ' ' : ''}
                                 {segment.text ? segment.prefix : ''}
                                 {renderSegmentText(segment.text, index)}
-                                {segment.rawSpan && onEditSpeaker ? <ActionIcon size="xs" variant="subtle" aria-label="Assign speaker" onClick={(event) => { event.stopPropagation(); if (segment.rawSpan) onEditSpeaker(segment.rawSpan); }}><IconUserEdit size={14} /></ActionIcon> : null}
+                                {segment.assignment && onEditSpeaker ? <ActionIcon size="xs" variant="subtle" aria-label="Assign speaker" onClick={(event) => { event.stopPropagation(); if (segment.assignment) onEditSpeaker(segment.assignment); }}><IconUserEdit size={14} /></ActionIcon> : null}
+                                {segment.children && segment.children.length > 1 ? <details><summary>Show original fragments</summary>{segment.children.map(({ segment: child }, childIndex) => <div key={childIndex}>
+                                    <span data-regions={String(child.startSec)}>{child.startSec.toFixed(2)}s</span>{' '}{child.text}
+                                    {child.rawSpan && segment.assignment && onEditSpeaker ? <ActionIcon size="xs" variant="subtle" aria-label="Assign fragment speaker" onClick={(event) => { event.stopPropagation(); onEditSpeaker({ ...segment.assignment!, spans: [{ ...child.rawSpan! }] }); }}><IconUserEdit size={14} /></ActionIcon> : null}
+                                </div>)}</details> : null}
                                 {'\n'}
                             </>
                         ) : (
                             <span data-regions={segment.startSeconds?.toString()}>
-                                {segment.prefix}
                                 {renderSegmentText(segment.text, index)}
-                                {segment.rawSpan && onEditSpeaker ? <ActionIcon size="xs" variant="subtle" aria-label="Assign speaker" onClick={(event) => { event.stopPropagation(); if (segment.rawSpan) onEditSpeaker(segment.rawSpan); }}><IconUserEdit size={14} /></ActionIcon> : null}
-                                {index < plainSegments.length - 1 ? ' ' : ''}
                             </span>
                         )}
                     </React.Fragment>

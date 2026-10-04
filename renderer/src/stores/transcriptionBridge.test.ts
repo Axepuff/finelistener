@@ -68,10 +68,11 @@ it('delivers structured text and progress through the controller and preload to 
         onTranscribeProgress: api.onTranscribeProgressValue,
     });
     const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
     store.workspace.replaceWorkspace({
         id: '', title: 'Audio', createdAt: 1, updatedAt: 1, sourceKind: 'imported',
-        hasTranscript: false, audioOriginalPath: 'audio.wav', audioWavPath: 'audio.wav',
+        hasTranscript: false, audioMode: 'original', audioOriginalPath: 'audio.wav', audioWavPath: 'audio.wav',
     });
     store.initialize();
     try {

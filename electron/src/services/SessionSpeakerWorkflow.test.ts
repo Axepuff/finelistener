@@ -23,6 +23,7 @@ const sessionFor = (transcript: SessionTranscriptV1): SessionDetails => ({
 it('labels a microphone-only transcript without loading assets or invoking sherpa', async () => {
     let session = sessionFor(microphoneTranscript);
     const sessions = {
+        prepareSourceAudio: (audioPath: string) => Promise.resolve(audioPath),
         getSession: vi.fn(() => Promise.resolve(session)),
         getActiveSessionId: () => 'one',
         recognitionFingerprint: () => 'original',
@@ -67,6 +68,7 @@ it('analyzes only the selected system range with the system speaker count', asyn
         ],
     };
     const sessions = {
+        prepareSourceAudio: (audioPath: string) => Promise.resolve(audioPath),
         getSession: vi.fn(() => Promise.resolve(session)),
         getActiveSessionId: () => 'one',
         getActiveSessionGeneration: () => 0,
@@ -105,6 +107,7 @@ it('analyzes an imported mono source even when it sounds like a microphone', asy
         sourceKind: 'imported', tracks: undefined, audioWavPath: 'mono.wav',
     };
     const sessions = {
+        prepareSourceAudio: (audioPath: string) => Promise.resolve(audioPath),
         getSession: vi.fn(() => Promise.resolve(session)),
         getActiveSessionId: () => 'one',
         getActiveSessionGeneration: () => 0,
@@ -137,6 +140,7 @@ it('preserves recognition when a completed system track has no audio file', asyn
     } });
     const replaceTranscriptIfCurrent = vi.fn();
     const sessions = {
+        prepareSourceAudio: (audioPath: string) => Promise.resolve(audioPath),
         getSession: vi.fn(() => Promise.resolve(session)),
         getActiveSessionId: () => 'one',
         getActiveSessionGeneration: () => 0,
@@ -157,6 +161,7 @@ it('does not replace a prior visible transcript while a new source run has no co
         sources: [{ source: 'microphone', status: 'pending', segments: [] }],
     } });
     const sessions = {
+        prepareSourceAudio: (audioPath: string) => Promise.resolve(audioPath),
         getSession: vi.fn(() => Promise.resolve(session)),
         getActiveSessionId: () => 'one',
         getActiveSessionGeneration: () => 0,
@@ -182,6 +187,7 @@ it('does not replace an existing result after cancellation', async () => {
     };
     const replaceTranscriptIfCurrent = vi.fn();
     const sessions = {
+        prepareSourceAudio: (audioPath: string) => Promise.resolve(audioPath),
         getSession: vi.fn(() => Promise.resolve(session)),
         getActiveSessionId: () => 'one',
         recognitionFingerprint: () => 'original',

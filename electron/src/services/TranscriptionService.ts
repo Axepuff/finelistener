@@ -48,12 +48,14 @@ export class TranscriptionService {
         return (await this.transcribeResult(audioPath, opts)).text;
     }
 
-    public async transcribeResult(audioPath: string, opts: TranscribeOpts): Promise<StructuredTranscriptionResult> {
+    public async transcribeResult(audioPath: string, opts: TranscribeOpts, prepareAudio?: (signal: AbortSignal) => Promise<string>): Promise<StructuredTranscriptionResult> {
         if (this.activeOperation) throw new Error('Previous transcription is not finished yet');
         this.activeOperation = new AbortController();
         this.operationFinished = new Promise((resolve) => { this.finishOperation = resolve; });
         try {
-            const result = await this.serverRunner.transcribeResult(audioPath, opts);
+            const selectedAudio = prepareAudio ? await prepareAudio(this.activeOperation.signal) : audioPath;
+            this.activeOperation.signal.throwIfAborted();
+            const result = await this.serverRunner.transcribeResult(selectedAudio, prepareAudio ? { ...opts, optimized: false } : opts);
             this.activeOperation.signal.throwIfAborted();
             return result;
         } catch (error) {

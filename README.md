@@ -1,6 +1,22 @@
 # finelistener
 App that converts audio to txt
 
+## Audio and speaker labels
+
+Sessions default to Optimized audio. Original/Optimized is remembered per session and applies to playback and subsequent recognition/analysis; original recordings and existing transcripts are preserved. Transcribe saves recognition before local Community-1 speaker analysis. Speaker labels default on, with a remembered opt-out and optional exact system/file speaker count. Microphone-only sessions need no speaker model.
+
+Plain Text contains speech only. Timecodes groups adjacent same-speaker/source fragments across gaps up to five seconds; expand a turn to edit original fragments. Search, copy and TXT export use the selected view. A failed or stopped analysis retains saved text and can be retried separately.
+
+Community-1 runs in a private Python worker. Packaged builds download a pinned component on first use and reuse it offline after installation; size/status and cancellation are available in the UI. System Python and Hugging Face login are not required for inference. CUDA initialization failures retry once on CPU and remain visible.
+
+## Preparing Community-1 release assets
+
+Use Python 3.12 with pip to run scripts/prepare-community.py for win-x64-cpu, win-x64-gpu or mac-arm64 on the corresponding host. The script acquires hash-pinned private Python archives and wheels; model acquisition requires maintainer-approved gated access through HF_TOKEN or an already acquired --model-dir. Only pinned model files enter artifacts. The worker never receives acquisition credentials.
+
+The build lock is scripts/community-assets.json. Build resources contain the component manifest; oversized runtime/model archives are release-associated downloads, split when needed. npm run measure:community:installer -- win-x64-cpu (or win-x64-gpu) produces matched Windows baseline/component installer measurements and enforces the 200000000-byte addition limit. scripts/verify-community-release.py validates components and all three platform manifests before release upload.
+
+See [Community-1 acceptance](docs/testing/community-1-acceptance.md) for observed application checks, artifact sizes and unresolved clean-install, platform, listening and redistribution gates.
+
 ## TypeScript toolchain
 
 Type checking and Electron compilation use TypeScript 7.0.2 through the

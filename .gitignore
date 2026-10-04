@@ -18,6 +18,7 @@ docs/*
 docs/adr/*
 !docs/adr/0005-add-session-scoped-speaker-diarization.md
 !docs/adr/0006-use-community-1-and-speaker-turn-views.md
+!docs/adr/0007-community-worker-and-transcript-projections.md
 !docs/plans/
 docs/plans/*
 !docs/plans/community-1-agent-plan.md
@@ -25,5 +26,8 @@ docs/plans/*
 docs/testing/*
 !docs/testing/sherpa-acceptance.md
 !docs/testing/diarization-timestamps.md
+!docs/testing/community-1-acceptance.md
 outputs/
 .artifact-work/
+
+__pycache__/

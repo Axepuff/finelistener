@@ -49,6 +49,27 @@ export interface SessionRawSpan {
     endChar: number;
 }
 
+export type SessionAudioMode = 'original' | 'optimized';
+
+export interface SessionSpeakerAssignment {
+    recognitionRevision: string;
+    generation: string;
+    spans: SessionRawSpan[];
+}
+
+export interface SessionSpeakerProvenance {
+    version: 1;
+    engine: 'pyannote-community-1';
+    modelRevision: string;
+    runtimeRevision: string;
+    audioMode: SessionAudioMode;
+    backend: 'cpu' | 'cuda';
+    range?: { start: number; end: number };
+    speakerCount?: number;
+    regularIntervals: SessionSpeakerInterval[];
+    exclusiveIntervals: SessionSpeakerInterval[];
+}
+
 export interface SessionSpeakerInterval {
     startSec: number;
     endSec: number;
@@ -69,6 +90,7 @@ export interface SessionSpeakerMetadataV1 {
     recognitionRevision: string;
     generation: string;
     settings: { speakerCount?: number; range?: { start: number; end: number } };
+    provenance?: SessionSpeakerProvenance;
     intervals: SessionSpeakerInterval[];
     speakers: SessionSpeakerIdentity[];
     corrections: SessionSpeakerCorrection[];
@@ -131,6 +153,7 @@ export interface SessionTranscriptionInfo {
 }
 
 export interface SessionFileV1 {
+    audioMode?: SessionAudioMode;
     version: 1;
     id: string;
     recordingId?: string;
@@ -155,6 +178,7 @@ export interface SessionListItem {
 }
 
 export interface SessionDetails extends SessionListItem {
+    audioMode?: SessionAudioMode;
     audioOriginalPath: string;
     audioWavPath: string;
     audioOptimizedWavPath?: string;

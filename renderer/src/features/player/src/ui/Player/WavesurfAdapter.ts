@@ -18,6 +18,7 @@ const buildLocalFileUrl = (filePath: string): string => {
 export class WaveSurferAdapter extends PlayerAdapter {
     private readonly wavesurfer: WaveSurfer;
     private readonly regions: RegionsPlugin;
+    private loadingController: AbortController | null = null;
     private readonly onPlayingChange: (isPlaying: boolean) => void;
     private readonly onTimeUpdate: (time: number) => void;
     private readonly onReadyChange: (isPlaying: boolean) => void;
@@ -80,6 +81,9 @@ export class WaveSurferAdapter extends PlayerAdapter {
     }
 
     async loadSource(filePath?: string): Promise<void> {
+        this.loadingController?.abort();
+        const controller = new AbortController();
+        this.loadingController = controller;
         this.clearRegions();
         this.onPlayingChange(false);
         this.onTimeUpdate(0);
@@ -90,7 +94,18 @@ export class WaveSurferAdapter extends PlayerAdapter {
             return;
         }
 
-        await this.wavesurfer.load(buildLocalFileUrl(filePath));
+        try {
+            const response = await fetch(buildLocalFileUrl(filePath), { signal: controller.signal });
+            if (!response.ok) throw new Error('Audio fetch failed');
+            // Large local-protocol responses can fail in Response.blob on Electron.
+            const buffer = await response.arrayBuffer();
+            if (controller.signal.aborted) return;
+            await this.wavesurfer.loadBlob(new Blob([buffer], { type: 'audio/wav' }));
+        } catch (error: unknown) {
+            if (controller.signal.aborted) return;
+            console.error('Failed to load playback audio', error);
+            this.onReadyChange(false);
+        }
     }
 
     async playPause(): Promise<void> {
@@ -154,6 +169,7 @@ export class WaveSurferAdapter extends PlayerAdapter {
     }
 
     destroy(): void {
+        this.loadingController?.abort();
         this.wavesurfer.un('play', this.handlePlay);
         this.wavesurfer.un('pause', this.handlePause);
         this.wavesurfer.un('finish', this.handlePause);

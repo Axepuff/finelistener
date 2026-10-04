@@ -16,14 +16,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p renderer/tsconfig.json --noEmit",
     "format": "npm run lint:fix",
     "test": "vitest",
-    "prebuild:assets:mac": "bash scripts/build-whisper.sh mac-arm64 && bash scripts/prepare-models.sh && python3 scripts/prepare-sherpa.py mac-arm64",
-    "prebuild:assets:win-gpu": "bash scripts/build-whisper.sh win-x64-gpu && bash scripts/build-miniaudio.sh win-x64-gpu && bash scripts/prepare-models.sh && python scripts/prepare-sherpa.py win-x64-gpu",
-    "prebuild:assets:win-cpu": "bash scripts/build-whisper.sh win-x64-cpu && bash scripts/build-miniaudio.sh win-x64-cpu && bash scripts/prepare-models.sh && python scripts/prepare-sherpa.py win-x64-cpu",
+    "prebuild:assets:mac": "bash scripts/build-whisper.sh mac-arm64 && bash scripts/prepare-models.sh && python scripts/prepare-community.py mac-arm64",
+    "prebuild:assets:win-gpu": "bash scripts/build-whisper.sh win-x64-gpu && bash scripts/build-miniaudio.sh win-x64-gpu && bash scripts/prepare-models.sh && python scripts/prepare-community.py win-x64-gpu",
+    "prebuild:assets:win-cpu": "bash scripts/build-whisper.sh win-x64-cpu && bash scripts/build-miniaudio.sh win-x64-cpu && bash scripts/prepare-models.sh && python scripts/prepare-community.py win-x64-cpu",
     "make": "electron-forge make",
     "make:mac": "npm run build && cross-env BUILD_VARIANT=mac-arm64 electron-forge make --platform=darwin --arch=arm64",
     "make:win-gpu": "npm run build && cross-env BUILD_VARIANT=win-x64-gpu electron-forge make --platform=win32 --arch=x64",
     "make:win-cpu": "npm run build && cross-env BUILD_VARIANT=win-x64-cpu electron-forge make --platform=win32 --arch=x64",
-    "make:mac-dev": "npm run build && electron-forge make --platform=darwin --arch=arm64"
+    "make:mac-dev": "npm run build && electron-forge make --platform=darwin --arch=arm64",
+    "measure:community:installer": "node scripts/measure-community-installer.cjs"
   },
   "build": {
     "appId": "com.axepuff.finelistener",

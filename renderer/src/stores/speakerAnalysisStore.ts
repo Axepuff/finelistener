@@ -3,7 +3,7 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import type { RendererAdapter } from './rendererAdapter';
 
 export class SpeakerAnalysisStore {
-    enabled = false;
+    enabled = true;
 
     speakerCount: number | null = null;
 

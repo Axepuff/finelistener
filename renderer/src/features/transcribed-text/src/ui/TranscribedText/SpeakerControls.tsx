@@ -1,4 +1,4 @@
-import type { SessionRawSpan } from 'electron/src/types/sessions';
+import type { SessionSpeakerAssignment } from 'electron/src/types/sessions';
 import { Alert, Button, Group, Loader, Modal, NumberInput, Progress, Select, Stack, Text, TextInput } from '@mantine/core';
 import { observer } from 'mobx-react-lite';
 import React, { useState } from 'react';
@@ -6,7 +6,7 @@ import { useAppStore } from 'renderer/src/AppContext';
 import type { CommandResult } from 'renderer/src/stores/types';
 
 interface Props {
-    selectedSpan: SessionRawSpan | null;
+    selectedSpan: SessionSpeakerAssignment | null;
     onCloseSpan: () => void;
 }
 
@@ -44,9 +44,9 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
         || store.workspace.activeSession?.tracks?.some((track) => track.source === 'system');
     const assignmentOptions = [{ value: '__unknown__', label: 'Unknown speaker' }, ...options];
     const selectedSegment = selectedSpan ? transcript.segments.find((segment) =>
-        segment.rawSpan?.segmentId === selectedSpan.segmentId
-        && segment.rawSpan.startChar === selectedSpan.startChar
-        && segment.rawSpan.endChar === selectedSpan.endChar) : null;
+        segment.rawSpan?.segmentId === selectedSpan.spans[0]?.segmentId
+        && segment.rawSpan?.startChar === selectedSpan.spans[0]?.startChar
+        && segment.rawSpan?.endChar === selectedSpan.spans[0]?.endChar) : null;
     const execute = async (action: Promise<{ ok: true; value: void } | { ok: false; message: string }>) => {
         const result = await action;
         if (!result.ok) store.activityLog.appendEvent(result.message);
@@ -122,6 +122,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
             {speakerState.status === 'error' && speakerState.errorMessage ? (
                 <Alert color="yellow" title="Speaker action failed">{speakerState.errorMessage}</Alert>
             ) : null}
+            {transcript.speakers?.provenance ? <Text size="xs" c="dimmed">Community-1 · {transcript.speakers.provenance.backend.toUpperCase()} · {transcript.speakers.provenance.audioMode === 'optimized' ? 'Optimized' : 'Original'}</Text> : null}
             {speakerState.usedCpuFallback ? (
                 <Alert color="yellow" title="Using CPU">CUDA was unavailable. Speaker analysis continued on CPU.</Alert>
             ) : null}
@@ -167,7 +168,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                 if (!editPending) { setAssignId(null); setEditError(null); onCloseSpan(); }
             }} title="Assign speaker" centered={true}>
                 <Stack gap="sm">
-                    <Text size="sm" lineClamp={3}>{selectedSegment?.text}</Text>
+                    <Text size="sm" lineClamp={3}>{selectedSpan && selectedSpan.spans.length > 1 ? `${selectedSpan.spans.length} transcript fragments` : selectedSegment?.text}</Text>
                     <Select label="Speaker" data={assignmentOptions} value={assignId ?? selectedSegment?.speakerId ?? '__unknown__'} onChange={setAssignId} disabled={editPending !== null} />
                     {editError ? <Alert color="red" title="Could not save">{editError}</Alert> : null}
                     <Button loading={editPending === 'assign'} disabled={!selectedSpan || isBusy} onClick={() => {

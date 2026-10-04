@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { RecordingSource, SessionDetails, SessionSourceRun, SessionTranscriptV1 } from '../types/sessions';
+import type { RecordingSource, SessionDetails, SessionSourceRun, SessionTranscriptV1, SessionTranscriptionInfo } from '../types/sessions';
 import type { SessionTranscribeOpts, TranscribeOpts } from '../types/transcription';
 import { deriveSpeakerTranscript, materializeRecognitionTranscript, transcriptionResultToTranscript } from './sessionTranscript';
 import { deriveSourceTranscript } from './transcriptDuplicateFilter';
@@ -7,7 +7,8 @@ import type { StructuredTranscriptionResult } from './whisperServer/utils';
 
 interface SessionRepository {
     getSession(sessionId: string): Promise<SessionDetails>;
-    saveTranscript(sessionId: string, transcript: SessionTranscriptV1): Promise<void>;
+    saveTranscript(sessionId: string, transcript: SessionTranscriptV1, transcription?: SessionTranscriptionInfo): Promise<void>;
+    prepareSourceAudio?(audioPath: string, mode: 'original' | 'optimized', signal?: AbortSignal, microphoneGate?: boolean): Promise<string>;
 }
 
 export interface SourcePass {
@@ -31,7 +32,16 @@ export async function transcribeSessionSources(
     if (!Number.isFinite(opts?.runId)) throw new Error('Invalid transcription request');
     const session = await repository.getSession(sessionId);
     const tracks = session.tracks;
-    if (!tracks?.length) throw new Error('Session has no recording sources');
+    if (!tracks?.length) {
+        signal.throwIfAborted();
+        const mode = opts.optimized === false ? 'original' : 'optimized';
+        const selected = await repository.prepareSourceAudio?.(session.audioOriginalPath, mode, signal) ?? session.audioOriginalPath;
+        const result = await transcribe(selected, { ...opts, optimized: false }, { source: 'system', index: 0, count: 1, offsetSec: opts.segment?.start ?? 0 });
+        signal.throwIfAborted();
+        const transcript = transcriptionResultToTranscript(typeof result === 'string' ? { text: result } : result, opts.segment?.start ?? 0);
+        await repository.saveTranscript(sessionId, transcript, { language: opts.language, model: opts.modelPath ? 'custom' : opts.model, segment: opts.segment });
+        return repository.getSession(sessionId);
+    }
     const previousRun = session.transcript?.sourceRun;
     if (opts.retryFailed && !previousRun) throw new Error('No incomplete transcription to retry');
     const {
@@ -89,11 +99,13 @@ export async function transcribeSessionSources(
         try {
             const passOpts: TranscribeOpts = {
                 ...run.settings, runId: opts.runId,
-                segment: end !== undefined ? { start, end } : undefined,
-                microphoneGateEnabled: source.source === 'microphone' && hasSystemTrack
+                segment: end !== undefined ? { start, end: Math.min(end, track.durationMs === undefined ? end : track.durationMs / 1000) } : undefined,
+                microphoneGateEnabled: run.settings.optimized !== false && source.source === 'microphone' && hasSystemTrack
                     && run.settings.microphoneGateEnabled === true,
             };
-            const result = outsideTrack ? { text: '', segments: [] } : await transcribe(track.filePath, passOpts, {
+            const result = outsideTrack ? { text: '', segments: [] } : await transcribe(await repository.prepareSourceAudio?.(track.filePath,
+                run.settings.optimized === false ? 'original' : 'optimized', signal, passOpts.microphoneGateEnabled) ?? track.filePath,
+                { ...passOpts, optimized: false, microphoneGateEnabled: repository.prepareSourceAudio ? false : passOpts.microphoneGateEnabled }, {
                 source: source.source, index, count: pendingSources.length, offsetSec: offsetSec + start,
             });
             signal.throwIfAborted();

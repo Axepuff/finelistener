@@ -10,6 +10,7 @@ const toWorkspaceSession = (session: DeepReadonly<WorkspaceSession>): WorkspaceS
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     sourceKind: session.sourceKind,
+    audioMode: session.audioMode,
     audioOriginalPath: session.audioOriginalPath,
     audioWavPath: session.audioWavPath,
     audioOptimizedWavPath: session.audioOptimizedWavPath,
@@ -23,7 +24,7 @@ export class WorkspaceStore {
 
     private segmentSelectionValue: SegmentSelection | null = null;
 
-    private audioModeValue: AudioMode = 'original';
+    private audioModeValue: AudioMode = 'optimized';
 
     private isPlayingValue = false;
 
@@ -93,8 +94,8 @@ export class WorkspaceStore {
 
     replaceWorkspace(session: DeepReadonly<SessionDetails>): void {
         this.activeSessionValue = toWorkspaceSession(session);
-        this.audioModeValue = 'original';
-        this.audioSourcePathValue = session.audioWavPath;
+        this.audioModeValue = session.audioMode ?? 'optimized';
+        this.audioSourcePathValue = this.audioModeValue === 'optimized' ? session.audioOptimizedWavPath ?? null : session.audioWavPath;
         this.resetPlayback();
     }
 

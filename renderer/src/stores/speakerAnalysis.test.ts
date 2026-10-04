@@ -33,7 +33,7 @@ const labeledTranscript: SessionTranscriptV1 = {
 
 const session = (savedTranscript: SessionTranscriptV1, sourceKind: SessionDetails['sourceKind'] = 'imported'): SessionDetails => ({
     id: 'session-1', title: 'Session', createdAt: 1, updatedAt: 1,
-    sourceKind, hasTranscript: true, audioOriginalPath: '/audio.wav', audioWavPath: '/audio.wav',
+    sourceKind, hasTranscript: true, audioMode: 'original', audioOriginalPath: '/audio.wav', audioWavPath: '/audio.wav',
     tracks: sourceKind === 'recorded' ? [{ source: 'microphone', filePath: '/mic.wav', startOffsetMs: 0 }] : undefined,
     transcript: savedTranscript,
 });
@@ -41,6 +41,7 @@ const session = (savedTranscript: SessionTranscriptV1, sourceKind: SessionDetail
 describe('speaker analysis in the renderer', () => {
     it('offers optional CUDA preparation before transcription when speaker labels are enabled', async () => {
         const store = new AppStore(createFakeRendererAdapter().adapter);
+        void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session(transcript));
         await store.speakers.setEnabled(true);
         store.speakers.setAssets({ cpuReady: true, cudaReady: false, cudaAvailable: true });
@@ -48,10 +49,10 @@ describe('speaker analysis in the renderer', () => {
         const render = () => renderToStaticMarkup(createElement(MantineProvider, null,
             createElement(AppContext.Provider, { value: store }, createElement(TranscribeControl))));
 
-        expect(render()).toContain('Prepare CUDA component');
-        expect(render()).toContain('continue on CPU');
+        expect(render()).toContain('Prepare speaker component');
+        expect(render()).toContain('recognition is saved first');
         store.speakers.setAssets({ cpuReady: true, cudaReady: true, cudaAvailable: true });
-        expect(render()).not.toContain('Prepare CUDA component');
+        expect(render()).not.toContain('Prepare speaker component');
     });
 
     it('does not replace freshly prepared assets with an older status response', async () => {
@@ -61,6 +62,7 @@ describe('speaker analysis in the renderer', () => {
             prepareSpeakerAssets: () => Promise.resolve({ cpuReady: true, cudaReady: true, cudaAvailable: true }),
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.speakers.initialize();
         expect((await store.prepareSpeakerAssets(true)).ok).toBe(true);
         resolveOldStatus({ cpuReady: true, cudaReady: false, cudaAvailable: true });
@@ -76,20 +78,22 @@ describe('speaker analysis in the renderer', () => {
         const transcribe = vi.fn(() => Promise.reject(new Error('must not transcribe')));
         const fake = createFakeRendererAdapter({ analyzeSpeakers, prepareSpeakerAssets, transcribe });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session(transcript, 'recorded'));
         store.transcription.replaceSavedTranscript(transcript);
 
         expect((await store.analyzeSpeakers()).ok).toBe(true);
-        expect(analyzeSpeakers).toHaveBeenCalledWith('session-1', { speakerCount: undefined });
+        expect(analyzeSpeakers).toHaveBeenCalledWith('session-1', expect.objectContaining({ speakerCount: undefined, audioMode: 'original', recognitionRevision: 'revision-1' }));
         expect(prepareSpeakerAssets).not.toHaveBeenCalled();
         expect(transcribe).not.toHaveBeenCalled();
-        expect(store.transcription.plainText).toBe('Microphone · Microphone speaker: Hello');
+        expect(store.transcription.plainText).toBe('Hello');
     });
 
     it('retains existing labels when a confirmed rerun fails', async () => {
         const analyzeSpeakers = vi.fn(() => Promise.reject(new Error('native process failed')));
         const fake = createFakeRendererAdapter({ analyzeSpeakers });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session(labeledTranscript));
         store.transcription.replaceSavedTranscript(labeledTranscript);
         const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -109,6 +113,7 @@ describe('speaker analysis in the renderer', () => {
         const renameSpeaker = vi.fn(() => Promise.reject(new Error('write failed')));
         const fake = createFakeRendererAdapter({ renameSpeaker });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session(labeledTranscript));
         store.transcription.replaceSavedTranscript(labeledTranscript);
         const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -131,6 +136,7 @@ describe('speaker analysis in the renderer', () => {
             analyzeSpeakers,
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session({ version: 1, segments: [] }));
         await store.speakers.setEnabled(true);
 
@@ -145,6 +151,7 @@ describe('speaker analysis in the renderer', () => {
         const analyzeSpeakers = vi.fn();
         const fake = createFakeRendererAdapter({ transcribeSession, analyzeSpeakers });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session(transcript, 'recorded'));
         store.transcription.replaceSavedTranscript(transcript);
         await store.speakers.setEnabled(true);
@@ -175,6 +182,7 @@ describe('speaker analysis in the renderer', () => {
             analyzeSpeakers,
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session({ version: 1, segments: [] }));
         await store.speakers.setEnabled(true);
         store.speakers.setSpeakerCount(2);
@@ -185,7 +193,7 @@ describe('speaker analysis in the renderer', () => {
         finishRecognition('Hello');
 
         expect((await pending).ok).toBe(true);
-        expect(analyzeSpeakers).toHaveBeenCalledWith('session-1', { speakerCount: 2 });
+        expect(analyzeSpeakers).toHaveBeenCalledWith('session-1', expect.objectContaining({ speakerCount: 2, audioMode: 'original' }));
     });
 
     it('requires a new replacement confirmation after a model download changes sessions', async () => {
@@ -196,6 +204,7 @@ describe('speaker analysis in the renderer', () => {
             downloadWhisperModel: () => Promise.resolve(),
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session(labeledTranscript));
         store.transcription.replaceSavedTranscript(labeledTranscript);
 
@@ -214,6 +223,7 @@ describe('speaker analysis in the renderer', () => {
             downloadWhisperModel: () => Promise.resolve(),
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session(labeledTranscript));
         store.transcription.replaceSavedTranscript(labeledTranscript);
 
@@ -242,6 +252,7 @@ describe('speaker analysis in the renderer', () => {
         const transcribeSession = vi.fn(() => Promise.resolve(session(completed, 'recorded')));
         const fake = createFakeRendererAdapter({ transcribeSession });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session(partial, 'recorded'));
         store.transcription.replaceSavedTranscript(partial);
 
@@ -260,6 +271,7 @@ describe('speaker analysis in the renderer', () => {
             stopSpeakerAnalysis: () => new Promise<boolean>((resolve) => { resolveStop = resolve; }),
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session(transcript));
         store.transcription.replaceSavedTranscript(transcript);
 
@@ -289,6 +301,7 @@ describe('speaker analysis in the renderer', () => {
             stopSpeakerAnalysis,
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session(transcript));
         store.transcription.replaceSavedTranscript(transcript);
 

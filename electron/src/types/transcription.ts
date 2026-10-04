@@ -49,6 +49,9 @@ export interface SessionTranscribeOpts extends TranscribeOpts {
 }
 
 export interface AnalyzeSpeakersOptions {
+    audioMode?: 'original' | 'optimized';
+    recognitionRevision?: string;
+    range?: Segment;
     speakerCount?: number;
 }
 
@@ -61,6 +64,8 @@ export interface SpeakerAnalysisProgressEvent {
 }
 
 export interface SpeakerAssetStatus {
+    downloadBytes?: number;
+    runtimeRevision?: string;
     cpuReady: boolean;
     cudaReady: boolean;
     cudaAvailable: boolean;

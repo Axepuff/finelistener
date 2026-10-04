@@ -1,4 +1,4 @@
-import type { SessionDetails, SessionRawSpan } from 'electron/src/types/sessions';
+import type { SessionDetails, SessionRawSpan, SessionSpeakerAssignment } from 'electron/src/types/sessions';
 import type { AnalyzeSpeakersOptions } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelName } from 'electron/src/types/whisper';
@@ -278,41 +278,27 @@ export class AppStore {
     async setAudioMode(mode: AudioMode): Promise<CommandResult> {
         if (this.operations.isBusy) return commandFailure('Another workspace operation is already running.');
 
-        if (mode === 'original') {
-            this.workspace.useOriginalAudio();
-
-            return commandSuccess(undefined);
-        }
-
         const session = this.workspace.activeSession;
-
         if (!session || !this.adapter) return commandFailure('No session is open.');
-
-        if (session.audioOptimizedWavPath) {
-            this.workspace.useOptimizedAudio(session);
-
-            return commandSuccess(undefined);
-        }
-
         const operation = this.operations.begin('optimizing-audio');
 
         if (!operation) return commandFailure('Another workspace operation is already running.');
 
         try {
-            const updatedSession = await this.adapter.optimizeAudio(session.id);
+            const updatedSession = await this.adapter.optimizeAudio(session.id, mode);
 
             if (!this.operations.owns(operation) || this.workspace.activeSessionId !== session.id || this.disposed) {
                 return commandFailure('Audio optimization was replaced before it finished.');
             }
 
-            if (!updatedSession.audioOptimizedWavPath) {
+            if (mode === 'optimized' && !updatedSession.audioOptimizedWavPath) {
                 console.error('Optimization completed but no optimized path was returned');
 
                 return commandFailure('The optimized audio could not be loaded.');
             }
 
             runInAction(() => {
-                this.workspace.useOptimizedAudio(updatedSession);
+                this.workspace.replaceWorkspace(updatedSession);
             });
 
             return commandSuccess(undefined);
@@ -456,7 +442,7 @@ export class AppStore {
             options: { ...options },
             sourceAware: Boolean(this.workspace.activeSession?.tracks?.length),
             retryFailed,
-            optimized: this.workspace.audioMode === 'optimized',
+            optimized: retryFailed ? (this.transcription.savedTranscript?.sourceRun?.settings.optimized ?? true) : this.workspace.audioMode === 'optimized',
             hideDuplicateSpeech: this.transcription.preferredDuplicateFilterEnabled,
         };
         const startedAt = performance.now();
@@ -496,9 +482,9 @@ export class AppStore {
                 }
             }
 
-            if (sessionId && result.status === 'success' && labelSpeakersRequested && isCurrent()) {
+            if (sessionId && result.status === 'success' && this.transcription.savedTranscript?.segments.some((segment) => segment.text.trim()) && labelSpeakersRequested && isCurrent()) {
                 this.operations.transition(operation, 'analyzing-speakers');
-                return await this.runSpeakerAnalysis(sessionId, { speakerCount: speakerCountRequested }, operation);
+                return await this.runSpeakerAnalysis(sessionId, { speakerCount: speakerCountRequested, audioMode: request.optimized ? 'optimized' : 'original', range: request.segment, recognitionRevision: this.transcription.savedTranscript?.recognitionRevision }, operation);
             }
 
             return commandSuccess(undefined);
@@ -549,7 +535,7 @@ export class AppStore {
         if (!operation) return commandFailure('Another workspace operation is already running.');
 
         try {
-            return await this.runSpeakerAnalysis(sessionId, { speakerCount: this.speakers.speakerCount ?? undefined }, operation);
+            return await this.runSpeakerAnalysis(sessionId, { speakerCount: this.speakers.speakerCount ?? undefined, audioMode: this.workspace.audioMode, recognitionRevision: this.transcription.savedTranscript?.recognitionRevision }, operation);
         } finally {
             runInAction(() => this.operations.finish(operation));
         }
@@ -712,7 +698,7 @@ export class AppStore {
         return this.editSpeaker((sessionId) => this.adapter!.renameSpeaker(sessionId, speakerId, trimmed));
     }
 
-    assignSpeaker(span: SessionRawSpan, speakerId: string | null): Promise<CommandResult> {
+    assignSpeaker(span: SessionRawSpan | SessionSpeakerAssignment, speakerId: string | null): Promise<CommandResult> {
         return this.editSpeaker((sessionId) => this.adapter!.assignSpeaker(sessionId, span, speakerId));
     }
 

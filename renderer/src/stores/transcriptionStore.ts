@@ -4,7 +4,7 @@ import type { WhisperModelName } from 'electron/src/types/whisper';
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { TranscriptionRunOutcome } from 'renderer/src/features/transcribe-state/src/model/transcriptionWorkflow';
 import type { RendererAdapter } from './rendererAdapter';
-import { formatTranscriptSegment, parseTranscript, transcriptToHtml, transcriptToTimecodedText } from './transcriptFormat';
+import { transcriptToPlainText, parseTranscript, transcriptToHtml, transcriptToTimecodedText } from './transcriptFormat';
 import { commandFailure, commandSuccess, type CommandResult, type DeepReadonly, type Segment } from './types';
 
 export interface StartTranscriptionOptions {
@@ -153,10 +153,7 @@ export class TranscriptionStore {
     }
 
     get plainText(): string {
-        const segments = this.visibleTranscript?.segments ?? [];
-
-        return segments.map((segment) => formatTranscriptSegment(segment, this.visibleTranscript))
-            .join(segments.some((segment) => segment.source || this.visibleTranscript?.speakers) ? '\n' : ' ');
+        return transcriptToPlainText(this.visibleTranscript);
     }
 
     get renderedHtml(): string {
@@ -244,6 +241,7 @@ export class TranscriptionStore {
             language: request.options.language,
             model: request.options.model,
             sessionId: request.sessionId,
+            optimized: request.optimized,
             modelPath: request.options.modelPath,
             maxContext: request.options.maxContext ?? -1,
             maxLen: request.options.maxLen ?? 0,

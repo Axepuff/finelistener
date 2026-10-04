@@ -2,8 +2,8 @@ import { ActionIcon, Alert, Button, Group, Modal, Paper, Progress, Stack, Text, 
 import { IconHeadphones, IconPlus } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState, type MouseEvent } from 'react';
-import type { SessionRawSpan } from 'electron/src/types/sessions';
-import { formatTranscriptPrefix, formatTranscriptRegionLabel } from 'renderer/src/stores/transcriptFormat';
+import type { SessionSpeakerAssignment } from 'electron/src/types/sessions';
+import { formatTranscriptPrefix, formatTranscriptRegionLabel, projectTranscript } from 'renderer/src/stores/transcriptFormat';
 import { useAppStore } from '../../../../../AppContext';
 import { TranscribedTextContent } from './TranscribedTextContent';
 import { TranscribedTextControls } from './TranscribedTextControls';
@@ -24,7 +24,7 @@ export const TranscribedText: React.FC = observer(() => {
     const [selectedSpan, setSelectedSpan] = useState<{
         sessionId: string | null;
         generation: string | undefined;
-        span: SessionRawSpan;
+        span: SessionSpeakerAssignment;
     } | null>(null);
     const currentTextValue = showRegions ? transcription.timecodedText : transcription.plainText;
     const isInitialEmptyState = (
@@ -33,15 +33,19 @@ export const TranscribedText: React.FC = observer(() => {
     ) && currentTextValue.trim().length === 0;
     const isReadyEmptyState = store.transcriptionWorkflow.state === 'loaded';
     const audioTitle = store.workspace.activeSession?.title;
-    const plainSegments = transcription.visibleTranscript?.segments.map((segment, index) => ({
-        id: segment.rawSpan ? `${segment.rawSpan.segmentId}:${segment.rawSpan.startChar}:${segment.rawSpan.endChar}` :
-            segment.id ?? `legacy-${index}`,
+    const plainSegments = projectTranscript(transcription.visibleTranscript, showRegions).map((segment, index) => ({
+        id: segment.members.map((member) => member.segment.rawSpan ? `${member.segment.rawSpan.segmentId}:${member.segment.rawSpan?.startChar}:${member.segment.rawSpan?.endChar}` : `legacy-${index}`).join('|'),
         text: segment.text,
-        prefix: formatTranscriptPrefix(segment, transcription.visibleTranscript),
+        prefix: showRegions ? formatTranscriptPrefix(segment, transcription.visibleTranscript) : '',
         startSeconds: segment.startSec,
         timecode: formatTranscriptRegionLabel(segment),
-        rawSpan: segment.rawSpan ? { ...segment.rawSpan } : undefined,
-    })) ?? [];
+        assignment: transcription.savedTranscript?.speakers && segment.members.every((member) => member.segment.rawSpan) ? {
+            generation: transcription.savedTranscript.speakers.generation,
+            recognitionRevision: transcription.savedTranscript.speakers.recognitionRevision,
+            spans: segment.members.map((member) => ({ ...member.segment.rawSpan! })),
+        } : undefined,
+        children: segment.members.map((member) => ({ segment: member.segment })),
+    }));
     const currentSelectedSpan = selectedSpan?.sessionId === store.workspace.activeSessionId
         && selectedSpan.generation === transcription.savedTranscript?.speakers?.generation ? selectedSpan.span : null;
     const matches = findTranscriptMatches(plainSegments, searchQuery);

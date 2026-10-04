@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useAppStore } from 'renderer/src/AppContext';
 import styles from './TranscribedText.module.css';
+import { transcriptToHtml } from 'renderer/src/stores/transcriptFormat';
 
 interface Props {
     currentTextValue: string;
@@ -46,7 +47,10 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
         if (!currentTextValue) return;
 
         try {
-            await navigator.clipboard.writeText(currentTextValue);
+            await navigator.clipboard.write([new ClipboardItem({
+                'text/plain': new Blob([currentTextValue], { type: 'text/plain' }),
+                'text/html': new Blob([transcriptToHtml(store.transcription.visibleTranscript, showRegions)], { type: 'text/html' }),
+            })]);
             setCopyNotificationKey((value) => value + 1);
             setIsCopyNotificationOpen(true);
         } catch (error) {

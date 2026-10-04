@@ -21,7 +21,7 @@ const VARIANT_CONFIG = {
         extraResource: [
             buildAssetsDir('mac-arm64', 'whisper'),
             path.resolve(__dirname, 'build-assets/models'),
-            buildAssetsDir('mac-arm64', 'sherpa'),
+            buildAssetsDir('mac-arm64', 'community'),
         ],
         asarUnpack: [
             '**/node_modules/ffmpeg-static/**',
@@ -45,7 +45,7 @@ const VARIANT_CONFIG = {
             buildAssetsDir('win-x64-gpu', 'whisper'),
             path.resolve(__dirname, 'build-assets/models'),
             buildAssetsDir('win-x64-gpu', 'miniaudio-loopback'),
-            buildAssetsDir('win-x64-gpu', 'sherpa'),
+            buildAssetsDir('win-x64-gpu', 'community'),
         ],
         asarUnpack: [
             '**/node_modules/ffmpeg-static/**',
@@ -69,7 +69,7 @@ const VARIANT_CONFIG = {
             buildAssetsDir('win-x64-cpu', 'whisper'),
             path.resolve(__dirname, 'build-assets/models'),
             buildAssetsDir('win-x64-cpu', 'miniaudio-loopback'),
-            buildAssetsDir('win-x64-cpu', 'sherpa'),
+            buildAssetsDir('win-x64-cpu', 'community'),
         ],
         asarUnpack: [
             '**/node_modules/ffmpeg-static/**',
@@ -244,7 +244,7 @@ module.exports = {
             NSAudioCaptureUsageDescription: 'This app records system audio for transcription.',
         },
         extraResource,
-        ignore: packagerIgnore,
+        ignore: [...packagerIgnore, /[\\/]\.artifact-work(?:[\\/]|$)/, /[\\/]build-assets(?:[\\/]|$)/, /[\\/]outputs(?:[\\/]|$)/],
     },
     rebuildConfig: {},
     makers,
