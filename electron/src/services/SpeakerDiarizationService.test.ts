@@ -40,6 +40,28 @@ it('parses v1.13.8 CLI intervals relative to a selected range', () => {
     ]);
 });
 
+it('reports split native progress before completion without leaking diagnostic text', async () => {
+    const values: number[] = [];
+    let observed!: () => void;
+    const progress = new Promise<void>((resolve) => { observed = resolve; });
+    const controller = new AbortController();
+    const running = runSpeakerProcess(process.execPath, ['-e',
+        "process.stderr.write('diagnostic 99%\\npro'); setTimeout(() => { process.stderr.write('gress 25.50%\\rprogress 25.90%\\n'); }, 30); setInterval(() => {}, 1000);",
+    ], controller.signal, tmpdir(), undefined, (percent) => { values.push(percent); observed(); });
+    const rejection = expect(running).rejects.toThrow('Speaker analysis cancelled');
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        await Promise.race([progress, new Promise<never>((_resolve, reject) => {
+            timer = setTimeout(() => reject(new Error('No live progress')), 2000);
+        })]);
+        expect(values).toEqual([25]);
+    } finally {
+        if (timer) clearTimeout(timer);
+        controller.abort();
+        await rejection;
+    }
+});
+
 it('sends only the selected audio to sherpa preparation', async () => {
     const directory = await fs.mkdtemp(path.join(tmpdir(), 'finelistener-speaker-range-'));
     const sourcePath = path.join(directory, 'source.wav');

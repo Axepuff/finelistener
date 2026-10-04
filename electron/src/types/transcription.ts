@@ -54,6 +54,7 @@ export interface AnalyzeSpeakersOptions {
 
 export interface SpeakerAnalysisProgressEvent {
     sessionId: string;
+    percent?: number;
     phase: 'preparing' | 'downloading' | 'converting' | 'analyzing' | 'saving' | 'fallback';
     downloadedBytes?: number;
     totalBytes?: number;

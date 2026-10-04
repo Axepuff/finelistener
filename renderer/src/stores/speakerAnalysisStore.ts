@@ -13,6 +13,8 @@ export class SpeakerAnalysisStore {
 
     totalBytes = 0;
 
+    percent: number | null = null;
+
     status: 'idle' | 'running' | 'success' | 'error' | 'cancelled' = 'idle';
 
     errorMessage: string | null = null;
@@ -83,6 +85,7 @@ export class SpeakerAnalysisStore {
     }
 
     begin(): void {
+        this.percent = null;
         this.status = 'running';
         this.phase = 'preparing';
         this.downloadedBytes = 0;
@@ -94,6 +97,8 @@ export class SpeakerAnalysisStore {
     updateProgress(event: SpeakerAnalysisProgressEvent): void {
         if (this.status !== 'running') return;
         this.phase = event.phase;
+        this.percent = event.percent !== undefined && Number.isFinite(event.percent) ?
+            Math.max(0, Math.min(100, event.percent)) : null;
         if (event.phase === 'fallback') this.usedCpuFallback = true;
         this.downloadedBytes = event.downloadedBytes ?? 0;
         this.totalBytes = event.totalBytes ?? 0;

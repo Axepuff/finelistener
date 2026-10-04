@@ -123,7 +123,8 @@ it('analyzes an imported mono source even when it sounds like a microphone', asy
     await new SessionSpeakerWorkflow(sessions, runtime, vi.fn()).analyze('one', {});
 
     expect(runtime.analyze).toHaveBeenCalledTimes(1);
-    expect(runtime.analyze.mock.calls[0][0]).toBe('mono.wav');
+    // The listening WAV may already have dynamic normalization applied.
+    expect(runtime.analyze.mock.calls[0][0]).toBe('original.wav');
     expect(session.transcript?.speakers?.speakers).toEqual([]);
 });
 

@@ -113,7 +113,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
             ) : null}
             {isRunning ? (
                 <Group gap={8} align="center" wrap="nowrap" role="status">
-                    <Text size="sm">{phaseLabels[speakerState.phase ?? 'preparing']}</Text>
+                    <Text size="sm">{phaseLabels[speakerState.phase ?? 'preparing']}{speakerState.phase === 'analyzing' && speakerState.percent !== null ? ` (${speakerState.percent}%)` : ''}</Text>
                     {speakerState.phase === 'downloading' && speakerState.totalBytes > 0 ? (
                         <Progress value={100 * speakerState.downloadedBytes / speakerState.totalBytes} size="sm" style={{ flex: 1 }} />
                     ) : <Loader size="xs" />}

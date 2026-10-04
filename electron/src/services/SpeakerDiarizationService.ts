@@ -34,6 +34,7 @@ export interface SpeakerPreparationProgress {
 
 export interface SpeakerAnalysisProgress {
     phase: 'converting' | 'analyzing' | 'fallback';
+    percent?: number;
 }
 
 interface FileEntry {
@@ -132,12 +133,14 @@ const safeArchiveEntries = (listing: string, files: Record<string, FileEntry>): 
     });
 };
 
-export const runSpeakerProcess = (binary: string, args: string[], signal: AbortSignal, cwd: string, env?: NodeJS.ProcessEnv): Promise<{ stdout: string; stderr: string }> =>
+export const runSpeakerProcess = (binary: string, args: string[], signal: AbortSignal, cwd: string, env?: NodeJS.ProcessEnv, onProgress?: (percent: number) => void): Promise<{ stdout: string; stderr: string }> =>
     new Promise((resolve, reject) => {
         const child = spawn(binary, args, { cwd, env, signal, windowsHide: true });
         let stdout = '';
         let stderr = '';
         let processError: Error | null = null;
+        let progressBuffer = '';
+        let lastPercent = -1;
         child.stdout.setEncoding('utf8');
         child.stderr.setEncoding('utf8');
         child.stdout.on('data', (chunk: string) => {
@@ -149,6 +152,18 @@ export const runSpeakerProcess = (binary: string, args: string[], signal: AbortS
         });
         child.stderr.on('data', (chunk: string) => {
             stderr = (stderr + chunk).slice(-100_000);
+            progressBuffer += chunk;
+            const lines = progressBuffer.split(/[\r\n]/);
+            progressBuffer = (lines.pop() ?? '').slice(-1000);
+            for (const line of lines) {
+                const match = /^progress (\d+(?:\.\d+)?)%$/.exec(line.trim());
+                if (!match) continue;
+                const percent = Math.min(100, Math.floor(Number(match[1])));
+                if (percent > lastPercent) {
+                    lastPercent = percent;
+                    onProgress?.(percent);
+                }
+            }
         });
         child.on('error', (error) => { processError = error; });
         child.on('close', (code) => {
@@ -320,8 +335,18 @@ export class SpeakerDiarizationService {
             if (useCuda) {
                 try {
                     onProgress?.({ phase: 'analyzing' });
-                    const cuda = await this.runCli(prepared.wavPath, options, signal, 'cuda', status.cudaRoot);
-                    if (cuda.gpuStages.segmentation && cuda.gpuStages.embedding) {
+                    // Profiling an entire recording accumulates millions of events in native memory.
+                    // Verify both providers on a bounded sample, then run without profiling.
+                    const probe = await this.audio.prepareAudioSegmentExactly(prepared.wavPath, { start: 0, end: 30 }, signal);
+                    let verified: boolean;
+                    try {
+                        const result = await this.runCli(probe.wavPath, { startSec: 0, endSec: 30 }, signal, 'cuda', status.cudaRoot, undefined, true);
+                        verified = result.gpuStages.segmentation && result.gpuStages.embedding;
+                    } finally {
+                        await probe.cleanup();
+                    }
+                    if (verified) {
+                        const cuda = await this.runCli(prepared.wavPath, options, signal, 'cuda', status.cudaRoot, onProgress);
                         return { intervals: cuda.intervals, backend: 'cuda', fallbackUsed: false };
                     }
                     console.warn('Sherpa CUDA run did not demonstrate execution in both model stages; retrying on CPU');
@@ -331,18 +356,18 @@ export class SpeakerDiarizationService {
                 }
                 signal.throwIfAborted();
                 onProgress?.({ phase: 'fallback' });
-                const cpu = await this.runCli(prepared.wavPath, options, signal, 'cpu');
+                const cpu = await this.runCli(prepared.wavPath, options, signal, 'cpu', undefined, onProgress);
                 return { intervals: cpu.intervals, backend: 'cpu', fallbackUsed: true };
             }
             onProgress?.({ phase: 'analyzing' });
-            const cpu = await this.runCli(prepared.wavPath, options, signal, 'cpu');
+            const cpu = await this.runCli(prepared.wavPath, options, signal, 'cpu', undefined, onProgress);
             return { intervals: cpu.intervals, backend: 'cpu', fallbackUsed: false };
         } finally {
             await prepared.cleanup();
         }
     }
 
-    private async runCli(wavPath: string, options: SpeakerAnalysisOptions, signal: AbortSignal, backend: 'cpu' | 'cuda', cudaRoot?: string | null): Promise<CliResult> {
+    private async runCli(wavPath: string, options: SpeakerAnalysisOptions, signal: AbortSignal, backend: 'cpu' | 'cuda', cudaRoot?: string | null, onProgress?: (progress: SpeakerAnalysisProgress) => void, verifyCuda = false): Promise<CliResult> {
         const root = this.bundleRoot();
         const binDir = backend === 'cuda' ? cudaRoot : path.join(root, 'cpu', process.platform === 'darwin' ? 'bin' : '');
         if (!binDir) throw new Error('CUDA speaker component is not ready');
@@ -361,9 +386,11 @@ export class SpeakerDiarizationService {
                 options.speakerCount === undefined ? '--clustering.cluster-threshold=0.5' : `--clustering.num-clusters=${options.speakerCount}`,
             ];
             for (const stage of stages) {
-                const config = path.join(work, `${stage}.config`);
-                await fsp.writeFile(config, `ProfilingFilePrefix=${stage}-profile\n`, 'utf8');
-                args.push(`--${stage}.provider=${backend}:${stage}.config`);
+                if (verifyCuda) {
+                    const config = path.join(work, `${stage}.config`);
+                    await fsp.writeFile(config, `ProfilingFilePrefix=${stage}-profile\n`, 'utf8');
+                    args.push(`--${stage}.provider=${backend}:${stage}.config`);
+                } else args.push(`--${stage}.provider=${backend}`);
             }
             args.push('audio.wav');
             const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
@@ -371,11 +398,13 @@ export class SpeakerDiarizationService {
                 ...process.env,
                 PATH: [binDir, path.join(systemRoot, 'System32'), systemRoot].join(path.delimiter),
             } : process.env;
-            const output = await runSpeakerProcess(binary, args, signal, work, env);
+            onProgress?.({ phase: 'analyzing', percent: 0 });
+            const output = await runSpeakerProcess(binary, args, signal, work, env,
+                (percent) => onProgress?.({ phase: 'analyzing', percent }));
             if (!output.stdout.includes('Started')) throw new Error(`Sherpa returned no result marker: ${output.stderr}`);
             const intervals = parseSpeakerIntervals(output.stdout, options.startSec, options.endSec);
             const gpuStages = { segmentation: false, embedding: false };
-            if (backend === 'cuda') {
+            if (verifyCuda) {
                 const files = await fsp.readdir(work);
                 for (const stage of stages) {
                     const profiles = files.filter((name) => name.startsWith(`${stage}-profile`) && name.endsWith('.json'));

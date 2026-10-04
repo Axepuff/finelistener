@@ -24,7 +24,7 @@ interface SpeakerRuntime {
         audioPath: string,
         options: { startSec: number; endSec?: number; speakerCount?: number; preferCuda?: boolean },
         signal: AbortSignal,
-        onProgress?: (progress: { phase: 'converting' | 'analyzing' | 'fallback' }) => void,
+        onProgress?: (progress: { phase: 'converting' | 'analyzing' | 'fallback'; percent?: number }) => void,
     ): Promise<{ intervals: SessionSpeakerInterval[]; backend: 'cpu' | 'cuda'; fallbackUsed: boolean }>;
 }
 
@@ -119,7 +119,7 @@ export class SessionSpeakerWorkflow {
             const hasImportedText = session.sourceKind === 'imported'
                 && (transcript.recognitionSegments ?? transcript.segments).length > 0;
             const systemTrack = session.tracks?.find((track) => track.source === 'system');
-            const audioPath = session.sourceKind === 'imported' ? session.audioWavPath : systemTrack?.filePath;
+            const audioPath = session.sourceKind === 'imported' ? session.audioOriginalPath : systemTrack?.filePath;
 
             if ((completedSystem || hasImportedText) && !audioPath) {
                 throw new Error('Speaker analysis audio is unavailable');
@@ -143,7 +143,7 @@ export class SessionSpeakerWorkflow {
                     const result = await this.runtime.analyze(audioPath, {
                         startSec, endSec, speakerCount: options.speakerCount,
                         preferCuda: assets.cudaReady && assets.cudaAvailable,
-                    }, signal, (event) => this.progress({ sessionId, phase: event.phase }));
+                    }, signal, (event) => this.progress({ sessionId, ...event }));
                     signal.throwIfAborted();
                     if (result.fallbackUsed) this.progress({ sessionId, phase: 'fallback' });
                     for (const interval of result.intervals) {
