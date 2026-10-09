@@ -44,9 +44,8 @@ export const Player: FC = observer(() => {
         };
     }, [workspace]);
 
-    const player = adapterRef.current;
-
     useEffect(() => {
+        const player = adapterRef.current;
         if (!player) return;
 
         workspace.clearSegment();
@@ -61,32 +60,31 @@ export const Player: FC = observer(() => {
 
         workspace.setPlayerLoading(true);
         void player.loadSource(currentAudioPath);
-    }, [currentAudioPath, player, workspace]);
+    }, [currentAudioPath, workspace]);
 
     useEffect(() => {
+        const player = adapterRef.current;
         if (!player) return;
 
         if (!Number.isFinite(workspace.requestedPlaybackTime)) return;
 
         player.seekTo(workspace.requestedPlaybackTime);
         workspace.setPlaybackPosition(workspace.requestedPlaybackTime);
-    }, [player, workspace, workspace.requestedPlaybackTime]);
+    }, [workspace, workspace.requestedPlaybackTime]);
 
     const onPlayPause = async () => {
-        if (player) {
-            await player.playPause();
-        }
+        await adapterRef.current?.playPause();
     };
 
     const handleMarkStart = () => {
-        const safeTime = Math.max(0, player?.currentTime ?? 0);
+        const safeTime = Math.max(0, adapterRef.current?.currentTime ?? 0);
 
         adapterRef.current?.setRegion({ start: safeTime });
         workspace.setSegmentStart(safeTime);
     };
 
     const handleMarkEnd = () => {
-        const safeTime = Math.max(0, player?.currentTime ?? 0);
+        const safeTime = Math.max(0, adapterRef.current?.currentTime ?? 0);
 
         adapterRef.current?.setRegion({ end: safeTime });
         workspace.setSegmentEnd(safeTime);
@@ -144,7 +142,7 @@ export const Player: FC = observer(() => {
                 </Group>
             ) : null}
             <Group gap={12} align="center" mt={12}>
-                <ActionIcon onClick={onPlayPause} variant="subtle">
+                <ActionIcon onClick={onPlayPause} variant="subtle" disabled={!currentAudioPath || workspace.isPlayerLoading} aria-label={workspace.isPlaying ? 'Pause audio' : 'Play audio'}>
                     {workspace.isPlaying ? <IconPlayerPause size={16} /> : <IconPlayerPlay size={16} />}
                 </ActionIcon>
                 <Text size="sm">
