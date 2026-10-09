@@ -9,8 +9,17 @@ export default defineConfig({
         },
     },
     test: {
-        environment: 'node',
-        include: ['electron/src/**/*.test.ts', 'renderer/src/**/*.test.ts'],
-        restoreMocks: true,
+        projects: [
+            {
+                extends: true,
+                test: {
+                    name: 'unit',
+                    environment: 'node',
+                    include: ['electron/src/**/*.test.ts', 'renderer/src/**/*.test.ts'],
+                    restoreMocks: true,
+                },
+            },
+            '.storybook/vitest.config.mts',
+        ],
     },
 });

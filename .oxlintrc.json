@@ -243,7 +243,9 @@
     },
     {
       "files": [
-        "src/**/*.stories.tsx"
+        "**/*.stories.tsx",
+        ".storybook/main.ts",
+        ".storybook/preview.tsx"
       ],
       "rules": {
         "import/no-default-export": "off"

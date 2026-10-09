@@ -55,6 +55,16 @@ unused-variable rule. React API deprecations are checked through
 See the [Oxlint migration guide](https://oxc.rs/docs/guide/usage/linter/migrate-from-eslint)
 for rule compatibility details.
 
+## Storybook
+
+Run `npm run storybook` and open [Storybook](http://127.0.0.1:6006). It binds to loopback only and uses the renderer's Mantine theme. The workspace and recorder stories use real components and isolated AppStore instances with demo services, so recording, importing, recognition, and preferences stay inside the story. Playback uses the real WaveSurfer adapter with a generated 12-second WAV tone sequence; transcript text is illustrative.
+
+Use the workspace stories to discuss empty, audio-ready, transcript, long-transcript, processing, and error states. Recorder stories cover ready, recording, and device failure. Add scenarios for UI changes here instead of maintaining a separate mock UI.
+
+The official Storybook MCP addon serves `http://127.0.0.1:6006/mcp` while the development server runs. Project-scoped Codex configuration is in `.codex/config.toml`; load this trusted project in a fresh Codex session after changing that configuration. The server provides component documentation, story preview links, and story tests. Browser control is a separate capability.
+
+Run `npm run test:storybook -- --run` for rendered stories and interaction checks, and `npm run build-storybook` for a static build. The browser tests use installed Microsoft Edge on Windows; on other platforms run `npx playwright install chromium` once. Set `STORYBOOK_BROWSER_CHANNEL` to override the browser channel. Existing Node tests remain under `npm run test -- --run`. Automated story clicks cannot grant browser audio permission; verify Play/Pause with a real click in the preview.
+
 ## Build miniaudio loopback helper (Windows)
 This project uses a small helper binary for capturing system audio on Windows.
 

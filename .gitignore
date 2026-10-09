@@ -31,3 +31,5 @@ outputs/
 .artifact-work/
 
 __pycache__/
+
+storybook-static/

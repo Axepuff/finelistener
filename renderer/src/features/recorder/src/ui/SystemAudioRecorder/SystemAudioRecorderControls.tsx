@@ -71,6 +71,7 @@ export const SystemAudioRecorderControls: React.FC = observer(() => {
                         radius="xl"
                         disabled={!canStopRecording}
                         size={48}
+                        aria-label="Stop recording"
                         onClick={onStopRecording}
                     >
                         <IconPlayerStopFilled />
@@ -83,6 +84,7 @@ export const SystemAudioRecorderControls: React.FC = observer(() => {
                         disabled={!canStartRecording}
                         radius="xl"
                         size={48}
+                        aria-label="Start recording"
                         onClick={onStartRecording}
                     >
                         <IconMicrophone />
