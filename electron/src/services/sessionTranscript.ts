@@ -137,6 +137,8 @@ const assignedSpeaker = (startSec: number, endSec: number, intervals: SessionSpe
     boundaries.sort((a, b) => a - b);
     const coverage = new Map<string, number>();
     for (let index = 0; index < boundaries.length - 1; index += 1) {
+        // Touching intervals add the same boundary twice; a shared endpoint is not overlapping speech.
+        if (boundaries[index + 1] <= boundaries[index]) continue;
         const middle = (boundaries[index] + boundaries[index + 1]) / 2;
         const active = new Set(intervals.filter((item) => item.startSec <= middle && item.endSec >= middle)
             .map((item) => item.speakerId));

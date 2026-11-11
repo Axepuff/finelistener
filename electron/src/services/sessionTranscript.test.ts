@@ -81,6 +81,27 @@ it('leaves overlapping, tied and invalid word timings unresolved', () => {
     ]);
 });
 
+it.each([
+    { name: 'later speaker majority', spans: [[0, 2, 'a'], [2, 8, 'b']], expected: 'g:b' },
+    { name: 'earlier speaker majority', spans: [[0, 6, 'a'], [6, 8, 'b']], expected: 'g:a' },
+    { name: 'majority across separate turns', spans: [[0, 3, 'a'], [3, 5, 'b'], [5, 8, 'a']], expected: 'g:a' },
+    { name: 'equal coverage', spans: [[0, 4, 'a'], [4, 8, 'b']], expected: null },
+    { name: 'insufficient speech coverage', spans: [[0, 3, 'a']], expected: null },
+])('assigns words by duration at touching interval boundaries: $name', ({ spans, expected }) => {
+    const transcript = materializeRecognitionTranscript({ version: 1, segments: [{
+        startSec: 0, endSec: 8, text: 'Hello', words: [
+            { startSec: 0, endSec: 8, text: 'Hello', startChar: 0, endChar: 5 },
+        ],
+    }] });
+    const speakers = createSpeakerMetadata(transcript, spans.map(([start, end, speaker]) => ({
+        startSec: Number(start), endSec: Number(end), speakerId: `g:${speaker}`,
+    })), {}, 'g');
+
+    expect(deriveSpeakerTranscript({ ...transcript, speakers }).segments).toMatchObject([
+        { text: 'Hello', startSec: 0, endSec: 8, speakerId: expected },
+    ]);
+});
+
 it('keeps the whole segment when saved word spans are out of order', () => {
     const transcript = materializeRecognitionTranscript({ version: 1, segments: [{
         startSec: 0, endSec: 2, text: 'Hello world.', words: [
