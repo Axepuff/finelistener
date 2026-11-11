@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { Home } from '../Home';
+import { TranscribedText } from '../features/transcribed-text';
 import { createStoryWorkspace, type WorkspaceScenario, type StoryWorkspace } from './storyWorkspace';
 import { StoryWorkspaceProvider } from './StoryWorkspaceProvider';
 
@@ -120,5 +121,26 @@ export const SpeakerSettings: Story = {
         await expect(page.getByRole('button', { name: 'Confirm merge' })).toBeEnabled();
         await userEvent.keyboard('{Escape}');
         await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
+    },
+};
+
+export const NarrowSpeakers: Story = {
+    parameters: { scenario: 'speakers' },
+    render: () => (
+        <section aria-label="Narrow transcript" style={{ width: 300, height: 500, overflow: 'hidden' }}>
+            <TranscribedText />
+        </section>
+    ),
+    play: async ({ canvas, canvasElement }) => {
+        await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
+        const pane = canvas.getByRole('region', { name: 'Narrow transcript' }).getBoundingClientRect();
+        const settings = canvas.getByRole('button', { name: 'Speaker settings' });
+        const button = settings.getBoundingClientRect();
+        await expect(button.left).toBeGreaterThanOrEqual(pane.left);
+        await expect(button.right).toBeLessThanOrEqual(pane.right);
+        await userEvent.click(settings);
+        const page = within(canvasElement.ownerDocument.body);
+        await waitFor(() => expect(page.getByRole('textbox', { name: 'Speaker count' })).toBeVisible());
+        await expect(page.getByRole('button', { name: 'Merge speakers' })).toBeEnabled();
     },
 };
