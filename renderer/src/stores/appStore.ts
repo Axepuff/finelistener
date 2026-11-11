@@ -132,20 +132,17 @@ export class AppStore {
         this.sessions.initialize();
         this.transcription.initialize();
         this.speakers.initialize();
+        this.whisperModels.initialize();
 
         if (this.adapter) {
             this.unsubscribeFunctions = [
                 this.adapter.onTranscribeLog((line) => this.activityLog.appendProcessOutput(line)),
-                this.adapter.onWhisperModelDownloadProgress((progress) => {
-                    this.whisperModels.updateDownloadProgress(progress);
-                }),
                 this.adapter.onSpeakerAnalysisProgress((progress) => {
                     if (this.operations.kind === 'preparing-speaker-assets'
                         || (this.operations.kind === 'analyzing-speakers'
                             && this.workspace.activeSessionId === progress.sessionId)) this.speakers.updateProgress(progress);
                 }),
             ];
-            void this.whisperModels.refresh();
         }
 
         this.recording.initialize();
@@ -163,6 +160,7 @@ export class AppStore {
         this.unsubscribeFunctions = [];
         this.transcription.dispose();
         this.speakers.dispose();
+        this.whisperModels.dispose();
         this.recording.dispose();
         this.recordingRecovery.dispose();
         this.sessions.dispose();
@@ -370,7 +368,6 @@ export class AppStore {
 
     async downloadWhisperModel(model: WhisperModelName): Promise<CommandResult> {
         if (this.disposed) return commandFailure('Model download is not available.');
-        if (this.whisperModels.isDownloadActive) return commandFailure('Model download is already in progress.');
 
         return this.whisperModels.download(model);
     }
