@@ -9,7 +9,7 @@ Start with [AppStore](appStore.ts) for a workflow that changes several stores. F
 | Recording recovery | [RecordingRecoveryStore](recordingRecoveryStore.ts) | Listing, recovering, or discarding interrupted recordings and coordinating recovery with foreground operations |
 | Active audio, segment and playback | [WorkspaceStore](workspaceStore.ts) | Selecting a segment, switching audio paths, resetting or seeking playback |
 | Transcription execution and output | [TranscriptionStore](transcriptionStore.ts) | Processing streaming events, stopping a run, managing draft/saved output or progress |
-| Models | [WhisperModelStore](whisperModelStore.ts) | Listing/downloading models or importing a local model |
+| Models | [WhisperModelStore](whisperModelStore.ts) | Catalog freshness, download ownership/progress, or importing a local model |
 | Transcription settings and preparation | [TranscriptionControlStore](../features/transcribe-control/src/model/transcriptionControlStore.ts) | Editing settings, confirming a missing model download, or cancelling the pending start |
 | Foreground ownership | [ForegroundOperationStore](foregroundOperationStore.ts) | Coordinating mutually exclusive workspace operations |
 | Activity log | [ActivityLogStore](activityLogStore.ts) | Appending user-visible events or process output |
@@ -24,7 +24,9 @@ Only one foreground operation owns the workspace. Playback is independent. The o
 
 AppStore starts and disposes child lifecycles. Listener owners retain their unsubscribe functions. Reinitialization must not duplicate subscriptions or make an old request current again. Tests exercise `initialize → dispose → initialize` and commands before the first initialization.
 
-The transcription store owns text/progress subscriptions; AppStore owns process-log and model-progress subscriptions. The recorder manages its own listeners. A pending model download does not reserve the workspace. Continuing transcription uses the latest control settings and the workspace active at the actual start; cancelling preparation or disposing invalidates that continuation. Downloading a model independently does not start transcription.
+The transcription store owns text/progress subscriptions; the model store owns model-progress subscriptions; AppStore owns process-log subscriptions. The recorder manages its own listeners. A pending model download does not reserve the workspace. Continuing transcription uses the latest control settings and the workspace active at the actual start; cancelling preparation or disposing invalidates that continuation. Downloading a model independently does not start transcription.
+
+The model store rejects overlapping downloads and obsolete catalog responses. Progress only updates the pending model. Disposal detaches its listener and invalidates catalog/import responses, but preserves the download reservation: main-process downloads cannot be cancelled through the current adapter. Reinitialization reconnects progress; when the pending download settles, it refreshes the current catalog if the store is active and releases the reservation even on failure.
 
 ## Tests
 

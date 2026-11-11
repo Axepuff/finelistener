@@ -23,6 +23,7 @@ export interface FakeRendererAdapterController {
     emitTranscribeText: (event: TranscriptionTextEvent) => void;
     emitTranscribeProgress: (event: TranscriptionProgressEvent) => void;
     emitTranscribeLog: (line: string) => void;
+    emitModelDownloadProgress: (progress: WhisperModelDownloadProgress) => void;
 }
 
 const subscribe = <T>(listeners: Set<(payload: T) => void>, callback: (payload: T) => void): (() => void) => {
@@ -114,5 +115,6 @@ export const createFakeRendererAdapter = (
         emitTranscribeText: (chunk) => listeners.transcribeText.forEach((callback) => callback(chunk)),
         emitTranscribeProgress: (value) => listeners.transcribeProgress.forEach((callback) => callback(value)),
         emitTranscribeLog: (line) => listeners.transcribeLog.forEach((callback) => callback(line)),
+        emitModelDownloadProgress: (progress) => listeners.modelDownloadProgress.forEach((callback) => callback(progress)),
     };
 };
