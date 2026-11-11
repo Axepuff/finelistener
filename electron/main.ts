@@ -6,6 +6,8 @@ import { cleanupAudioTempDirs } from './src/services/AudioPreprocessor';
 
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
+let canQuit = false;
+let stopBackgroundWork: (() => Promise<void>) | null = null;
 
 const IS_DEV = !app.isPackaged;
 const RENDERER_DEV_URL = process.env.RENDERER_DEV_URL ?? 'http://127.0.0.1:5173';
@@ -72,10 +74,11 @@ if (!gotLock) {
 
 app.whenReady()
     .then(() => {
+        if (isQuitting) return;
         createMainWindow();
 
         app.on('activate', () => {
-            if (BrowserWindow.getAllWindows().length === 0) {
+            if (!isQuitting && BrowserWindow.getAllWindows().length === 0) {
                 createMainWindow();
             }
         });
@@ -95,7 +98,7 @@ app.whenReady()
             });
         });
 
-        registerIpcHandlers(() => mainWindow);
+        stopBackgroundWork = registerIpcHandlers(() => mainWindow);
 
         protocol.handle(LOCAL_FILE_PROTOCOL, (request) => {
             const url = new URL(request.url);
@@ -125,13 +128,19 @@ app.whenReady()
     });
 
 app.on('before-quit', (event) => {
-    if (isQuitting) {
-        return;
-    }
+    if (canQuit) return;
 
     event.preventDefault();
+    if (isQuitting) return;
     isQuitting = true;
-    void cleanupAudioTempDirs().finally(() => app.quit());
+    // Workers may still be reading temporary audio; wait before deleting it or exiting.
+    void (stopBackgroundWork?.() ?? Promise.resolve())
+        .then(() => cleanupAudioTempDirs())
+        .catch((error: unknown) => console.error('Failed to finish application shutdown', error))
+        .finally(() => {
+            canQuit = true;
+            app.quit();
+        });
 });
 
 app.on('window-all-closed', () => {

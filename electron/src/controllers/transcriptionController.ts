@@ -22,12 +22,13 @@ export function registerTranscriptionController(
             throw new Error('Invalid audioPath');
         }
 
-        const session = opts.sessionId ? await sessionsService.getSession(opts.sessionId) : null;
-        const mode = opts.optimized === false ? 'original' : 'optimized';
-        const result = await service.transcribeResult(audioPath, opts, session ?
-            (signal) => sessionsService.prepareSourceAudio(session.audioOriginalPath, mode, signal) : undefined);
-
         const sessionId = opts?.sessionId;
+        const mode = opts.optimized === false ? 'original' : 'optimized';
+        const result = await service.transcribeResult(audioPath, opts, sessionId ? async (signal) => {
+            const session = await sessionsService.getSession(sessionId);
+            signal.throwIfAborted();
+            return sessionsService.prepareSourceAudio(session.audioOriginalPath, mode, signal);
+        } : undefined);
 
         if (typeof sessionId === 'string' && sessionId.trim()) {
             const offsetSec = typeof opts.segment?.start === 'number' ? opts.segment.start : 0;
