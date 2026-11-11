@@ -68,7 +68,9 @@ export function registerSpeakerController(
     }));
     ipc.handle('sessions:merge-speakers', (_event, sessionId: unknown, sourceId: unknown, targetId: unknown) => safe('merge', () => {
         ensureEditable();
-        return workflow.merge(sessionIdFrom(sessionId), speakerIdFrom(sourceId), speakerIdFrom(targetId));
+        return workflow.merge(sessionIdFrom(sessionId),
+            sourceId === null ? null : speakerIdFrom(sourceId),
+            targetId === null ? null : speakerIdFrom(targetId));
     }));
     return workflow;
 }

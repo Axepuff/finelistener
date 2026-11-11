@@ -34,7 +34,7 @@ declare global {
                 prepareSpeakerAssets: (includeCuda: boolean) => Promise<SpeakerAssetStatus>;
                 renameSpeaker: (sessionId: string, speakerId: string, name: string) => Promise<SessionDetails>;
                 assignSpeaker: (sessionId: string, span: SessionRawSpan | SessionSpeakerAssignment, speakerId: string | null) => Promise<SessionDetails>;
-                mergeSpeakers: (sessionId: string, sourceId: string, targetId: string) => Promise<SessionDetails>;
+                mergeSpeakers: (sessionId: string, sourceId: string | null, targetId: string | null) => Promise<SessionDetails>;
                 revealFolder: () => Promise<boolean>;
             };
             transcribeStream: (audioPath: string, opts: TranscribeOpts) => Promise<string>;

@@ -94,7 +94,7 @@ export interface SessionSpeakerMetadataV1 {
     intervals: SessionSpeakerInterval[];
     speakers: SessionSpeakerIdentity[];
     corrections: SessionSpeakerCorrection[];
-    merges?: Array<{ fromId: string; toId: string }>;
+    merges?: Array<{ fromId: string; toId: string | null }>;
     status: 'completed' | 'failed';
 }
 

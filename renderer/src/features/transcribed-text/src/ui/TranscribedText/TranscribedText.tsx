@@ -3,18 +3,22 @@ import { IconHeadphones, IconPlus } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState, type MouseEvent } from 'react';
 import type { SessionSpeakerAssignment } from 'electron/src/types/sessions';
-import { formatTranscriptPrefix, formatTranscriptRegionLabel, projectTranscript } from 'renderer/src/stores/transcriptFormat';
+import { formatTranscriptPrefix, formatTranscriptRegionLabel, projectTranscript, transcriptToText, type TranscriptView } from 'renderer/src/stores/transcriptFormat';
 import { useAppStore } from '../../../../../AppContext';
 import { TranscribedTextContent } from './TranscribedTextContent';
 import { TranscribedTextControls } from './TranscribedTextControls';
-import { SpeakerControls } from './SpeakerControls';
+import { SpeakerAnalysisStatus, SpeakerControls } from './SpeakerControls';
 import { findTranscriptMatches } from './search';
 import { parseTimeToSeconds } from './utils';
+
+const speakerColors = ['blue', 'teal', 'grape', 'orange', 'pink', 'indigo', 'cyan', 'lime'];
 
 export const TranscribedText: React.FC = observer(() => {
     const store = useAppStore();
     const { transcription } = store;
-    const [showRegions, setShowRegions] = useState(false);
+    const [view, setView] = useState<TranscriptView>('plain');
+    const showRegions = view !== 'plain';
+    const showSpeakers = view === 'speakers';
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedMatchIndex, setSelectedMatchIndex] = useState(0);
     const [confirmRetrySpeakers, setConfirmRetrySpeakers] = useState<{
@@ -26,25 +30,32 @@ export const TranscribedText: React.FC = observer(() => {
         generation: string | undefined;
         span: SessionSpeakerAssignment;
     } | null>(null);
-    const currentTextValue = showRegions ? transcription.timecodedText : transcription.plainText;
+    const needsSpeakerAnalysis = showSpeakers && transcription.visibleTranscript?.speakers?.status !== 'completed';
+    const displayedTranscript = needsSpeakerAnalysis ? null : transcription.visibleTranscript;
+    const currentTextValue = transcriptToText(displayedTranscript, view);
     const isInitialEmptyState = (
         store.lifecycleState === 'initial'
         || store.lifecycleState === 'importing'
     ) && currentTextValue.trim().length === 0;
     const isReadyEmptyState = store.transcriptionWorkflow.state === 'loaded';
     const audioTitle = store.workspace.activeSession?.title;
-    const plainSegments = projectTranscript(transcription.visibleTranscript, showRegions).map((segment, index) => ({
+    const speakerLabels = new Map(displayedTranscript?.speakers?.speakers.map((speaker, index) => [
+        speaker.id, { name: speaker.name, color: speakerColors[index % speakerColors.length] },
+    ]));
+    const plainSegments = projectTranscript(displayedTranscript, view).map((segment, index) => ({
         id: segment.members.map((member) => member.segment.rawSpan ? `${member.segment.rawSpan.segmentId}:${member.segment.rawSpan?.startChar}:${member.segment.rawSpan?.endChar}` : `legacy-${index}`).join('|'),
         text: segment.text,
-        prefix: showRegions ? formatTranscriptPrefix(segment, transcription.visibleTranscript) : '',
+        prefix: showRegions ? formatTranscriptPrefix(segment, showSpeakers ? displayedTranscript : null) : '',
         startSeconds: segment.startSec,
         timecode: formatTranscriptRegionLabel(segment),
-        assignment: transcription.savedTranscript?.speakers && segment.members.every((member) => member.segment.rawSpan) ? {
+        speaker: showSpeakers ? speakerLabels.get(segment.speakerId ?? '') ?? { name: 'Unknown speaker', color: 'gray' } : undefined,
+        source: segment.source,
+        assignment: showSpeakers && transcription.savedTranscript?.speakers && segment.members.every((member) => member.segment.rawSpan) ? {
             generation: transcription.savedTranscript.speakers.generation,
             recognitionRevision: transcription.savedTranscript.speakers.recognitionRevision,
             spans: segment.members.map((member) => ({ ...member.segment.rawSpan! })),
         } : undefined,
-        children: segment.members.map((member) => ({ segment: member.segment })),
+        children: showSpeakers ? segment.members.map((member) => ({ segment: member.segment })) : undefined,
     }));
     const currentSelectedSpan = selectedSpan?.sessionId === store.workspace.activeSessionId
         && selectedSpan.generation === transcription.savedTranscript?.speakers?.generation ? selectedSpan.span : null;
@@ -62,7 +73,7 @@ export const TranscribedText: React.FC = observer(() => {
     };
 
     const handleRegionClick = (event: MouseEvent<HTMLElement>) => {
-        const regionElement = (event.target as HTMLElement | null)?.closest('span[data-regions]');
+        const regionElement = (event.target as HTMLElement | null)?.closest('[data-regions]');
 
         if (!regionElement) return;
 
@@ -88,7 +99,7 @@ export const TranscribedText: React.FC = observer(() => {
     };
 
     return (
-        <Stack gap={16} align="stretch" style={{ width: '100%', minWidth: 0, minHeight: 0, height: '100%', padding: 16, overflow: 'hidden' }}>
+        <Stack gap={showSpeakers ? 10 : 16} align="stretch" style={{ width: '100%', minWidth: 0, minHeight: 0, height: '100%', padding: 16, overflow: 'hidden' }}>
             {isInitialEmptyState ? (
                 <Paper
                     style={{
@@ -121,16 +132,17 @@ export const TranscribedText: React.FC = observer(() => {
                 <>
                     <TranscribedTextControls
                         currentTextValue={currentTextValue}
-                        showRegions={showRegions}
-                        setShowRegions={setShowRegions}
+                        view={view}
+                        onViewChange={(value) => { setView(value); setSelectedSpan(null); }}
                         searchQuery={searchQuery}
                         onSearchChange={handleSearchChange}
                         matchCount={matches.length}
                         activeMatchIndex={activeMatchIndex}
                         onPreviousMatch={() => moveToMatch(-1)}
                         onNextMatch={() => moveToMatch(1)}
+                        speakerControls={showSpeakers ? <SpeakerControls key={store.workspace.activeSessionId ?? ''} selectedSpan={currentSelectedSpan} onCloseSpan={() => setSelectedSpan(null)} /> : undefined}
                     />
-                    <SpeakerControls key={store.workspace.activeSessionId ?? ''} selectedSpan={currentSelectedSpan} onCloseSpan={() => setSelectedSpan(null)} />
+                    {showSpeakers ? <SpeakerAnalysisStatus /> : null}
 
                     {store.lifecycleState === 'transcribing' ? (
                         <Group gap={8} align="center" wrap="nowrap" style={{ width: '100%' }}>
@@ -215,6 +227,10 @@ export const TranscribedText: React.FC = observer(() => {
                                 </Text>
                             </Stack>
                         </Paper>
+                    ) : needsSpeakerAnalysis ? (
+                        <Text size="sm" c="dimmed">
+                            {'The transcript will appear here after speaker analysis.'}
+                        </Text>
                     ) : (
                         <TranscribedTextContent
                             showRegions={showRegions}
@@ -224,7 +240,7 @@ export const TranscribedText: React.FC = observer(() => {
                             searchQuery={searchQuery}
                             transcriptText={currentTextValue}
                             onRegionClick={handleRegionClick}
-                            onEditSpeaker={transcription.savedTranscript?.speakers ? (span) => setSelectedSpan({
+                            onEditSpeaker={showSpeakers && transcription.savedTranscript?.speakers ? (span) => setSelectedSpan({
                                 sessionId: store.workspace.activeSessionId,
                                 generation: transcription.savedTranscript?.speakers?.generation,
                                 span,

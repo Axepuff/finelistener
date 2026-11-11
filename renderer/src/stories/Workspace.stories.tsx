@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, waitFor } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { Home } from '../Home';
 import { createStoryWorkspace, type WorkspaceScenario, type StoryWorkspace } from './storyWorkspace';
 import { StoryWorkspaceProvider } from './StoryWorkspaceProvider';
@@ -42,3 +42,83 @@ export const AudioReady: Story = { parameters: { scenario: 'ready' } };
 export const Transcribing: Story = { parameters: { scenario: 'transcribing' } };
 export const TranscriptionError: Story = { parameters: { scenario: 'error', docs: { description: { story: 'An intentional adapter failure demonstrates the real transcription error state. The developer console contains the expected failure log.' } } } };
 export const LongTranscript: Story = { parameters: { scenario: 'long-transcript' } };
+export const SpeakersBeforeAnalysis: Story = {
+    play: async ({ canvas, canvasElement }) => {
+        const page = within(canvasElement.ownerDocument.body);
+        await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
+        await expect(canvas.queryByText(/Let us review the recording workflow/)).not.toBeInTheDocument();
+        await expect(canvas.getByText('The transcript will appear here after speaker analysis.')).toBeVisible();
+        await expect(page.queryByRole('button', { name: 'Analyze speakers' })).not.toBeInTheDocument();
+        await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
+        await expect(page.getByRole('button', { name: 'Analyze speakers' })).toBeEnabled();
+        const count = page.getByRole('textbox', { name: 'Speaker count' });
+        await expect(count).toHaveAttribute('placeholder', 'Auto');
+        await userEvent.type(count, '3');
+        await userEvent.keyboard('{Escape}');
+        await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
+        await expect(page.getByRole('textbox', { name: 'Speaker count' })).toHaveValue('3');
+        await userEvent.clear(page.getByRole('textbox', { name: 'Speaker count' }));
+        await userEvent.keyboard('{Escape}');
+        await expect(canvas.getByRole('button', { name: 'Copy transcript' })).toBeDisabled();
+        await expect(canvas.getByRole('button', { name: 'Save .txt' })).toBeDisabled();
+        await userEvent.type(canvas.getByRole('textbox', { name: 'Search transcript' }), 'recording');
+        await expect(canvas.getByRole('status')).toHaveTextContent('0 results');
+        await userEvent.click(canvas.getByRole('button', { name: 'Clear search' }));
+        await userEvent.click(canvas.getByRole('radio', { name: 'Plain Text' }));
+        await expect(canvas.getByText(/Let us review the recording workflow/)).toBeVisible();
+        await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
+    },
+};
+export const Speakers: Story = {
+    parameters: { scenario: 'speakers' },
+    play: async ({ canvas }) => {
+        await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
+        await expect(canvas.queryByRole('button', { name: 'Rename speaker' })).not.toBeInTheDocument();
+        await userEvent.click(canvas.getByRole('radio', { name: 'Timecodes' }));
+        await expect(canvas.queryByRole('button', { name: "Seek to Alice's turn" })).not.toBeInTheDocument();
+        await expect(canvas.queryByRole('button', { name: 'Assign speaker' })).not.toBeInTheDocument();
+        await expect(canvas.queryByRole('button', { name: 'Analyze speakers again' })).not.toBeInTheDocument();
+        await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
+        await waitFor(() => expect(canvas.getByText('Current position: 00:04.00')).toBeVisible());
+        await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
+        const alice = canvas.getByRole('button', { name: "Seek to Alice's turn" });
+        const bob = canvas.getByRole('button', { name: "Seek to Bob's turn" });
+        await expect(alice).toBeVisible();
+        await expect(canvas.queryByText(/\[00:00:/)).not.toBeInTheDocument();
+        await expect(canvas.getAllByRole('button', { name: 'Assign speaker' })).toHaveLength(2);
+        await expect(canvas.queryByRole('button', { name: 'Rename speaker' })).not.toBeInTheDocument();
+        await expect(canvas.queryByRole('button', { name: 'Merge speakers' })).not.toBeInTheDocument();
+        await userEvent.click(bob);
+        await waitFor(() => expect(canvas.getByText('Current position: 00:08.00')).toBeVisible());
+        alice.focus();
+        await userEvent.keyboard('{Enter}');
+        await waitFor(() => expect(canvas.getByText('Current position: 00:00.00')).toBeVisible());
+        await userEvent.click(canvas.getByText('Show original fragments'));
+        await expect(canvas.queryByText(/^\d+\.\d+s$/)).not.toBeInTheDocument();
+        await userEvent.click(canvas.getByRole('button', { name: 'The transcript should stay easy to read while we listen and compare details.' }));
+        await waitFor(() => expect(canvas.getByText('Current position: 00:04.00')).toBeVisible());
+        await userEvent.click(canvas.getByText('Show original fragments'));
+    },
+};
+
+export const SpeakerSettings: Story = {
+    parameters: { scenario: 'speakers' },
+    play: async ({ canvas, canvasElement }) => {
+        const page = within(canvasElement.ownerDocument.body);
+        await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
+        await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
+        await expect(page.getByRole('button', { name: 'Rename speaker' })).toBeEnabled();
+        await userEvent.click(page.getByRole('button', { name: 'Merge speakers' }));
+        await userEvent.click(page.getByRole('textbox', { name: 'Merge this speaker' }));
+        await userEvent.click(page.getByRole('option', { name: 'Unknown speaker' }));
+        await expect(page.getByRole('button', { name: 'Confirm merge' })).toBeEnabled();
+        await userEvent.click(page.getByRole('textbox', { name: 'Into this speaker' }));
+        await userEvent.click(page.getByRole('option', { name: 'Unknown speaker' }));
+        await expect(page.getByRole('button', { name: 'Confirm merge' })).toBeDisabled();
+        await userEvent.click(page.getByRole('textbox', { name: 'Merge this speaker' }));
+        await userEvent.click(page.getByRole('option', { name: 'Alice' }));
+        await expect(page.getByRole('button', { name: 'Confirm merge' })).toBeEnabled();
+        await userEvent.keyboard('{Escape}');
+        await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
+    },
+};

@@ -35,7 +35,7 @@ contextBridge.exposeInMainWorld('api', {
             ipcRenderer.invoke('sessions:rename-speaker', sessionId, speakerId, name),
         assignSpeaker: (sessionId: string, span: SessionRawSpan | SessionSpeakerAssignment, speakerId: string | null) =>
             ipcRenderer.invoke('sessions:assign-speaker', sessionId, span, speakerId),
-        mergeSpeakers: (sessionId: string, sourceId: string, targetId: string) =>
+        mergeSpeakers: (sessionId: string, sourceId: string | null, targetId: string | null) =>
             ipcRenderer.invoke('sessions:merge-speakers', sessionId, sourceId, targetId),
         revealFolder: () => ipcRenderer.invoke('sessions:reveal-root'),
     },

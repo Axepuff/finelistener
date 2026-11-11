@@ -27,7 +27,7 @@ export interface RendererAdapter {
     prepareSpeakerAssets: (includeCuda: boolean) => Promise<SpeakerAssetStatus>;
     renameSpeaker: (sessionId: string, speakerId: string, name: string) => Promise<SessionDetails>;
     assignSpeaker: (sessionId: string, span: SessionRawSpan | SessionSpeakerAssignment, speakerId: string | null) => Promise<SessionDetails>;
-    mergeSpeakers: (sessionId: string, sourceId: string, targetId: string) => Promise<SessionDetails>;
+    mergeSpeakers: (sessionId: string, sourceId: string | null, targetId: string | null) => Promise<SessionDetails>;
     revealSessionsFolder: () => Promise<boolean>;
     transcribe: (audioPath: string, options: TranscribeOpts) => Promise<string>;
     transcribeSession: (sessionId: string, options: SessionTranscribeOpts) => Promise<SessionDetails>;

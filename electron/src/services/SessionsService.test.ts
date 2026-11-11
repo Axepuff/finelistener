@@ -345,3 +345,63 @@ it('rejects an invalid group member and stale generation without partially persi
     const saved = await workflow.assign(session.id, { recognitionRevision: 'r', generation: 'g', spans: [first, second] }, 'g:0');
     expect(saved.transcript?.speakers?.corrections).toEqual([{ ...first, speakerId: 'g:0' }, { ...second, speakerId: 'g:0' }]);
 });
+
+it('persists merges to and from Unknown speaker without changing recognition or future unassignments', async () => {
+    const source = path.join(environment.root, 'unknown-speakers.wav');
+    await fs.writeFile(source, wav(1000));
+    const service = new SessionsService();
+    const session = await service.createSessionFromImport(source);
+    await service.setActiveSession(session.id);
+    const raw = ['First', 'Second', 'Unresolved', 'Corrected', 'Last'].map((text, index) => ({
+        id: `raw-${index}`, startSec: index, endSec: index + 1, text,
+    }));
+    await service.saveTranscript(session.id, { version: 1, recognitionRevision: 'r', segments: raw, recognitionSegments: raw,
+        speakers: { version: 1, recognitionRevision: 'r', generation: 'g', settings: {},
+            intervals: [
+                { startSec: 0, endSec: 1, speakerId: 'a' },
+                { startSec: 1, endSec: 2, speakerId: 'b' },
+                { startSec: 3, endSec: 4, speakerId: 'a' },
+                { startSec: 4, endSec: 5, speakerId: 'c' },
+            ],
+            speakers: [{ id: 'a', name: 'Alice' }, { id: 'b', name: 'Bob' }, { id: 'c', name: 'Carol' }],
+            corrections: [{ segmentId: 'raw-3', startChar: 0, endChar: 9, speakerId: null }], status: 'completed' } });
+    const workflow = new SessionSpeakerWorkflow(service, { getAssetStatus: vi.fn(), prepareAssets: vi.fn(), analyze: vi.fn() }, () => undefined);
+
+    await workflow.merge(session.id, 'a', 'b');
+    const unassigned = await workflow.merge(session.id, 'b', null);
+    expect(unassigned.transcript?.segments.map((segment) => segment.speakerId)).toEqual([null, null, null, null, 'c']);
+    expect(unassigned.transcript?.speakers?.speakers).toEqual([{ id: 'c', name: 'Carol' }]);
+    await workflow.merge(session.id, null, 'c');
+    const reopened = await new SessionsService().getSession(session.id);
+    expect(reopened.transcript?.segments.map((segment) => segment.speakerId)).toEqual(['c', 'c', 'c', 'c', 'c']);
+    expect(reopened.transcript?.recognitionSegments).toEqual(raw);
+    await workflow.assign(session.id, { segmentId: 'raw-0', startChar: 0, endChar: 5 }, null);
+    const renamed = await workflow.rename(session.id, 'c', 'Carol renamed');
+    expect(renamed.transcript?.segments.map((segment) => segment.speakerId)).toEqual([null, 'c', 'c', 'c', 'c']);
+});
+
+it('includes hidden duplicate speech when merging Unknown speaker', async () => {
+    const source = path.join(environment.root, 'hidden-speakers.wav');
+    await fs.writeFile(source, wav(1000));
+    const service = new SessionsService();
+    const session = await service.createSessionFromImport(source);
+    await service.setActiveSession(session.id);
+    const text = 'please open the document';
+    await service.saveTranscript(session.id, { version: 1, recognitionRevision: 'r', segments: [], sourceRun: {
+        status: 'completed', settings: { language: 'en' }, sources: [
+            { source: 'system', status: 'completed', segments: [{ id: 'system', startSec: 0, endSec: 1, text }] },
+            { source: 'microphone', status: 'completed', segments: [{ id: 'microphone', startSec: 0, endSec: 1, text }] },
+        ],
+    }, speakers: { version: 1, recognitionRevision: 'r', generation: 'g', settings: {}, intervals: [],
+        speakers: [{ id: 'a', name: 'Alice' }, { id: 'g:microphone', name: 'Microphone' }],
+        corrections: [{ segmentId: 'microphone', startChar: 0, endChar: text.length, speakerId: null }], status: 'completed' } });
+    const filtered = await service.setTranscriptDuplicateFilter(session.id, true);
+    expect(filtered.transcript?.segments.map((segment) => segment.source)).toEqual(['system']);
+    const workflow = new SessionSpeakerWorkflow(service, { getAssetStatus: vi.fn(), prepareAssets: vi.fn(), analyze: vi.fn() }, () => undefined);
+
+    const merged = await workflow.merge(session.id, null, 'a');
+    expect(merged.transcript?.presentation?.duplicateFilter?.enabled).toBe(true);
+    const unfiltered = await service.setTranscriptDuplicateFilter(session.id, false);
+    expect(Object.fromEntries(unfiltered.transcript!.segments.map((segment) => [segment.source, segment.speakerId])))
+        .toEqual({ microphone: 'a', system: 'a' });
+});

@@ -7,7 +7,7 @@ import { AppContext } from '../AppContext';
 import { TranscribeControl } from '../features/transcribe-control';
 import { AppStore } from './appStore';
 import { createFakeRendererAdapter } from './testing/fakeRendererAdapter';
-import { formatTranscriptPrefix, transcriptToTimecodedText } from './transcriptFormat';
+import { formatTranscriptPrefix, transcriptToText } from './transcriptFormat';
 
 const transcript: SessionTranscriptV1 = {
     version: 1,
@@ -315,9 +315,9 @@ describe('speaker analysis in the renderer', () => {
         expect(store.speakers.status).toBe('cancelled');
     });
 
-    it('uses the same speaker and source labels for timecoded export', () => {
+    it('uses the same speaker and source labels for Speakers export', () => {
         expect(formatTranscriptPrefix(labeledTranscript.segments[0], labeledTranscript)).toBe('Microphone · Microphone speaker: ');
-        expect(transcriptToTimecodedText(labeledTranscript)).toContain('Microphone · Microphone speaker: Hello');
+        expect(transcriptToText(labeledTranscript, 'speakers')).toContain('Microphone · Microphone speaker: Hello');
         expect(formatTranscriptPrefix(transcript.segments[0], transcript)).toBe('Microphone: ');
     });
 });
