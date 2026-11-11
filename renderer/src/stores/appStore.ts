@@ -699,7 +699,7 @@ export class AppStore {
         return this.editSpeaker((sessionId) => this.adapter!.assignSpeaker(sessionId, span, speakerId));
     }
 
-    mergeSpeakers(sourceId: string, targetId: string): Promise<CommandResult> {
+    mergeSpeakers(sourceId: string | null, targetId: string | null): Promise<CommandResult> {
         if (sourceId === targetId) return Promise.resolve(commandFailure('Choose a different speaker to merge.'));
 
         return this.editSpeaker((sessionId) => this.adapter!.mergeSpeakers(sessionId, sourceId, targetId));

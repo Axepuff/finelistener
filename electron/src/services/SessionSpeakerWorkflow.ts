@@ -14,6 +14,7 @@ import {
     deriveSpeakerTranscript,
     materializeRecognitionTranscript,
 } from './sessionTranscript';
+import { deriveSourceTranscript } from './transcriptDuplicateFilter';
 
 interface SpeakerRuntime {
     getAssetStatus(): Promise<SpeakerAssetStatus>;
@@ -244,12 +245,26 @@ export class SessionSpeakerWorkflow {
         });
     }
 
-    public merge(sessionId: string, sourceId: string, targetId: string): Promise<SessionDetails> {
+    public merge(sessionId: string, sourceId: string | null, targetId: string | null): Promise<SessionDetails> {
         if (sourceId === targetId) throw new Error('Choose two different speakers');
         return this.updateSpeakers(sessionId, (transcript) => {
             const metadata = transcript.speakers!;
-            if (!metadata.speakers.some((item) => item.id === sourceId)
-                || !metadata.speakers.some((item) => item.id === targetId)) throw new Error('Unknown speaker');
+            if ((sourceId !== null && !metadata.speakers.some((item) => item.id === sourceId))
+                || (targetId !== null && !metadata.speakers.some((item) => item.id === targetId))) throw new Error('Unknown speaker');
+            if (sourceId === null) {
+                // Assign only currently unresolved spans, including speech hidden by duplicate filtering.
+                const unfiltered = deriveSpeakerTranscript({ ...transcript,
+                    presentation: transcript.sourceRun ? deriveSourceTranscript(transcript.sourceRun, false).presentation : transcript.presentation,
+                });
+                for (const segment of unfiltered.segments) {
+                    if ((segment.speakerId !== null && segment.speakerId !== undefined) || !segment.rawSpan) continue;
+                    const span = segment.rawSpan;
+                    metadata.corrections = metadata.corrections.filter((item) =>
+                        item.segmentId !== span.segmentId || item.startChar !== span.startChar || item.endChar !== span.endChar);
+                    metadata.corrections.push({ ...span, speakerId: targetId });
+                }
+                return transcript;
+            }
             metadata.speakers = metadata.speakers.filter((item) => item.id !== sourceId);
             metadata.merges = [...(metadata.merges ?? []).map((item) => ({
                 ...item, toId: item.toId === sourceId ? targetId : item.toId,

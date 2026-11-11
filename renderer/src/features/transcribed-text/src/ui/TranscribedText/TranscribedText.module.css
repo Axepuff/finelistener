@@ -19,6 +19,100 @@
     white-space: normal;
 }
 
+.speakerTranscript {
+    display: grid;
+    grid-template-columns: fit-content(9rem) minmax(0, 1fr);
+    gap: 8px;
+    text-align: left;
+    white-space: normal;
+    line-height: 1.5;
+}
+
+.speakerTurn {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+    align-items: start;
+}
+
+.speakerIdentity {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.speakerIdentityRow {
+    display: flex;
+    align-items: flex-start;
+    gap: 2px;
+    padding-top: 3px;
+}
+
+.speakerLabel {
+    min-width: 0;
+    max-width: 100%;
+    padding: 2px 0;
+    font-size: var(--mantine-font-size-xs);
+    font-weight: 600;
+    line-height: 18px;
+    text-align: left;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+.speakerEdit {
+    flex-shrink: 0;
+}
+
+.speakerLabel:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.speakerLabel:focus-visible,
+.fragmentText:focus-visible {
+    outline: 2px solid var(--mantine-color-blue-6);
+    outline-offset: 3px;
+}
+
+.speakerSpeech {
+    min-width: 0;
+    padding: 4px 8px;
+    border-radius: var(--mantine-radius-sm);
+    overflow-wrap: anywhere;
+}
+
+.originalFragments {
+    margin-top: 4px;
+    font-size: var(--mantine-font-size-xs);
+}
+
+.originalFragments summary {
+    color: var(--mantine-color-dimmed);
+    cursor: pointer;
+}
+
+.originalFragment {
+    display: flex;
+    align-items: start;
+    gap: 4px;
+    margin-top: 4px;
+    padding-left: 8px;
+    border-left: 2px solid var(--mantine-color-gray-2);
+}
+
+.fragmentText {
+    flex: 1;
+    min-width: 0;
+    font-size: inherit;
+    line-height: inherit;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+
+.fragmentText:hover {
+    background-color: var(--mantine-color-gray-0);
+}
+
 .searchMatch {
     background-color: var(--mantine-color-yellow-2);
     color: inherit;
@@ -42,17 +136,21 @@
 }
 
 .viewToggle {
-    flex-shrink: 0;
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
 }
 
 .actionsGroup {
-    flex: 1;
+    flex: 1 1 380px;
     min-width: 0;
     justify-content: flex-end;
 }
 
 .searchInput {
     width: 220px;
+    max-width: 100%;
 }
 
 .searchCount {

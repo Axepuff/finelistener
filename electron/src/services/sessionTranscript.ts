@@ -179,7 +179,7 @@ export const deriveSpeakerTranscript = (transcript: SessionTranscriptV1): Sessio
         while (current && !visited.has(current)) {
             visited.add(current);
             const target = metadata.merges?.find((merge) => merge.fromId === current)?.toId;
-            if (!target) break;
+            if (target === undefined) break;
             current = target;
         }
         return current;

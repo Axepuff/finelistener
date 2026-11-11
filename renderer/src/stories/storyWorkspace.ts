@@ -5,7 +5,7 @@ import { AppStore } from '../stores/appStore';
 import { createFakeRendererAdapter } from '../stores/testing/fakeRendererAdapter';
 import { STORY_AUDIO_PATH } from './storyAudio';
 
-export type WorkspaceScenario = 'empty' | 'ready' | 'transcript' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error';
+export type WorkspaceScenario = 'empty' | 'ready' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error';
 
 export interface StoryWorkspace {
     store: AppStore;
@@ -20,12 +20,26 @@ const transcript: SessionTranscriptV1 = {
         { startSec: 8, endSec: 12, text: 'Search for recording, switch to timecodes, or click a passage to seek the audio.' },
     ],
 };
+const speakerTranscript: SessionTranscriptV1 = {
+    ...transcript,
+    recognitionRevision: 'demo-revision',
+    segments: transcript.segments.map((segment, index) => ({
+        ...segment,
+        speakerId: index < 2 ? 'alice' : 'bob',
+        rawSpan: { segmentId: `demo-${index}`, startChar: 0, endChar: segment.text.length },
+    })),
+    speakers: {
+        version: 1, recognitionRevision: 'demo-revision', generation: 'demo-generation',
+        settings: {}, intervals: [], corrections: [], status: 'completed',
+        speakers: [{ id: 'alice', name: 'Alice' }, { id: 'bob', name: 'Bob' }],
+    },
+};
 const transcriptSource = transcript.segments.map((segment) => (
     `[00:00:${segment.startSec.toFixed(3).padStart(6, '0')} --> 00:00:${segment.endSec!.toFixed(3).padStart(6, '0')}] ${segment.text}`
 )).join('\n');
 
 export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise<StoryWorkspace> => {
-    const hasTranscript = scenario === 'transcript' || scenario === 'long-transcript';
+    const hasTranscript = scenario === 'transcript' || scenario === 'long-transcript' || scenario === 'speakers';
     let session: SessionDetails = {
         id: 'storybook-session',
         title: 'Design discussion.wav',
@@ -44,7 +58,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
                 endSec: (index + 1) / 5,
                 text: `Passage ${index + 1}. ${transcript.segments[index % 3].text}`,
             })),
-        } : structuredClone(transcript) : undefined,
+        } : structuredClone(scenario === 'speakers' ? speakerTranscript : transcript) : undefined,
     };
     const isRecorder = scenario.startsWith('recording');
     let sessions: SessionListItem[] = scenario === 'empty' || isRecorder ? [] : [session];

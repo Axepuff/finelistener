@@ -1,33 +1,35 @@
 import { ActionIcon, Box, Button, Group, Notification, SegmentedControl, Switch, Text, TextInput } from '@mantine/core';
-import { IconChevronDown, IconChevronUp, IconClockHour2, IconCopy, IconDownload, IconSearch, IconTextSize, IconX } from '@tabler/icons-react';
+import { IconChevronDown, IconChevronUp, IconClockHour2, IconCopy, IconDownload, IconSearch, IconTextSize, IconUsers, IconX } from '@tabler/icons-react';
 import React, { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useAppStore } from 'renderer/src/AppContext';
 import styles from './TranscribedText.module.css';
-import { transcriptToHtml } from 'renderer/src/stores/transcriptFormat';
+import { transcriptToHtml, type TranscriptView } from 'renderer/src/stores/transcriptFormat';
 
 interface Props {
     currentTextValue: string;
-    showRegions: boolean;
-    setShowRegions: React.Dispatch<React.SetStateAction<boolean>>;
+    view: TranscriptView;
+    onViewChange: (view: TranscriptView) => void;
     searchQuery: string;
     onSearchChange: (value: string) => void;
     matchCount: number;
     activeMatchIndex: number;
     onPreviousMatch: () => void;
     onNextMatch: () => void;
+    speakerControls?: React.ReactNode;
 }
 
 export const TranscribedTextControls: React.FC<Props> = observer(({
     currentTextValue,
-    showRegions,
-    setShowRegions,
+    view,
+    onViewChange,
     searchQuery,
     onSearchChange,
     matchCount,
     activeMatchIndex,
     onPreviousMatch,
     onNextMatch,
+    speakerControls,
 }) => {
     const store = useAppStore();
     const [isCopyNotificationOpen, setIsCopyNotificationOpen] = useState(false);
@@ -49,7 +51,7 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
         try {
             await navigator.clipboard.write([new ClipboardItem({
                 'text/plain': new Blob([currentTextValue], { type: 'text/plain' }),
-                'text/html': new Blob([transcriptToHtml(store.transcription.visibleTranscript, showRegions)], { type: 'text/html' }),
+                'text/html': new Blob([transcriptToHtml(store.transcription.visibleTranscript, view)], { type: 'text/html' }),
             })]);
             setCopyNotificationKey((value) => value + 1);
             setIsCopyNotificationOpen(true);
@@ -82,36 +84,48 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
 
     return (
         <>
-            <Group className={styles.controlsRow} justify="space-between" align="center" wrap="nowrap">
-                <SegmentedControl
-                    value={showRegions ? 'timecodes' : 'plain'}
-                    onChange={(value) => {
-                        setShowRegions(value === 'timecodes');
-                    }}
-                    className={styles.viewToggle}
-                    data={[
-                        {
-                            value: 'plain',
-                            label: (
-                                <Group gap={6} wrap="nowrap">
-                                    <IconTextSize size={16} />
-                                    <span>{'Plain Text'}</span>
-                                </Group>
-                            ),
-                        },
-                        {
-                            value: 'timecodes',
-                            label: (
-                                <Group gap={6} wrap="nowrap">
-                                    <IconClockHour2 size={16} />
-                                    <span>{'Timecodes'}</span>
-                                </Group>
-                            ),
-                        },
-                    ]}
-                />
+            <Group className={styles.controlsRow} justify="space-between" align="center" wrap="wrap">
+                <Group gap={6} wrap="nowrap" style={{ maxWidth: '100%' }}>
+                    <SegmentedControl
+                        value={view}
+                        onChange={(value) => {
+                            if (value === 'plain' || value === 'timecodes' || value === 'speakers') onViewChange(value);
+                        }}
+                        className={styles.viewToggle}
+                        data={[
+                            {
+                                value: 'plain',
+                                label: (
+                                    <Group gap={6} wrap="nowrap">
+                                        <IconTextSize size={16} />
+                                        <span>{'Plain Text'}</span>
+                                    </Group>
+                                ),
+                            },
+                            {
+                                value: 'timecodes',
+                                label: (
+                                    <Group gap={6} wrap="nowrap">
+                                        <IconClockHour2 size={16} />
+                                        <span>{'Timecodes'}</span>
+                                    </Group>
+                                ),
+                            },
+                            {
+                                value: 'speakers',
+                                label: (
+                                    <Group gap={6} wrap="nowrap">
+                                        <IconUsers size={16} />
+                                        <span>{'Speakers'}</span>
+                                    </Group>
+                                ),
+                            },
+                        ]}
+                    />
+                    {speakerControls}
+                </Group>
 
-                <Group gap={8} align="center" wrap="nowrap" className={styles.actionsGroup}>
+                <Group gap={8} align="center" wrap="wrap" className={styles.actionsGroup}>
                     {store.transcription.duplicateFilterAvailable ? (
                         <Switch
                             checked={store.transcription.duplicateFilterEnabled}
@@ -160,6 +174,7 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
                         color="gray"
                         disabled={currentTextValue.length === 0}
                         onClick={handleCopy}
+                        aria-label="Copy transcript"
                         size={36}
                     >
                         <IconCopy size={18} />

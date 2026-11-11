@@ -4,7 +4,7 @@ import type { WhisperModelName } from 'electron/src/types/whisper';
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { TranscriptionRunOutcome } from 'renderer/src/features/transcribe-state/src/model/transcriptionWorkflow';
 import type { RendererAdapter } from './rendererAdapter';
-import { transcriptToPlainText, parseTranscript, transcriptToHtml, transcriptToTimecodedText } from './transcriptFormat';
+import { transcriptToPlainText, parseTranscript, transcriptToHtml, transcriptToText } from './transcriptFormat';
 import { commandFailure, commandSuccess, type CommandResult, type DeepReadonly, type Segment } from './types';
 
 export interface StartTranscriptionOptions {
@@ -149,7 +149,7 @@ export class TranscriptionStore {
     }
 
     get timecodedText(): string {
-        return transcriptToTimecodedText(this.visibleTranscript);
+        return transcriptToText(this.visibleTranscript);
     }
 
     get plainText(): string {
