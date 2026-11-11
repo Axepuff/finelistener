@@ -7,6 +7,7 @@ import { createFakeRendererAdapter } from './testing/fakeRendererAdapter';
 const session: SessionDetails = {
     id: 'session-1', title: 'Audio', createdAt: 1, updatedAt: 1,
     sourceKind: 'imported', hasTranscript: true,
+    audioMode: 'original',
     audioOriginalPath: '/audio/original.mp3', audioWavPath: '/audio/source.wav',
     transcript: { version: 1, segments: [{ startSec: 0, endSec: 1, text: 'Previous transcript' }] },
 };
@@ -18,6 +19,7 @@ it('retains the current transcript when audio optimization returns old session m
         optimizeAudio: () => Promise.resolve({ ...session, audioOptimizedWavPath: '/audio/optimized.wav' }),
     });
     const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
     await store.openSession(session.id);
     expect(store.transcription.plainText).toBe('Previous transcript');
@@ -43,6 +45,7 @@ it('publishes session identity and saved transcript as one workspace transition'
         getSession: (id) => Promise.resolve(id === session.id ? session : withoutTranscript),
     });
     const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
     const snapshots: Array<[string | null, string]> = [];
     const unsubscribe = autorun(() => {
         snapshots.push([store.workspace.activeSessionId, store.transcription.plainText]);

@@ -28,6 +28,9 @@ export type ForegroundOperationKind =
     | 'deleting-session'
     | 'optimizing-audio'
     | 'filtering-transcript'
+    | 'analyzing-speakers'
+    | 'preparing-speaker-assets'
+    | 'editing-speakers'
     | 'transcribing';
 
 export interface ForegroundOperation {

@@ -4,6 +4,7 @@ import path from 'path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { SessionSourceRun } from '../types/sessions';
 import { SessionsService } from './SessionsService';
+import { SessionSpeakerWorkflow } from './SessionSpeakerWorkflow';
 
 const environment = vi.hoisted(() => ({ root: '' }));
 vi.mock('electron', () => ({
@@ -98,7 +99,9 @@ it('opens legacy sessions without assigning invented source labels', async () =>
     }));
     const session = await new SessionsService().getSession('legacy');
     expect(session.tracks).toBeUndefined();
-    expect(session.audioWavPath).toBe(path.join(sessionDir, 'original.wav'));
+    expect(session.audioMode).toBe('optimized');
+    expect(await fs.readFile(session.audioOriginalPath)).toEqual(wav(1000));
+    expect(session.audioOptimizedWavPath).toBeTruthy();
 });
 
 it('persists reversible duplicate-filter presentations without changing source results', async () => {
@@ -139,7 +142,7 @@ it('persists reversible duplicate-filter presentations without changing source r
         ['system', duplicated],
         ['microphone', 'local reply.'],
     ]);
-    expect(filtered.transcript?.sourceRun).toEqual(sourceRun);
+    expect(filtered.transcript?.sourceRun).toMatchObject(sourceRun);
 
     const restored = await new SessionsService().setTranscriptDuplicateFilter(session.id, false);
     expect(restored.transcript?.segments.map((item) => item.text)).toEqual([
@@ -166,7 +169,7 @@ it.each([undefined, null, { wavPath: 42 }, { wavPath: 'cache.wav' }])('opens a v
     await fs.writeFile(path.join(brokenDir, 'session.json'), JSON.stringify({ version: 1, audio }));
 
     await expect(new SessionsService().getSession('valid')).resolves.toMatchObject({
-        id: 'valid', audioWavPath: path.join(sessionDir, 'original.wav'),
+        id: 'valid', audioMode: 'optimized', audioOriginalPath: path.join(sessionDir, 'original.wav'),
     });
 });
 
@@ -250,4 +253,95 @@ it('rebuilds cache accounting when the derived cache index is missing', async ()
     await expect(fs.access(first.audioWavPath)).rejects.toThrow();
     await expect(fs.access(first.audioOriginalPath)).resolves.toBeUndefined();
     await expect(fs.access(second.audioWavPath)).resolves.toBeUndefined();
+});
+
+it('publishes speaker replacement only for the same recognition and active session generation', async () => {
+    const source = path.join(environment.root, 'speaker-source.wav');
+    await fs.writeFile(source, wav(1000));
+    const service = new SessionsService();
+    const session = await service.createSessionFromImport(source);
+    const original = { version: 1 as const, segments: [{ startSec: 0, endSec: 1, text: 'first' }] };
+    await service.saveTranscript(session.id, original);
+    await service.setActiveSession(session.id);
+    const fingerprint = service.recognitionFingerprint(original);
+    const activeGeneration = service.getActiveSessionGeneration();
+    await service.saveTranscript(session.id, { ...original, segments: [{ ...original.segments[0], text: 'new ASR' }] });
+    expect(await service.replaceTranscriptIfCurrent(session.id, fingerprint, original)).toBe(false);
+    expect((await service.getSession(session.id)).transcript?.segments[0].text).toBe('new ASR');
+
+    const current = (await service.getSession(session.id)).transcript!;
+    await service.setActiveSession(null);
+    await service.setActiveSession(session.id);
+    expect(await service.replaceTranscriptIfCurrent(
+        session.id, service.recognitionFingerprint(current), original, undefined, activeGeneration,
+    )).toBe(false);
+    expect((await service.getSession(session.id)).transcript?.segments[0].text).toBe('new ASR');
+});
+
+it('preserves a duplicate-filter change made during speaker analysis of a legacy transcript', async () => {
+    const source = path.join(environment.root, 'speaker-filter-source.wav');
+    await fs.writeFile(source, wav(1000));
+    const service = new SessionsService();
+    const session = await service.createSessionFromImport(source);
+    const original = { version: 1 as const, segments: [], sourceRun: {
+        status: 'completed' as const, settings: { language: 'en' },
+        sources: [{ source: 'system' as const, status: 'completed' as const,
+            segments: [{ startSec: 0, endSec: 1, text: 'hello' }] }],
+    } };
+    await service.saveTranscript(session.id, original);
+    await service.setActiveSession(session.id);
+    const fingerprint = service.recognitionFingerprint(original);
+    await service.setTranscriptDuplicateFilter(session.id, false);
+    const replacement = { ...original, speakers: {
+        version: 1 as const, recognitionRevision: (await service.getSession(session.id)).transcript!.recognitionRevision!,
+        generation: 'generation', settings: {},
+        intervals: [{ startSec: 0, endSec: 1, speakerId: 'generation:one' }],
+        speakers: [{ id: 'generation:one', name: 'Speaker 1' }], corrections: [], status: 'completed' as const,
+    } };
+
+    expect(await service.replaceTranscriptIfCurrent(session.id, fingerprint, replacement)).toBe(true);
+    const saved = (await service.getSession(session.id)).transcript!;
+    expect(saved.presentation?.duplicateFilter?.enabled).toBe(false);
+    expect(saved.segments[0].speakerId).toBe('generation:one');
+});
+
+it('persists Original across reopen and reuses per-source Optimized without changing original samples or transcripts', async () => {
+    const source = path.join(environment.root, 'selected.wav');
+    await fs.writeFile(source, wav(1000));
+    const service = new SessionsService();
+    const created = await service.createSessionFromImport(source);
+    expect(created.audioMode).toBe('optimized');
+    const first = await service.prepareSourceAudio(created.audioOriginalPath, 'optimized');
+    const before = await fs.stat(first);
+    expect(await service.prepareSourceAudio(created.audioOriginalPath, 'optimized')).toBe(first);
+    expect((await fs.stat(first)).mtimeMs).toBe(before.mtimeMs);
+    await service.saveTranscript(created.id, { version: 1, segments: [{ startSec: 0, endSec: 1, text: 'Saved' }] });
+    await service.optimizeSessionAudio(created.id, 'original');
+    const reopened = await new SessionsService().getSession(created.id);
+    expect(reopened.audioMode).toBe('original');
+    expect(reopened.transcript?.segments[0].text).toBe('Saved');
+    expect(await fs.readFile(reopened.audioOriginalPath)).toEqual(wav(1000));
+    const signal = AbortSignal.abort();
+    await expect(service.prepareSourceAudio(created.audioOriginalPath, 'optimized', signal)).rejects.toThrow();
+});
+
+it('rejects an invalid group member and stale generation without partially persisting valid members', async () => {
+    const source = path.join(environment.root, 'group.wav');
+    await fs.writeFile(source, wav(1000));
+    const service = new SessionsService();
+    const session = await service.createSessionFromImport(source);
+    await service.setActiveSession(session.id);
+    const raw = [{ id: 'a', startSec: 0, endSec: 0.5, text: 'One' }, { id: 'b', startSec: 0.5, endSec: 1, text: 'Two' }];
+    await service.saveTranscript(session.id, { version: 1, recognitionRevision: 'r', segments: raw, recognitionSegments: raw,
+        speakers: { version: 1, recognitionRevision: 'r', generation: 'g', settings: {}, intervals: [],
+            speakers: [{ id: 'g:0', name: 'One' }], corrections: [], status: 'completed' } });
+    const workflow = new SessionSpeakerWorkflow(service, { getAssetStatus: () => Promise.resolve({ cpuReady: false, cudaReady: false, cudaAvailable: false }),
+        prepareAssets: () => Promise.resolve(), analyze: () => Promise.resolve({ intervals: [], backend: 'cpu', fallbackUsed: false }) }, () => undefined);
+    const first = { segmentId: 'a', startChar: 0, endChar: 3 };
+    const second = { segmentId: 'b', startChar: 0, endChar: 3 };
+    await expect(workflow.assign(session.id, { recognitionRevision: 'r', generation: 'g', spans: [first, { ...second, endChar: 20 }] }, 'g:0')).rejects.toThrow();
+    expect((await service.getSession(session.id)).transcript?.speakers?.corrections).toEqual([]);
+    await expect(workflow.assign(session.id, { recognitionRevision: 'r', generation: 'old', spans: [first, second] }, 'g:0')).rejects.toThrow();
+    const saved = await workflow.assign(session.id, { recognitionRevision: 'r', generation: 'g', spans: [first, second] }, 'g:0');
+    expect(saved.transcript?.speakers?.corrections).toEqual([{ ...first, speakerId: 'g:0' }, { ...second, speakerId: 'g:0' }]);
 });

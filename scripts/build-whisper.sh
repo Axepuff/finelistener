@@ -16,6 +16,7 @@ if [[ ! -d "$WHISPER_SRC" ]]; then
 fi
 
 # Output: build-assets/<variant>/whisper/ — basename "whisper" becomes the resource folder name
+node "$SCRIPT_DIR/patch-whisper-timestamps.cjs"
 OUTPUT_DIR="$ROOT_DIR/build-assets/$VARIANT/whisper"
 BUILD_DIR="$WHISPER_SRC/build-$VARIANT"
 

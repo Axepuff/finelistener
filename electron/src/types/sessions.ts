@@ -25,10 +25,77 @@ export interface SessionSourceRun {
 }
 
 export interface SessionTranscriptSegmentV1 {
+    id?: string;
     startSec: number;
     endSec: number | null;
     text: string;
     source?: RecordingSource;
+    words?: SessionRecognitionWord[];
+    rawSpan?: SessionRawSpan;
+    speakerId?: string | null;
+}
+
+export interface SessionRecognitionWord {
+    startSec: number;
+    endSec: number;
+    text: string;
+    startChar: number;
+    endChar: number;
+}
+
+export interface SessionRawSpan {
+    segmentId: string;
+    startChar: number;
+    endChar: number;
+}
+
+export type SessionAudioMode = 'original' | 'optimized';
+
+export interface SessionSpeakerAssignment {
+    recognitionRevision: string;
+    generation: string;
+    spans: SessionRawSpan[];
+}
+
+export interface SessionSpeakerProvenance {
+    version: 1;
+    engine: 'pyannote-community-1';
+    modelRevision: string;
+    runtimeRevision: string;
+    audioMode: SessionAudioMode;
+    backend: 'cpu' | 'cuda';
+    range?: { start: number; end: number };
+    speakerCount?: number;
+    regularIntervals: SessionSpeakerInterval[];
+    exclusiveIntervals: SessionSpeakerInterval[];
+}
+
+export interface SessionSpeakerInterval {
+    startSec: number;
+    endSec: number;
+    speakerId: string;
+}
+
+export interface SessionSpeakerIdentity {
+    id: string;
+    name: string;
+}
+
+export interface SessionSpeakerCorrection extends SessionRawSpan {
+    speakerId: string | null;
+}
+
+export interface SessionSpeakerMetadataV1 {
+    version: 1;
+    recognitionRevision: string;
+    generation: string;
+    settings: { speakerCount?: number; range?: { start: number; end: number } };
+    provenance?: SessionSpeakerProvenance;
+    intervals: SessionSpeakerInterval[];
+    speakers: SessionSpeakerIdentity[];
+    corrections: SessionSpeakerCorrection[];
+    merges?: Array<{ fromId: string; toId: string }>;
+    status: 'completed' | 'failed';
 }
 
 export interface TranscriptDuplicateFilterV1 {
@@ -47,6 +114,9 @@ export interface SessionTranscriptPresentationV1 {
 export interface SessionTranscriptV1 {
     version: 1;
     segments: SessionTranscriptSegmentV1[];
+    recognitionRevision?: string;
+    recognitionSegments?: SessionTranscriptSegmentV1[];
+    speakers?: SessionSpeakerMetadataV1;
     sourceRun?: SessionSourceRun;
     presentation?: SessionTranscriptPresentationV1;
 }
@@ -83,6 +153,7 @@ export interface SessionTranscriptionInfo {
 }
 
 export interface SessionFileV1 {
+    audioMode?: SessionAudioMode;
     version: 1;
     id: string;
     recordingId?: string;
@@ -107,10 +178,12 @@ export interface SessionListItem {
 }
 
 export interface SessionDetails extends SessionListItem {
+    audioMode?: SessionAudioMode;
     audioOriginalPath: string;
     audioWavPath: string;
     audioOptimizedWavPath?: string;
     transcript?: SessionTranscriptV1;
+    transcription?: SessionTranscriptionInfo;
     tracks?: SessionSourceTrack[];
     sourceWarnings?: Array<{ source: RecordingSource; message: string }>;
 }

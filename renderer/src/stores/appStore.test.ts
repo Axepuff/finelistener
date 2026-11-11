@@ -13,6 +13,7 @@ const createSession = (overrides: Partial<SessionDetails> = {}): SessionDetails 
     updatedAt: 1,
     sourceKind: 'imported',
     hasTranscript: false,
+    audioMode: 'original',
     audioOriginalPath: 'C:\\audio\\source.mp3',
     audioWavPath: 'C:\\audio\\source.wav',
     ...overrides,
@@ -82,6 +83,7 @@ describe('AppStore', () => {
                 getSession: () => Promise.resolve(recordedSession),
             });
             const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
             store.initialize();
             try {
@@ -134,6 +136,7 @@ describe('AppStore', () => {
             getSession: () => Promise.resolve(createSession()),
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.initialize();
         try {
@@ -163,6 +166,7 @@ describe('AppStore', () => {
             stopSystemRecording,
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.initialize();
         try {
@@ -182,11 +186,12 @@ describe('AppStore', () => {
     it('provides one idempotent lifecycle for renderer listeners', () => {
         const fake = createFakeRendererAdapter();
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.initialize();
         store.initialize();
 
-        expect(fake.activeListenerCount).toBe(9);
+        expect(fake.activeListenerCount).toBe(10);
 
         store.dispose();
         store.dispose();
@@ -194,7 +199,7 @@ describe('AppStore', () => {
         expect(fake.activeListenerCount).toBe(0);
 
         store.initialize();
-        expect(fake.activeListenerCount).toBe(9);
+        expect(fake.activeListenerCount).toBe(10);
 
         store.dispose();
     });
@@ -210,6 +215,7 @@ describe('AppStore', () => {
             stopTranscription: () => Promise.resolve(true),
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.initialize();
         await store.openSession('session-1');
@@ -243,6 +249,7 @@ describe('AppStore', () => {
             }),
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.initialize();
         try {
@@ -281,8 +288,12 @@ describe('AppStore', () => {
                 resolvers.push(resolve);
             }),
         );
-        const fake = createFakeRendererAdapter({ transcribe, stopTranscription: () => Promise.resolve(true) });
+        const fake = createFakeRendererAdapter({
+            transcribe, stopTranscription: () => Promise.resolve(true),
+            getSession: () => Promise.resolve(createSession()),
+        });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.workspace.replaceWorkspace(createSession());
         const firstRun = store.startTranscription(transcriptionOptions);
@@ -305,8 +316,10 @@ describe('AppStore', () => {
         const fake = createFakeRendererAdapter({
             listSessions,
             transcribe: () => Promise.resolve('[00:00:00.000 --> 00:00:01.000] Final text\n'),
+            getSession: () => Promise.resolve(createSession()),
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.workspace.replaceWorkspace(createSession());
         const result = await store.startTranscription(transcriptionOptions);
@@ -325,6 +338,7 @@ describe('AppStore', () => {
             getSession: () => Promise.resolve(createSession()),
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         const importPromise = store.importAudio();
 
         const openResult = await store.openSession('session-1');
@@ -347,6 +361,7 @@ describe('AppStore', () => {
             deleteSession,
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.workspace.replaceWorkspace(activeSession);
         store.transcription.replaceSavedTranscript(sourceTranscript);
@@ -373,6 +388,7 @@ describe('AppStore', () => {
             setTranscriptDuplicateFilter,
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.workspace.replaceWorkspace(activeSession);
         store.transcription.replaceSavedTranscript(sourceTranscript);
@@ -396,6 +412,7 @@ describe('AppStore', () => {
         const activeSession = createSession({ transcript: sourceTranscript, hasTranscript: true });
         const fake = createFakeRendererAdapter({ setTranscriptDuplicateFilter, optimizeAudio });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.workspace.replaceWorkspace(activeSession);
         store.transcription.replaceSavedTranscript(sourceTranscript);
@@ -420,6 +437,7 @@ describe('AppStore', () => {
             deleteSession,
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.workspace.replaceWorkspace(activeSession);
         store.transcription.replaceSavedTranscript(sourceTranscript);
@@ -445,6 +463,7 @@ describe('AppStore', () => {
             importAudio: () => importUpdate.promise,
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.workspace.replaceWorkspace(activeSession);
         store.transcription.replaceSavedTranscript(sourceTranscript);
@@ -459,7 +478,7 @@ describe('AppStore', () => {
 
         filterUpdate.resolve({ ...activeSession, transcript: staleTranscript });
         expect((await filterPromise).ok).toBe(false);
-        expect(store.transcription.plainText).toBe('System audio: Saved source transcript');
+        expect(store.transcription.plainText).toBe('Saved source transcript');
         expect(store.operations.kind).toBe('importing');
 
         importUpdate.resolve(null);
@@ -476,6 +495,7 @@ describe('AppStore', () => {
             transcribe,
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         await store.openSession('session-1');
         store.workspace.setSegmentStart(-5);
@@ -508,6 +528,7 @@ describe('AppStore', () => {
             getSession: () => Promise.resolve(recoveredSession),
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.initialize();
         await vi.waitFor(() => expect(store.recordingRecovery.hasItems).toBe(true));
 

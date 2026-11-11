@@ -2,7 +2,7 @@ import { Blob } from 'buffer';
 import { Agent, FormData, fetch as undiciFetch } from 'undici';
 import type { RequestInit as UndiciRequestInit } from 'undici';
 import type { TranscribeOpts } from '../../types/transcription';
-import { formatVerboseJson, type WhisperVerboseResponse } from './utils';
+import { parseVerboseJson, type StructuredTranscriptionResult, type WhisperVerboseResponse } from './utils';
 
 interface InferencePayload {
     audioBuffer: Uint8Array<ArrayBuffer>;
@@ -14,6 +14,7 @@ export type InferenceResponse =
     | {
         ok: true;
         text: string;
+        segments?: StructuredTranscriptionResult['segments'];
     }
     | {
         ok: false;
@@ -108,10 +109,7 @@ export class WhisperServerApiClient {
         if (contentType.includes('application/json')) {
             const payloadJson = (await response.json()) as WhisperVerboseResponse;
 
-            return {
-                ok: true,
-                text: formatVerboseJson(payloadJson),
-            };
+            return { ok: true, ...parseVerboseJson(payloadJson) };
         }
 
         return {

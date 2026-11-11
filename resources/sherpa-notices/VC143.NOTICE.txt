@@ -1,0 +1,13 @@
+Microsoft Visual C++ v14 runtime, version 14.44.35112
+
+The optional Windows CUDA component contains unmodified msvcp140.dll,
+msvcp140_1.dll, vcruntime140.dll, and vcruntime140_1.dll copied from the
+Microsoft.VC143.CRT redistribution directory in Visual Studio 2022 Build
+Tools. Their exact byte sizes and SHA-256 hashes are pinned in
+scripts/sherpa-assets.json and checked before packaging.
+
+Redistribution is subject to the Microsoft Software License Terms for the
+licensed Visual Studio installation. Microsoft's redistribution guidance and
+distributable file list are available at:
+https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files
+https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution

@@ -39,13 +39,37 @@ jobs:
           node-version: 20
           cache: npm
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Prepare model acquisition tooling
+        run: python -m pip install huggingface_hub==2.1.1
+
       - run: npm ci
 
       - name: Build whisper.cpp (Metal) and prepare models
         run: npm run prebuild:assets:mac
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
 
       - name: Build and package
         run: npm run make:mac
+
+      - name: Verify Community release component
+        run: python scripts/verify-community-release.py build-assets/mac-arm64/community/component.json
+
+      - name: Upload Community component
+        uses: actions/upload-artifact@v4
+        with:
+          name: community-mac-arm64
+          path: |
+            build-assets/release-components/*.part*
+            build-assets/release-components/*.zip
+            !build-assets/release-components/*win-x64-gpu.zip
+            build-assets/release-components/*-component.json
+          compression-level: 0
+          if-no-files-found: error
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -80,15 +104,39 @@ jobs:
           vulkan-components: Vulkan-Headers, Vulkan-Loader
           vulkan-use-cache: true
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Prepare model acquisition tooling
+        run: python -m pip install huggingface_hub==2.1.1
+
       - run: npm ci
 
       - name: Build whisper.cpp (CUDA+Vulkan), miniaudio, and prepare models
         shell: bash
         run: npm run prebuild:assets:win-gpu
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
 
       - name: Build and package
         shell: bash
         run: npm run make:win-gpu
+
+      - name: Verify Community release component
+        run: python scripts/verify-community-release.py build-assets/win-x64-gpu/community/component.json
+
+      - name: Upload Community component
+        uses: actions/upload-artifact@v4
+        with:
+          name: community-win-x64-gpu
+          path: |
+            build-assets/release-components/*.part*
+            build-assets/release-components/*.zip
+            !build-assets/release-components/*win-x64-gpu.zip
+            build-assets/release-components/*-component.json
+          compression-level: 0
+          if-no-files-found: error
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -110,15 +158,39 @@ jobs:
           node-version: 20
           cache: npm
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Prepare model acquisition tooling
+        run: python -m pip install huggingface_hub==2.1.1
+
       - run: npm ci
 
       - name: Build whisper.cpp (CPU), miniaudio, and prepare models
         shell: bash
         run: npm run prebuild:assets:win-cpu
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
 
       - name: Build and package
         shell: bash
         run: npm run make:win-cpu
+
+      - name: Verify Community release component
+        run: python scripts/verify-community-release.py build-assets/win-x64-cpu/community/component.json
+
+      - name: Upload Community component
+        uses: actions/upload-artifact@v4
+        with:
+          name: community-win-x64-cpu
+          path: |
+            build-assets/release-components/*.part*
+            build-assets/release-components/*.zip
+            !build-assets/release-components/*win-x64-gpu.zip
+            build-assets/release-components/*-component.json
+          compression-level: 0
+          if-no-files-found: error
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -132,12 +204,18 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+
+      - name: Verify Community release components
+        run: python3 scripts/verify-community-release.py --all artifacts --release-tag "$GITHUB_REF_NAME"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
+          fail_on_unmatched_files: true
           generate_release_notes: true

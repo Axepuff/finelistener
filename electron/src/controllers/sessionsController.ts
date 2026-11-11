@@ -53,12 +53,9 @@ export function registerSessionsController(
         return service.createSessionFromImport(filePaths[0]);
     });
 
-    ipc.handle('sessions:optimize-audio', async (_event, sessionId: unknown) => {
-        if (typeof sessionId !== 'string' || !sessionId.trim()) {
-            throw new Error('Invalid session id');
-        }
-
-        return service.optimizeSessionAudio(sessionId);
+    ipc.handle('sessions:optimize-audio', async (_event, sessionId: unknown, mode: unknown = 'optimized') => {
+        if (typeof sessionId !== 'string' || !sessionId.trim() || (mode !== 'original' && mode !== 'optimized')) throw new Error('Invalid audio choice');
+        return service.optimizeSessionAudio(sessionId, mode);
     });
 
     ipc.handle('sessions:set-transcript-duplicate-filter', async (

@@ -289,34 +289,30 @@ const findCandidates = (systemGroups: CandidateGroup[], microphoneGroups: Candid
         || left.timeDistance - right.timeDistance);
 };
 
-const removeSuppressedWords = (segment: SegmentTokens, suppressed: Set<number>): string => {
-    const kept = segment.tokens.filter((token) => !suppressed.has(token.tokenIndex));
-
-    if (kept.length === 0) return '';
-
-    let result = kept[0].tokenIndex === 0 ? segment.segment.text.slice(0, kept[0].start) : '';
-
-    for (const [index, token] of kept.entries()) {
-        result += segment.segment.text.slice(token.start, token.end);
-        const next = kept[index + 1];
-
-        if (next) {
-            if (next.tokenIndex === token.tokenIndex + 1) {
-                result += segment.segment.text.slice(token.end, next.start);
-            } else {
-                const suppressedNext = segment.tokens[token.tokenIndex + 1];
-                const punctuation = suppressedNext ?
-                    segment.segment.text.slice(token.end, suppressedNext.start).replace(/\s+/g, '') :
-                    '';
-
-                result += `${punctuation} `;
-            }
-        } else if (token.tokenIndex === segment.tokens.length - 1) {
-            result += segment.segment.text.slice(token.end);
+const retainedSpans = (segment: SegmentTokens, suppressed: Set<number>): SessionTranscriptSegmentV1[] => {
+    const result: SessionTranscriptSegmentV1[] = [];
+    let first = -1;
+    for (let index = 0; index <= segment.tokens.length; index += 1) {
+        if (index < segment.tokens.length && !suppressed.has(index)) {
+            if (first < 0) first = index;
+            continue;
         }
+        if (first < 0) continue;
+        const start = first === 0 ? 0 : segment.tokens[first].start;
+        const next = segment.tokens[index];
+        const end = next ? next.start : segment.segment.text.length;
+        const raw = segment.segment.text.slice(start, end);
+        const leading = raw.length - raw.trimStart().length;
+        const trailing = raw.length - raw.trimEnd().length;
+        const startChar = start + leading;
+        const endChar = end - trailing;
+        const text = segment.segment.text.slice(startChar, endChar);
+        if (text) result.push({ ...segment.segment, text,
+            ...(segment.segment.id ? { rawSpan: { segmentId: segment.segment.id, startChar, endChar } } : {}),
+        });
+        first = -1;
     }
-
-    return result.trim();
+    return result;
 };
 
 const createMetadata = (enabled: boolean, status: TranscriptDuplicateFilterV1['status']): TranscriptDuplicateFilterV1 => ({
@@ -327,7 +323,9 @@ const createMetadata = (enabled: boolean, status: TranscriptDuplicateFilterV1['s
 
 const mergeCompletedSegments = (run: SessionSourceRun): SessionTranscriptSegmentV1[] => run.sources
     .flatMap((source) => source.status === 'completed' ?
-        source.segments.map((segment) => ({ ...segment, source: source.source })) :
+        source.segments.map((segment) => ({ ...segment, source: source.source,
+            ...(segment.id ? { rawSpan: { segmentId: segment.id, startChar: 0, endChar: segment.text.length } } : {}),
+        })) :
         [])
     .sort((left, right) => left.startSec - right.startSec);
 
@@ -346,7 +344,9 @@ export const deriveSourceTranscript = (run: SessionSourceRun, enabled: boolean):
     try {
         const systemSegments = run.sources
             .filter((source) => source.source === 'system' && source.status === 'completed')
-            .flatMap((source) => source.segments.map((segment) => ({ ...segment, source: 'system' as const })));
+            .flatMap((source) => source.segments.map((segment) => ({ ...segment, source: 'system' as const,
+                ...(segment.id ? { rawSpan: { segmentId: segment.id, startChar: 0, endChar: segment.text.length } } : {}),
+            })));
         const microphoneSegments = run.sources
             .filter((source) => source.source === 'microphone' && source.status === 'completed')
             .flatMap((source) => source.segments.map((segment) => ({ ...segment, source: 'microphone' as const })));
@@ -367,10 +367,11 @@ export const deriveSourceTranscript = (run: SessionSourceRun, enabled: boolean):
         const filteredMicrophone = tokenizedMicrophone.flatMap((segment, segmentIndex) => {
             const suppressed = suppressedBySegment.get(segmentIndex);
 
-            if (!suppressed?.size) return [{ ...segment.segment }];
-            const text = removeSuppressedWords(segment, suppressed);
-
-            return text ? [{ ...segment.segment, text }] : [];
+            if (!suppressed?.size) return [{ ...segment.segment,
+                ...(segment.segment.id ? { rawSpan: { segmentId: segment.segment.id,
+                    startChar: 0, endChar: segment.segment.text.length } } : {}),
+            }];
+            return retainedSpans(segment, suppressed);
         });
         const filteredSegments = [
             ...systemSegments,

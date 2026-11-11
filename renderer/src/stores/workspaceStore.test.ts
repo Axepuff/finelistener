@@ -24,7 +24,8 @@ describe('WorkspaceStore', () => {
         expect(store.activeSession).not.toHaveProperty('transcript');
         expect(store.activeSession).not.toHaveProperty('hasTranscript');
         expect(store.activeSession).toMatchObject({ id: session.id, title: session.title });
-        expect(store.audioSourcePath).toBe(session.audioWavPath);
+        expect(store.audioSourcePath).toBe(session.audioOptimizedWavPath);
+        expect(store.audioMode).toBe('optimized');
         expect(session.transcript?.segments[0]?.text).toBe('Saved');
 
         expect(store.useOptimizedAudio(session)).toBe(true);

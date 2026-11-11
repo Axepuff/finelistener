@@ -20,7 +20,7 @@ import {
 
 const session: SessionDetails = {
     id: 'recorded', title: 'Recording', createdAt: 1, updatedAt: 1, sourceKind: 'recorded',
-    hasTranscript: false, audioOriginalPath: 'mix.wav', audioWavPath: 'mix.wav',
+    hasTranscript: false, audioMode: 'original', audioOriginalPath: 'mix.wav', audioWavPath: 'mix.wav',
     tracks: [
         { source: 'system', filePath: 'system.wav', startOffsetMs: 0 },
         { source: 'microphone', filePath: 'microphone.wav', startOffsetMs: 0 },
@@ -54,6 +54,7 @@ describe('recording sources', () => {
             startSystemRecording, stopSystemRecording: () => Promise.resolve(captured), getSession: () => Promise.resolve(session) });
         const persist = vi.spyOn(fake.adapter, 'setUiPreference');
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.initialize();
         try {
@@ -85,6 +86,7 @@ describe('recording sources', () => {
             onRecordingState: (callback) => { emitState = callback; return () => undefined; },
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.initialize();
         try {
@@ -115,6 +117,7 @@ describe('recording sources', () => {
             },
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.initialize();
         try {
             await settle();
@@ -143,6 +146,7 @@ describe('recording sources', () => {
             startSystemRecording, listRecoverableRecordings,
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.initialize();
         try {
             await settle();
@@ -177,14 +181,14 @@ describe('source transcription', () => {
             fake.emitTranscribeText({ runId, source: 'system', offsetSec: 2, chunk: '[00:00:01.000 --> 00:00:02.000] Hello\n' });
             fake.emitTranscribeText({ runId, source: 'microphone', offsetSec: 2, chunk: '[00:00:00.000 --> 00:00:01.000] Earlier\n' });
             expect(store.draftTranscript?.segments.map((segment) => [segment.startSec, segment.source])).toEqual([[2, 'microphone'], [3, 'system']]);
-            expect(store.plainText).toBe('Microphone: Earlier\nSystem audio: Hello');
+            expect(store.plainText).toBe('Earlier Hello');
             expect(store.timecodedText).toContain('Microphone: Earlier');
             expect(store.renderedHtml).toContain('System audio: Hello');
             finish({ ...session, transcript: partial });
             expect((await run).status).toBe('incomplete');
             expect(store.isIncomplete).toBe(true);
             expect(store.draftTranscript).toBeNull();
-            expect(store.plainText).toBe('System audio: Saved speech');
+            expect(store.plainText).toBe('Saved speech');
         } finally { store.dispose(); }
     });
 
@@ -192,6 +196,7 @@ describe('source transcription', () => {
         const transcribeSession = vi.fn(() => Promise.resolve({ ...session, transcript: partial }));
         const fake = createFakeRendererAdapter({ getSession: () => Promise.resolve({ ...session, transcript: partial }), transcribeSession });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.initialize();
         try {
@@ -214,6 +219,7 @@ describe('source transcription', () => {
             getSession: () => Promise.resolve({ ...session, transcript: partial }),
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.workspace.replaceWorkspace(session);
         store.initialize();
@@ -229,7 +235,7 @@ describe('source transcription', () => {
             await run;
             expect(store.transcription.runOutcome).toBe('stopped');
             expect(store.transcription.isIncomplete).toBe(true);
-            expect(store.transcription.plainText).toBe('System audio: Saved speech');
+            expect(store.transcription.plainText).toBe('Saved speech');
             expect(store.operations.isBusy).toBe(false);
         } finally { store.dispose(); }
     });
@@ -249,6 +255,7 @@ describe('failed source transcription status', () => {
 
     it('does not claim completed source results when both sources fail', () => {
         const store = new AppStore(null);
+        void store.speakers.setEnabled(false);
 
         store.workspace.replaceWorkspace(session);
         store.transcription.replaceSavedTranscript(failedTranscript);
@@ -265,6 +272,7 @@ describe('failed source transcription status', () => {
             transcribeSession: () => Promise.resolve({ ...session, transcript: failedTranscript }),
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.workspace.replaceWorkspace(session);
         const result = await store.startTranscription(options);
@@ -288,6 +296,7 @@ it.each([false, true])('keeps a completed empty source successful when another s
     };
     const fake = createFakeRendererAdapter({ transcribeSession: () => Promise.resolve({ ...session, transcript }) });
     const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
     store.workspace.replaceWorkspace(session);
     expect((await store.startTranscription(options)).ok).toBe(true);
@@ -348,6 +357,7 @@ describe('transcript duplicate filter presentation', () => {
         };
         const fake = createFakeRendererAdapter({ setTranscriptDuplicateFilter, setUiPreference });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.workspace.replaceWorkspace({ ...session, transcript: unfiltered });
         store.transcription.replaceSavedTranscript(unfiltered);
@@ -359,7 +369,7 @@ describe('transcript duplicate filter presentation', () => {
         expect(preferenceWrites).toContainEqual({ key: 'transcriptDuplicateFilterEnabled', value: true });
         expect(store.transcription.duplicateFilterEnabled).toBe(true);
         expect(store.transcription.plainText).toBe(
-            'System audio: This shared phrase contains enough words for duplicate filtering\nMicrophone: local reply',
+            'This shared phrase contains enough words for duplicate filtering local reply',
         );
         expect(store.transcription.timecodedText).toContain('Microphone: local reply');
         expect(store.transcription.renderedHtml).toContain('Microphone: local reply');
@@ -368,10 +378,10 @@ describe('transcript duplicate filter presentation', () => {
 
         expect((await store.setTranscriptDuplicateFilterEnabled(false)).ok).toBe(true);
         expect(store.transcription.plainText).toContain(
-            'Microphone: This shared phrase contains enough words for duplicate filtering local reply',
+            'This shared phrase contains enough words for duplicate filtering local reply',
         );
         expect((await store.setTranscriptDuplicateFilterEnabled(true)).ok).toBe(true);
-        expect(store.transcription.plainText).toContain('Microphone: local reply');
+        expect(store.transcription.plainText).toContain('local reply');
     });
 
     it('uses the remembered preference for subsequent source-aware runs', async () => {
@@ -380,7 +390,7 @@ describe('transcript duplicate filter presentation', () => {
             transcript: deriveSourceTranscript(sourceRun, false),
         }));
         const getUiPreference = <K extends UiPreferenceKey>(key: K): Promise<UiPreferenceValueMap[K]> => {
-            const value = key === 'transcriptDuplicateFilterEnabled' ? false : UI_PREFERENCE_DEFAULTS[key];
+            const value = key === 'transcriptDuplicateFilterEnabled' || key === 'speakerLabelsEnabled' ? false : UI_PREFERENCE_DEFAULTS[key];
 
             return Promise.resolve(value as UiPreferenceValueMap[K]);
         };
@@ -389,6 +399,7 @@ describe('transcript duplicate filter presentation', () => {
             transcribeSession,
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         store.workspace.replaceWorkspace(session);
         store.initialize();
@@ -414,10 +425,11 @@ describe('transcript duplicate filter presentation', () => {
             }),
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
         expect((await store.openSession(session.id)).ok).toBe(true);
         expect(store.transcription.duplicateFilterEnabled).toBe(true);
-        expect(store.transcription.plainText).toContain('Microphone: local reply');
+        expect(store.transcription.plainText).toContain('local reply');
 
         const legacy: SessionTranscriptV1 = {
             version: 1,

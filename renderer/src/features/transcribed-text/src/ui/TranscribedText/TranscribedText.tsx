@@ -1,11 +1,13 @@
-import { ActionIcon, Alert, Button, Group, Paper, Progress, Stack, Text, ThemeIcon } from '@mantine/core';
+import { ActionIcon, Alert, Button, Group, Modal, Paper, Progress, Stack, Text, ThemeIcon } from '@mantine/core';
 import { IconHeadphones, IconPlus } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState, type MouseEvent } from 'react';
-import { formatTranscriptRegionLabel, formatTranscriptSourcePrefix } from 'renderer/src/stores/transcriptFormat';
+import type { SessionSpeakerAssignment } from 'electron/src/types/sessions';
+import { formatTranscriptPrefix, formatTranscriptRegionLabel, projectTranscript } from 'renderer/src/stores/transcriptFormat';
 import { useAppStore } from '../../../../../AppContext';
 import { TranscribedTextContent } from './TranscribedTextContent';
 import { TranscribedTextControls } from './TranscribedTextControls';
+import { SpeakerControls } from './SpeakerControls';
 import { findTranscriptMatches } from './search';
 import { parseTimeToSeconds } from './utils';
 
@@ -15,6 +17,15 @@ export const TranscribedText: React.FC = observer(() => {
     const [showRegions, setShowRegions] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedMatchIndex, setSelectedMatchIndex] = useState(0);
+    const [confirmRetrySpeakers, setConfirmRetrySpeakers] = useState<{
+        sessionId: string | null;
+        speakers: object;
+    } | null>(null);
+    const [selectedSpan, setSelectedSpan] = useState<{
+        sessionId: string | null;
+        generation: string | undefined;
+        span: SessionSpeakerAssignment;
+    } | null>(null);
     const currentTextValue = showRegions ? transcription.timecodedText : transcription.plainText;
     const isInitialEmptyState = (
         store.lifecycleState === 'initial'
@@ -22,12 +33,21 @@ export const TranscribedText: React.FC = observer(() => {
     ) && currentTextValue.trim().length === 0;
     const isReadyEmptyState = store.transcriptionWorkflow.state === 'loaded';
     const audioTitle = store.workspace.activeSession?.title;
-    const plainSegments = transcription.visibleTranscript?.segments.map((segment) => ({
+    const plainSegments = projectTranscript(transcription.visibleTranscript, showRegions).map((segment, index) => ({
+        id: segment.members.map((member) => member.segment.rawSpan ? `${member.segment.rawSpan.segmentId}:${member.segment.rawSpan?.startChar}:${member.segment.rawSpan?.endChar}` : `legacy-${index}`).join('|'),
         text: segment.text,
-        prefix: formatTranscriptSourcePrefix(segment),
+        prefix: showRegions ? formatTranscriptPrefix(segment, transcription.visibleTranscript) : '',
         startSeconds: segment.startSec,
         timecode: formatTranscriptRegionLabel(segment),
-    })) ?? [];
+        assignment: transcription.savedTranscript?.speakers && segment.members.every((member) => member.segment.rawSpan) ? {
+            generation: transcription.savedTranscript.speakers.generation,
+            recognitionRevision: transcription.savedTranscript.speakers.recognitionRevision,
+            spans: segment.members.map((member) => ({ ...member.segment.rawSpan! })),
+        } : undefined,
+        children: segment.members.map((member) => ({ segment: member.segment })),
+    }));
+    const currentSelectedSpan = selectedSpan?.sessionId === store.workspace.activeSessionId
+        && selectedSpan.generation === transcription.savedTranscript?.speakers?.generation ? selectedSpan.span : null;
     const matches = findTranscriptMatches(plainSegments, searchQuery);
     const activeMatchIndex = matches.length > 0 ? Math.min(selectedMatchIndex, matches.length - 1) : -1;
 
@@ -60,6 +80,11 @@ export const TranscribedText: React.FC = observer(() => {
         if (!result.ok) {
             store.activityLog.appendEvent(result.message);
         }
+    };
+
+    const handleRetry = async (replaceSpeakerLabels = false) => {
+        const result = await store.retryIncompleteTranscription(replaceSpeakerLabels);
+        if (!result.ok) store.activityLog.appendEvent(result.message);
     };
 
     return (
@@ -105,6 +130,7 @@ export const TranscribedText: React.FC = observer(() => {
                         onPreviousMatch={() => moveToMatch(-1)}
                         onNextMatch={() => moveToMatch(1)}
                     />
+                    <SpeakerControls key={store.workspace.activeSessionId ?? ''} selectedSpan={currentSelectedSpan} onCloseSpan={() => setSelectedSpan(null)} />
 
                     {store.lifecycleState === 'transcribing' ? (
                         <Group gap={8} align="center" wrap="nowrap" style={{ width: '100%' }}>
@@ -122,15 +148,37 @@ export const TranscribedText: React.FC = observer(() => {
                                     'Completed sources are saved. Retry to transcribe the remaining sources using the original settings.' :
                                     'No source was transcribed. Retry using the original settings.'}</Text>
                                 <Button size="compact-sm" variant="light" disabled={store.operations.isBusy} onClick={() => {
-                                    void store.retryIncompleteTranscription().then((result) => {
-                                        if (!result.ok) store.activityLog.appendEvent(result.message);
+                                    if (transcription.savedTranscript?.speakers) setConfirmRetrySpeakers({
+                                        sessionId: store.workspace.activeSessionId,
+                                        speakers: transcription.savedTranscript.speakers,
                                     });
+                                    else void handleRetry();
                                 }}>
                                     {'Retry remaining sources'}
                                 </Button>
                             </Stack>
                         </Alert>
                     ) : null}
+                    {transcription.runOutcome === 'error' && !transcription.isIncomplete ? (
+                        <Alert color="red" title="Transcription failed">
+                            {transcription.runErrorMessage}
+                        </Alert>
+                    ) : null}
+                    <Modal opened={confirmRetrySpeakers !== null} onClose={() => setConfirmRetrySpeakers(null)} title="Replace speaker labels?" centered={true}>
+                        <Stack gap="sm">
+                            <Text size="sm">A successful retry may replace speaker names, assignments, and merges in this session.</Text>
+                            <Group justify="flex-end">
+                                <Button variant="default" onClick={() => setConfirmRetrySpeakers(null)}>Cancel</Button>
+                                <Button color="red" disabled={store.operations.isBusy} onClick={() => {
+                                    const isCurrent = confirmRetrySpeakers?.sessionId === store.workspace.activeSessionId
+                                        && confirmRetrySpeakers.speakers === transcription.savedTranscript?.speakers;
+                                    setConfirmRetrySpeakers(null);
+                                    if (isCurrent) void handleRetry(true);
+                                    else store.activityLog.appendEvent('Speaker labels changed. Review the transcript before retrying.');
+                                }}>Retry and replace</Button>
+                            </Group>
+                        </Stack>
+                    </Modal>
                     {transcription.duplicateFilterFailed ? (
                         <Alert color="yellow" title="Duplicate filtering unavailable">
                             {'The unfiltered transcript is shown. Try the filter again.'}
@@ -176,6 +224,11 @@ export const TranscribedText: React.FC = observer(() => {
                             searchQuery={searchQuery}
                             transcriptText={currentTextValue}
                             onRegionClick={handleRegionClick}
+                            onEditSpeaker={transcription.savedTranscript?.speakers ? (span) => setSelectedSpan({
+                                sessionId: store.workspace.activeSessionId,
+                                generation: transcription.savedTranscript?.speakers?.generation,
+                                span,
+                            }) : undefined}
                         />
                     )}
                 </>

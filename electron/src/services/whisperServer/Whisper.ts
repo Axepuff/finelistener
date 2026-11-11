@@ -10,6 +10,7 @@ import { WhisperServerApiClient } from './WhisperServerApiClient';
 import { WhisperServerProcess } from './WhisperServerProcess';
 import type { TranscriptionCallbacks } from './types';
 import { normalizeChunk } from './utils';
+import type { StructuredTranscriptionResult } from './utils';
 import { isSilentPcmWav } from './pcmSilence';
 
 const SERVER_HOST = '127.0.0.1';
@@ -79,6 +80,10 @@ export class Whisper {
     }
 
     public async transcribe(audioPath: string, opts: TranscribeOpts): Promise<string> {
+        return (await this.transcribeResult(audioPath, opts)).text;
+    }
+
+    public async transcribeResult(audioPath: string, opts: TranscribeOpts): Promise<StructuredTranscriptionResult> {
         if (this.isTranscribing) {
             throw new Error('Previous transcription is not finished yet');
         }
@@ -103,7 +108,7 @@ export class Whisper {
                 opts.segment,
                 opts.optimized ?
                     { highPass: 80, lowPass: 12000, dynanorm: true, microphoneGate: opts.microphoneGateEnabled, signal: operation.signal } :
-                    { highPass: undefined, microphoneGate: opts.microphoneGateEnabled, signal: operation.signal },
+                    { highPass: undefined, dynanorm: false, microphoneGate: opts.microphoneGateEnabled, signal: operation.signal },
             );
 
             this.activeRunId = opts.runId;
@@ -122,7 +127,7 @@ export class Whisper {
                 operation.signal.throwIfAborted();
                 if (isSilentPcmWav(fileBuffer)) {
                     this.callbacks.onProgressPercent?.({ runId: opts.runId, value: 100 });
-                    return '';
+                    return { text: '', segments: [] };
                 }
                 const safeBuffer = new Uint8Array(fileBuffer.byteLength);
 
@@ -154,7 +159,7 @@ export class Whisper {
                 }
                 this.callbacks.onProgressPercent?.({ runId: opts.runId, value: 100 });
 
-                return transcriptText;
+                return { text: transcriptText, segments: inferenceResult.segments };
             } catch (error) {
                 if (this.abortController === null && error instanceof Error && error.name === 'AbortError') {
                     throw new Error('Transcription was stopped by the user');
@@ -168,7 +173,7 @@ export class Whisper {
                     if (this.noSpeechController?.signal.aborted) {
                         this.callbacks.onStderrChunk?.('Whisper detected no speech in this source. Saved an empty transcript.');
                         this.callbacks.onProgressPercent?.({ runId: opts.runId, value: 100 });
-                        return '';
+                        return { text: '', segments: [] };
                     }
                 }
 

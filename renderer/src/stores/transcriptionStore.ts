@@ -4,7 +4,7 @@ import type { WhisperModelName } from 'electron/src/types/whisper';
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { TranscriptionRunOutcome } from 'renderer/src/features/transcribe-state/src/model/transcriptionWorkflow';
 import type { RendererAdapter } from './rendererAdapter';
-import { formatTranscriptSegment, parseTranscript, transcriptToHtml, transcriptToTimecodedText } from './transcriptFormat';
+import { transcriptToPlainText, parseTranscript, transcriptToHtml, transcriptToTimecodedText } from './transcriptFormat';
 import { commandFailure, commandSuccess, type CommandResult, type DeepReadonly, type Segment } from './types';
 
 export interface StartTranscriptionOptions {
@@ -123,7 +123,11 @@ export class TranscriptionStore {
     get draftTranscript(): DeepReadonly<SessionTranscriptV1> | null {
         if (Object.keys(this.sourceDrafts).length > 0) {
             const segments: SessionTranscriptSegmentV1[] = this.isRetryRun ?
-                (this.savedTranscriptValue?.segments.map((segment) => ({ ...segment })) ?? []) : [];
+                (this.savedTranscriptValue?.segments.map((segment) => ({
+                    ...segment,
+                    words: segment.words?.map((word) => ({ ...word })),
+                    rawSpan: segment.rawSpan ? { ...segment.rawSpan } : undefined,
+                })) ?? []) : [];
 
             for (const source of ['system', 'microphone'] as const) {
                 const draft = this.sourceDrafts[source];
@@ -149,9 +153,7 @@ export class TranscriptionStore {
     }
 
     get plainText(): string {
-        const segments = this.visibleTranscript?.segments ?? [];
-
-        return segments.map(formatTranscriptSegment).join(segments.some((segment) => segment.source) ? '\n' : ' ');
+        return transcriptToPlainText(this.visibleTranscript);
     }
 
     get renderedHtml(): string {
@@ -239,6 +241,7 @@ export class TranscriptionStore {
             language: request.options.language,
             model: request.options.model,
             sessionId: request.sessionId,
+            optimized: request.optimized,
             modelPath: request.options.modelPath,
             maxContext: request.options.maxContext ?? -1,
             maxLen: request.options.maxLen ?? 0,
@@ -408,6 +411,7 @@ export class TranscriptionStore {
     private failRun(runId: number, message: string): void {
         if (this.activeRunId !== runId) return;
 
+        this.progressValue = 0;
         this.runOutcomeValue = 'error';
         this.runErrorMessageValue = message;
         this.activeRunId = null;

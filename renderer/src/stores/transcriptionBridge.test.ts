@@ -10,7 +10,7 @@ import { createFakeRendererAdapter } from './testing/fakeRendererAdapter';
 const bridge = vi.hoisted(() => ({
     expose: vi.fn(),
     invoke: vi.fn(),
-    transcribe: vi.fn(),
+    transcribe: vi.fn<(_path: string, options: TranscribeOpts) => Promise<string>>(),
     callbacks: null as TranscriptionCallbacks | null,
     listeners: new Map<string, (event: unknown, payload: unknown) => void>(),
 }));
@@ -29,7 +29,8 @@ vi.mock('../../../electron/src/services/SessionsService', () => ({ SessionsServi
 vi.mock('../../../electron/src/services/TranscriptionService', () => ({
     TranscriptionService: class {
         constructor(callbacks: TranscriptionCallbacks) { bridge.callbacks = callbacks; }
-        transcribe = bridge.transcribe;
+        transcribeResult = (audioPath: string, options: TranscribeOpts) =>
+            bridge.transcribe(audioPath, options).then((text: string) => ({ text }));
     },
 }));
 
@@ -67,10 +68,11 @@ it('delivers structured text and progress through the controller and preload to 
         onTranscribeProgress: api.onTranscribeProgressValue,
     });
     const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
 
     store.workspace.replaceWorkspace({
         id: '', title: 'Audio', createdAt: 1, updatedAt: 1, sourceKind: 'imported',
-        hasTranscript: false, audioOriginalPath: 'audio.wav', audioWavPath: 'audio.wav',
+        hasTranscript: false, audioMode: 'original', audioOriginalPath: 'audio.wav', audioWavPath: 'audio.wav',
     });
     store.initialize();
     try {

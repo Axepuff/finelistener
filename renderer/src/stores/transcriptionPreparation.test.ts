@@ -7,6 +7,7 @@ import { createFakeRendererAdapter } from './testing/fakeRendererAdapter';
 
 const session = (id: string): SessionDetails => ({
     id, title: id, createdAt: 1, updatedAt: 1, sourceKind: 'imported', hasTranscript: false,
+    audioMode: 'original',
     audioOriginalPath: `/${id}.wav`, audioWavPath: `/${id}.wav`,
 });
 
@@ -25,6 +26,7 @@ const setup = () => {
         getWhisperModels: () => Promise.resolve([{ name: 'large', sizeLabel: '3 GB', isBundled: false, isDownloaded: true }]),
     });
     const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
     store.workspace.replaceWorkspace(session('first'));
 
     return { store, fake, download, transcribe, finishDownload: () => finishDownload(), failDownload: () => failDownload(new Error('Download failed')) };
@@ -110,6 +112,7 @@ describe('Transcription preparation integration', () => {
             stopTranscription: () => Promise.resolve(true),
         });
         const store = new AppStore(fake.adapter);
+        void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session('first'));
         store.transcriptionControl.setUseCustomModelFile(true);
         store.transcriptionControl.setCustomModelFile({ path: '/model.bin', fileName: 'model.bin' });

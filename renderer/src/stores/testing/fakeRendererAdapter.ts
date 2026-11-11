@@ -1,6 +1,7 @@
 import type { RecordingLevel, RecordingProgress, RecordingState } from 'electron/src/services/RecordingService';
 import type { FinalizeRecordingResult } from 'electron/src/types/recordingArchive';
 import type { TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
+import type { SpeakerAnalysisProgressEvent } from 'electron/src/types/transcription';
 import { UI_PREFERENCE_DEFAULTS, type UiPreferenceKey, type UiPreferenceValueMap } from '../../../../electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress } from 'electron/src/types/whisper';
 import type { RendererAdapter } from '../rendererAdapter';
@@ -15,6 +16,7 @@ interface AdapterListeners {
     recordingFinished: Set<(result: FinalizeRecordingResult) => void>;
     recordingError: Set<(payload: { message: string }) => void>;
     modelDownloadProgress: Set<(payload: WhisperModelDownloadProgress) => void>;
+    speakerAnalysisProgress: Set<(event: SpeakerAnalysisProgressEvent) => void>;
 }
 
 export interface FakeRendererAdapterController {
@@ -47,6 +49,7 @@ export const createFakeRendererAdapter = (
         recordingFinished: new Set(),
         recordingError: new Set(),
         modelDownloadProgress: new Set(),
+        speakerAnalysisProgress: new Set(),
     };
     const unavailable = (): Promise<never> => Promise.reject(
         new Error('Not configured in fake renderer adapter'),
@@ -60,6 +63,13 @@ export const createFakeRendererAdapter = (
         importAudio: () => Promise.resolve(null),
         optimizeAudio: unavailable,
         setTranscriptDuplicateFilter: unavailable,
+        analyzeSpeakers: unavailable,
+        stopSpeakerAnalysis: () => Promise.resolve(false),
+        getSpeakerAssets: () => Promise.resolve({ cpuReady: false, cudaReady: false, cudaAvailable: false }),
+        prepareSpeakerAssets: unavailable,
+        renameSpeaker: unavailable,
+        assignSpeaker: unavailable,
+        mergeSpeakers: unavailable,
         revealSessionsFolder: () => Promise.resolve(true),
         transcribe: () => Promise.resolve(''),
         transcribeSession: unavailable,
@@ -81,7 +91,7 @@ export const createFakeRendererAdapter = (
         importWhisperModelFromFile: () => Promise.resolve(null),
         openDevTools: () => Promise.resolve(true),
         getUiPreference: <K extends UiPreferenceKey>(key: K) => (
-            Promise.resolve(UI_PREFERENCE_DEFAULTS[key])
+            Promise.resolve((key === 'speakerLabelsEnabled' ? false : UI_PREFERENCE_DEFAULTS[key]) as UiPreferenceValueMap[K])
         ),
         setUiPreference: <K extends UiPreferenceKey>(
             _key: K,
@@ -90,6 +100,7 @@ export const createFakeRendererAdapter = (
         onTranscribeText: (callback) => subscribe(listeners.transcribeText, callback),
         onTranscribeProgress: (callback) => subscribe(listeners.transcribeProgress, callback),
         onTranscribeLog: (callback) => subscribe(listeners.transcribeLog, callback),
+        onSpeakerAnalysisProgress: (callback) => subscribe(listeners.speakerAnalysisProgress, callback),
         onRecordingState: (callback) => subscribe(listeners.recordingState, callback),
         onRecordingProgress: (callback) => subscribe(listeners.recordingProgress, callback),
         onRecordingLevel: (callback) => subscribe(listeners.recordingLevel, callback),
@@ -110,7 +121,8 @@ export const createFakeRendererAdapter = (
                 listeners.recordingLevel.size +
                 listeners.recordingFinished.size +
                 listeners.recordingError.size +
-                listeners.modelDownloadProgress.size;
+                listeners.modelDownloadProgress.size +
+                listeners.speakerAnalysisProgress.size;
         },
         emitTranscribeText: (chunk) => listeners.transcribeText.forEach((callback) => callback(chunk)),
         emitTranscribeProgress: (value) => listeners.transcribeProgress.forEach((callback) => callback(value)),

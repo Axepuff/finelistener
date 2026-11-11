@@ -3,6 +3,8 @@ import type { RecordingStartOptions } from './src/services/RecordingService';
 import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResult } from './src/types/recordingArchive';
 import type { TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from './src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from './src/types/uiPreferences';
+import type { SessionRawSpan, SessionSpeakerAssignment } from './src/types/sessions';
+import type { AnalyzeSpeakersOptions, SpeakerAnalysisProgressEvent } from './src/types/transcription';
 
 type WhisperModelDownloadProgressPayload = {
     name: string;
@@ -21,9 +23,20 @@ contextBridge.exposeInMainWorld('api', {
         setActive: (sessionId: string | null) => ipcRenderer.invoke('sessions:set-active', sessionId),
         delete: (sessionId: string) => ipcRenderer.invoke('sessions:delete', sessionId),
         importAudio: () => ipcRenderer.invoke('sessions:import-audio'),
-        optimizeAudio: (sessionId: string) => ipcRenderer.invoke('sessions:optimize-audio', sessionId),
+        optimizeAudio: (sessionId: string, mode?: 'original' | 'optimized') => ipcRenderer.invoke('sessions:optimize-audio', sessionId, mode),
         setTranscriptDuplicateFilter: (sessionId: string, enabled: boolean) =>
             ipcRenderer.invoke('sessions:set-transcript-duplicate-filter', sessionId, enabled),
+        analyzeSpeakers: (sessionId: string, options: AnalyzeSpeakersOptions) =>
+            ipcRenderer.invoke('sessions:analyze-speakers', sessionId, options),
+        stopSpeakerAnalysis: () => ipcRenderer.invoke('sessions:stop-speaker-analysis'),
+        getSpeakerAssets: () => ipcRenderer.invoke('sessions:get-speaker-assets'),
+        prepareSpeakerAssets: (includeCuda: boolean) => ipcRenderer.invoke('sessions:prepare-speaker-assets', includeCuda),
+        renameSpeaker: (sessionId: string, speakerId: string, name: string) =>
+            ipcRenderer.invoke('sessions:rename-speaker', sessionId, speakerId, name),
+        assignSpeaker: (sessionId: string, span: SessionRawSpan | SessionSpeakerAssignment, speakerId: string | null) =>
+            ipcRenderer.invoke('sessions:assign-speaker', sessionId, span, speakerId),
+        mergeSpeakers: (sessionId: string, sourceId: string, targetId: string) =>
+            ipcRenderer.invoke('sessions:merge-speakers', sessionId, sourceId, targetId),
         revealFolder: () => ipcRenderer.invoke('sessions:reveal-root'),
     },
     saveText: (content: string) => ipcRenderer.invoke('saveText', content),
@@ -72,6 +85,13 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.on('transcribe:log', handler);
 
         return () => ipcRenderer.removeListener('transcribe:log', handler);
+    },
+    onSpeakerAnalysisProgress: (cb: (event: SpeakerAnalysisProgressEvent) => void) => {
+        const handler = (_e: unknown, event: SpeakerAnalysisProgressEvent) => cb(event);
+
+        ipcRenderer.on('sessions:speaker-analysis-progress', handler);
+
+        return () => ipcRenderer.removeListener('sessions:speaker-analysis-progress', handler);
     },
     onRecordingState: (cb: (state: string) => void) => {
         const handler = (_e: unknown, state: string) => cb(state);

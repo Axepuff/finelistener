@@ -7,8 +7,8 @@ import type {
 import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResult } from 'electron/src/types/recordingArchive';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
-import type { SessionDetails, SessionListItem } from 'electron/src/types/sessions';
-import type { TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
+import type { SessionDetails, SessionListItem, SessionRawSpan, SessionSpeakerAssignment } from 'electron/src/types/sessions';
+import type { AnalyzeSpeakersOptions, SpeakerAnalysisProgressEvent, SpeakerAssetStatus, TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
 
@@ -19,8 +19,15 @@ export interface RendererAdapter {
     setActiveSession: (sessionId: string | null) => Promise<boolean>;
     deleteSession: (sessionId: string) => Promise<boolean>;
     importAudio: () => Promise<SessionDetails | null>;
-    optimizeAudio: (sessionId: string) => Promise<SessionDetails>;
+    optimizeAudio: (sessionId: string, mode?: 'original' | 'optimized') => Promise<SessionDetails>;
     setTranscriptDuplicateFilter: (sessionId: string, enabled: boolean) => Promise<SessionDetails>;
+    analyzeSpeakers: (sessionId: string, options: AnalyzeSpeakersOptions) => Promise<SessionDetails>;
+    stopSpeakerAnalysis: () => Promise<boolean>;
+    getSpeakerAssets: () => Promise<SpeakerAssetStatus>;
+    prepareSpeakerAssets: (includeCuda: boolean) => Promise<SpeakerAssetStatus>;
+    renameSpeaker: (sessionId: string, speakerId: string, name: string) => Promise<SessionDetails>;
+    assignSpeaker: (sessionId: string, span: SessionRawSpan | SessionSpeakerAssignment, speakerId: string | null) => Promise<SessionDetails>;
+    mergeSpeakers: (sessionId: string, sourceId: string, targetId: string) => Promise<SessionDetails>;
     revealSessionsFolder: () => Promise<boolean>;
     transcribe: (audioPath: string, options: TranscribeOpts) => Promise<string>;
     transcribeSession: (sessionId: string, options: SessionTranscribeOpts) => Promise<SessionDetails>;
@@ -53,6 +60,7 @@ export interface RendererAdapter {
     onTranscribeText: (callback: (event: TranscriptionTextEvent) => void) => () => void;
     onTranscribeProgress: (callback: (event: TranscriptionProgressEvent) => void) => () => void;
     onTranscribeLog: (callback: (line: string) => void) => () => void;
+    onSpeakerAnalysisProgress: (callback: (event: SpeakerAnalysisProgressEvent) => void) => () => void;
     onRecordingState: (callback: (state: RecordingState) => void) => () => void;
     onRecordingProgress: (callback: (progress: RecordingProgress) => void) => () => void;
     onRecordingLevel: (callback: (level: RecordingLevel) => void) => () => void;
@@ -71,8 +79,15 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
         setActiveSession: (sessionId) => api.sessions.setActive(sessionId),
         deleteSession: (sessionId) => api.sessions.delete(sessionId),
         importAudio: () => api.sessions.importAudio(),
-        optimizeAudio: (sessionId) => api.sessions.optimizeAudio(sessionId),
+        optimizeAudio: (sessionId, mode) => api.sessions.optimizeAudio(sessionId, mode),
         setTranscriptDuplicateFilter: (sessionId, enabled) => api.sessions.setTranscriptDuplicateFilter(sessionId, enabled),
+        analyzeSpeakers: (sessionId, options) => api.sessions.analyzeSpeakers(sessionId, options),
+        stopSpeakerAnalysis: () => api.sessions.stopSpeakerAnalysis(),
+        getSpeakerAssets: () => api.sessions.getSpeakerAssets(),
+        prepareSpeakerAssets: (includeCuda) => api.sessions.prepareSpeakerAssets(includeCuda),
+        renameSpeaker: (sessionId, speakerId, name) => api.sessions.renameSpeaker(sessionId, speakerId, name),
+        assignSpeaker: (sessionId, span, speakerId) => api.sessions.assignSpeaker(sessionId, span, speakerId),
+        mergeSpeakers: (sessionId, sourceId, targetId) => api.sessions.mergeSpeakers(sessionId, sourceId, targetId),
         revealSessionsFolder: () => api.sessions.revealFolder(),
         transcribe: (audioPath, options) => api.transcribeStream(audioPath, options),
         transcribeSession: (sessionId, options) => api.transcribeSession(sessionId, options),
@@ -98,6 +113,7 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
         onTranscribeText: (callback) => api.onTranscribeText(callback),
         onTranscribeProgress: (callback) => api.onTranscribeProgressValue(callback),
         onTranscribeLog: (callback) => api.onTranscribeLog(callback),
+        onSpeakerAnalysisProgress: (callback) => api.onSpeakerAnalysisProgress(callback),
         onRecordingState: (callback) => api.onRecordingState(callback),
         onRecordingProgress: (callback) => api.onRecordingProgress(callback),
         onRecordingLevel: (callback) => api.onRecordingLevel(callback),
