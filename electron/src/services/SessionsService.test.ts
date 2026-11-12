@@ -6,10 +6,10 @@ import type { SessionSourceRun } from '../types/sessions';
 import { SessionsService } from './SessionsService';
 import { SessionSpeakerWorkflow } from './SessionSpeakerWorkflow';
 
-const environment = vi.hoisted(() => ({ root: '' }));
+const environment = vi.hoisted(() => ({ root: '', openPath: vi.fn(() => Promise.resolve('')) }));
 vi.mock('electron', () => ({
     app: { getPath: () => environment.root },
-    shell: { openPath: () => Promise.resolve('') },
+    shell: { openPath: environment.openPath },
 }));
 
 const wav = (amplitude: number): Buffer => {
@@ -404,4 +404,19 @@ it('includes hidden duplicate speech when merging Unknown speaker', async () => 
     const unfiltered = await service.setTranscriptDuplicateFilter(session.id, false);
     expect(Object.fromEntries(unfiltered.transcript!.segments.map((segment) => [segment.source, segment.speakerId])))
         .toEqual({ microphone: 'a', system: 'a' });
+});
+
+it('opens the requested session folder without changing the active session', async () => {
+    const service = new SessionsService();
+    const folder = path.join(environment.root, 'sessions', 'requested-session');
+    await fs.mkdir(folder, { recursive: true });
+    await expect(service.revealSessionFolder('requested-session')).resolves.toBe(true);
+    expect(environment.openPath).toHaveBeenCalledWith(folder);
+    expect(service.getActiveSessionId()).toBeNull();
+});
+
+it('rejects session paths outside storage before opening the file manager', async () => {
+    vi.mocked(environment.openPath).mockClear();
+    await expect(new SessionsService().revealSessionFolder('../outside')).rejects.toThrow('Invalid session id');
+    expect(environment.openPath).not.toHaveBeenCalled();
 });

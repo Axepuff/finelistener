@@ -73,7 +73,11 @@ export function registerSessionsController(
         return service.setTranscriptDuplicateFilter(sessionId, enabled);
     });
 
-    ipc.handle('sessions:reveal-root', async () => {
-        return service.revealSessionsFolder();
+    ipc.handle('sessions:reveal-folder', async (_event, sessionId: unknown) => {
+        if (typeof sessionId !== 'string' || !sessionId.trim()) {
+            throw new Error('Invalid session id');
+        }
+
+        return service.revealSessionFolder(sessionId);
     });
 }

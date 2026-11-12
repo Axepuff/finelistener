@@ -37,7 +37,7 @@ contextBridge.exposeInMainWorld('api', {
             ipcRenderer.invoke('sessions:assign-speaker', sessionId, span, speakerId),
         mergeSpeakers: (sessionId: string, sourceId: string | null, targetId: string | null) =>
             ipcRenderer.invoke('sessions:merge-speakers', sessionId, sourceId, targetId),
-        revealFolder: () => ipcRenderer.invoke('sessions:reveal-root'),
+        revealFolder: (sessionId: string) => ipcRenderer.invoke('sessions:reveal-folder', sessionId),
     },
     saveText: (content: string) => ipcRenderer.invoke('saveText', content),
     startSystemRecording: (options?: RecordingStartOptions): Promise<StartRecordingResult> => ipcRenderer.invoke('recording:start', options),

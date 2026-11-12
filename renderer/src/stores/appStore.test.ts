@@ -540,3 +540,10 @@ describe('AppStore', () => {
         expect(store.workspace.activeSessionId).toBeNull();
     });
 });
+
+it('reports an unsuccessful file-manager launch as a safe command failure', async () => {
+    const fake = createFakeRendererAdapter({ revealSessionFolder: () => Promise.resolve(false) });
+    const store = new AppStore(fake.adapter);
+    expect(await store.revealSessionFolder('session-1')).toEqual({ ok: false, message: 'Failed to open the session folder.' });
+    store.dispose();
+});

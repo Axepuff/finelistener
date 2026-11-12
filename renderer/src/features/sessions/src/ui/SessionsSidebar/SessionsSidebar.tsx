@@ -9,8 +9,8 @@ export const SessionsSidebar: React.FC = observer(() => {
     const { sessions, workspace } = store;
     const [openedMenuSessionId, setOpenedMenuSessionId] = useState<string | null>(null);
 
-    const handleRevealRoot = useCallback(async () => {
-        const result = await store.revealSessionsFolder();
+    const handleRevealFolder = useCallback(async (sessionId: string) => {
+        const result = await store.revealSessionFolder(sessionId);
 
         if (!result.ok) {
             store.activityLog.appendEvent(result.message);
@@ -144,10 +144,10 @@ export const SessionsSidebar: React.FC = observer(() => {
                                                         leftSection={<IconFolder size={16} />}
                                                         onClick={() => {
                                                             setOpenedMenuSessionId(null);
-                                                            void handleRevealRoot();
+                                                            void handleRevealFolder(session.id);
                                                         }}
                                                     >
-                                                        {'Reveal sessions folder'}
+                                                        {'Reveal session folder'}
                                                     </Menu.Item>
                                                     <Menu.Divider />
                                                     <Menu.Item
