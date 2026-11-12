@@ -4,6 +4,7 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import struct
 import subprocess
 import sys
@@ -27,16 +28,29 @@ def main():
         runtime.mkdir()
         # Use the same native ZIP extractor as the app, including Unix executable permissions.
         tar = str(Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32/tar.exe') if sys.platform == 'win32' else '/usr/bin/tar'
-        subprocess.run([tar, '-xf', str(archive), '-C', str(runtime)], check=True, timeout=60)
+        shutil.copyfile(archive, work / 'component.zip')
+        subprocess.run([tar, '-xf', 'component.zip', '-C', runtime.name], cwd=work, check=True, timeout=60)
         env = {key: os.environ[key] for key in ('SystemRoot', 'WINDIR', 'USERPROFILE', 'LOCALAPPDATA', 'HOME') if key in os.environ}
         env.update(TEMP=temporary, TMP=temporary, OMP_NUM_THREADS='2', OMP_THREAD_LIMIT='2',
                    OPENBLAS_NUM_THREADS='2', MKL_NUM_THREADS='2', GGML_VK_DISABLE_GRAPH_OPTIMIZE='1',
                    PATH=str(runtime / 'bin') + os.pathsep + (str(Path(env['SystemRoot']) / 'System32') if sys.platform == 'win32' else '/usr/bin:/bin'))
         binary = str(runtime / manifest['executable'])
-        doctor = subprocess.run([binary, '--json', 'doctor'], cwd=work, env=env, capture_output=True, text=True, encoding='utf-8', timeout=30)
+        doctor = subprocess.Popen([binary, '--verbose', '--json', 'doctor'], cwd=work, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
+        try:
+            stdout, stderr = doctor.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            if sys.platform == 'darwin':
+                sample = work / 'doctor-sample.txt'
+                subprocess.run(['/usr/bin/sample', str(doctor.pid), '1', '1', '-file', str(sample)], timeout=10, check=False)
+                if sample.exists():
+                    print('[DEBUG-native-ci] ' + sample.read_text(), flush=True)
+            doctor.kill()
+            stdout, stderr = doctor.communicate()
+            print('[DEBUG-native-ci] ' + stderr, flush=True)
+            raise
         if doctor.returncode not in (0, 1):
-            raise RuntimeError(doctor.stderr)
-        status = json.loads(doctor.stdout)
+            raise RuntimeError(stderr)
+        status = json.loads(stdout)
         if status['version'] != '0.3.0' or not any(device['type'] == 'cpu' for device in status['devices']):
             raise ValueError('Pinned CPU runtime is unavailable')
         devices = ['cpu']

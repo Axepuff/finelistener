@@ -215,11 +215,12 @@ export class SpeakerDiarizationService {
             if ((await fsp.stat(archive)).size !== component.bytes || await hashFile(archive, signal) !== component.sha256) throw new Error('Speaker component integrity check failed');
             await fsp.mkdir(extracted);
             const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe') : '/usr/bin/tar';
-            const listing = await runSpeakerProcess(tar, ['-tf', archive], signal, temporary);
+            // Windows tar can use an ANSI argv code page. Keep paths relative to the Unicode-safe process cwd.
+            const listing = await runSpeakerProcess(tar, ['-tf', 'component.zip'], signal, temporary);
             if (!safeArchiveEntries(listing.stdout, component.files)) throw new Error('Unexpected speaker archive entries');
-            const types = await runSpeakerProcess(tar, ['-tvf', archive], signal, temporary, undefined, 8_000_000);
+            const types = await runSpeakerProcess(tar, ['-tvf', 'component.zip'], signal, temporary, undefined, 8_000_000);
             if (types.stdout.split(/\r?\n/).filter(Boolean).some((line) => !line.startsWith('-'))) throw new Error('Only regular archive files are allowed');
-            await runSpeakerProcess(tar, ['-xf', archive, '-C', extracted], signal, temporary);
+            await runSpeakerProcess(tar, ['-xf', 'component.zip', '-C', 'extracted'], signal, temporary);
             if (!await filesMatch(extracted, component.files, true, signal)) throw new Error('Speaker component files failed validation');
             signal.throwIfAborted();
             const backup = target + '.previous-' + randomUUID();
