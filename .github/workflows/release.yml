@@ -135,9 +135,9 @@ jobs:
 
       - run: npm ci
 
-      - name: Cache the pinned Whisper GPU build
+      - name: Restore the pinned Whisper GPU build
         id: whisper-gpu-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: build-assets/win-x64-gpu/whisper
           key: whisper-gpu-v1-30c5194c-msvc142-cuda124-vulkan143281-${{ hashFiles('scripts/build-whisper.sh', 'scripts/patch-whisper-timestamps.cjs') }}
@@ -153,6 +153,13 @@ jobs:
           # Upstream templates repeat unused-variable and intentional infinity-conversion warnings for every GPU architecture.
           CUDAFLAGS: --diag-suppress=177,221,550
         run: bash scripts/build-whisper.sh win-x64-gpu
+
+      - name: Cache the completed Whisper GPU build
+        if: steps.whisper-gpu-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build-assets/win-x64-gpu/whisper
+          key: ${{ steps.whisper-gpu-cache.outputs.cache-primary-key }}
 
       - name: Build miniaudio and prepare models and Nemotron
         shell: bash

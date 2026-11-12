@@ -28,6 +28,12 @@ jobs:
           - os: windows-latest
             variant: win-x64-gpu
             smoke_args: ''
+          - os: windows-2022
+            variant: win-x64-cpu
+            smoke_args: ''
+          - os: windows-2022
+            variant: win-x64-gpu
+            smoke_args: ''
           - os: macos-15
             variant: mac-arm64
             # The hosted VM's paravirtualized Metal driver crashes upstream inference; physical Metal is a release gate.

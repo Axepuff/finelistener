@@ -40,7 +40,8 @@ def main():
         doctor = subprocess.run([binary, '--json', 'doctor'], cwd=work, env=env,
                                 capture_output=True, text=True, encoding='utf-8', timeout=180)
         if doctor.returncode not in (0, 1):
-            raise RuntimeError(doctor.stderr)
+            raise RuntimeError(f'Nemotron doctor exited with {doctor.returncode} (0x{doctor.returncode & 0xffffffff:08X}):\n'
+                               f'{doctor.stderr}\n{doctor.stdout}')
         status = json.loads(doctor.stdout)
         if status['version'] != '0.3.0' or not any(device['type'] == 'cpu' for device in status['devices']):
             raise ValueError('Pinned CPU runtime is unavailable')
