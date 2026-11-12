@@ -185,7 +185,8 @@ export class SpeakerDiarizationService {
         let gpuAvailable: boolean | undefined;
         if (root && component) {
             try {
-                const timeout = AbortSignal.timeout(10_000);
+                // The first Metal device probe compiles embedded shaders before reporting CPU/GPU capabilities.
+                const timeout = AbortSignal.timeout(component.variant === 'mac-arm64' ? 180_000 : 10_000);
                 ({ gpuAvailable } = await inspectNemotron(root, component.variant,
                     signal ? AbortSignal.any([signal, timeout]) : timeout));
             } catch (error) {

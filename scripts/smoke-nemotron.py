@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('variant', choices=['win-x64-cpu', 'win-x64-gpu', 'mac-arm64'])
+    parser.add_argument('--cpu-only', action='store_true', help='Explicitly skip GPU qualification on hosts without a usable GPU')
     args = parser.parse_args()
     if (args.variant == 'mac-arm64') != (sys.platform == 'darwin'):
         raise ValueError('Run the smoke check on the target operating system')
@@ -35,26 +36,16 @@ def main():
                    OPENBLAS_NUM_THREADS='2', MKL_NUM_THREADS='2', GGML_VK_DISABLE_GRAPH_OPTIMIZE='1',
                    PATH=str(runtime / 'bin') + os.pathsep + (str(Path(env['SystemRoot']) / 'System32') if sys.platform == 'win32' else '/usr/bin:/bin'))
         binary = str(runtime / manifest['executable'])
-        doctor = subprocess.Popen([binary, '--verbose', '--json', 'doctor'], cwd=work, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
-        try:
-            stdout, stderr = doctor.communicate(timeout=180)
-        except subprocess.TimeoutExpired:
-            if sys.platform == 'darwin':
-                sample = work / 'doctor-sample.txt'
-                subprocess.run(['/usr/bin/sample', str(doctor.pid), '1', '1', '-file', str(sample)], timeout=10, check=False)
-                if sample.exists():
-                    print('[DEBUG-native-ci] ' + sample.read_text(), flush=True)
-            doctor.kill()
-            stdout, stderr = doctor.communicate()
-            print('[DEBUG-native-ci] ' + stderr, flush=True)
-            raise
+        # Metal compiles its embedded shaders on the first launch, including during doctor.
+        doctor = subprocess.run([binary, '--json', 'doctor'], cwd=work, env=env,
+                                capture_output=True, text=True, encoding='utf-8', timeout=180)
         if doctor.returncode not in (0, 1):
-            raise RuntimeError(stderr)
-        status = json.loads(stdout)
+            raise RuntimeError(doctor.stderr)
+        status = json.loads(doctor.stdout)
         if status['version'] != '0.3.0' or not any(device['type'] == 'cpu' for device in status['devices']):
             raise ValueError('Pinned CPU runtime is unavailable')
         devices = ['cpu']
-        if status['driver_runtime_compatible'] and status['accelerator_available']:
+        if not args.cpu_only and status['driver_runtime_compatible'] and status['accelerator_available']:
             devices.append('metal' if args.variant == 'mac-arm64' else 'vulkan:0')
         audio = work / 'аудио.wav'
         with wave.open(str(audio), 'wb') as wav:
@@ -63,18 +54,10 @@ def main():
         for device in devices:
             output = work / 'result.json'
             command = [binary, 'diarize', str(audio), '--model', str(runtime / manifest['model']),
-                            '--device', device, '--preset', 'v3-offline', '--concurrency', '1', '--format', 'json', '--output', str(output)],
-            result = subprocess.run(command[0], cwd=work, env=env, capture_output=True, timeout=60)
+                       '--device', device, '--preset', 'v3-offline', '--concurrency', '1', '--format', 'json', '--output', str(output)]
+            result = subprocess.run(command, cwd=work, env=env, capture_output=True, timeout=60)
             if result.returncode:
                 print(result.stderr.decode('utf-8', errors='replace'), flush=True)
-                if sys.platform == 'darwin':
-                    original = work / 'original'
-                    original.mkdir()
-                    subprocess.run(['/usr/bin/tar', '-xf', str(ROOT / 'build-assets/nemotron-downloads/nemo-metal.tar.gz'), '-C', str(original)], check=True)
-                    upstream = original / 'nemo-speech-0.3.0-macos-aarch64-metal/bin/nemo-speech'
-                    baseline = subprocess.run([str(upstream), '--verbose', *command[0][1:]], cwd=work, env=env, capture_output=True, timeout=180)
-                    print('[DEBUG-native-ci] Unmodified upstream runtime: ' + str(baseline.returncode), flush=True)
-                    print(baseline.stderr.decode('utf-8', errors='replace'), flush=True)
                 result.check_returncode()
             result = json.loads(output.read_text(encoding='utf-8'))
             if not isinstance(result.get('segments'), list) or any(not (0 <= segment['start'] < segment['end'] <= 3.01) for segment in result['segments']):
@@ -82,7 +65,7 @@ def main():
             output.unlink()
             print(json.dumps({'variant': args.variant, 'device': device, 'smokePassed': True}))
         if len(devices) == 1 and args.variant != 'win-x64-cpu':
-            print('GPU smoke skipped: this host has no available accelerator.')
+            print('GPU smoke skipped: ' + ('explicit --cpu-only check.' if args.cpu_only else 'this host has no available accelerator.'))
 
 
 if __name__ == '__main__':

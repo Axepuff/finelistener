@@ -54,8 +54,9 @@ jobs:
       - name: Verify Nemotron release component
         run: python scripts/verify-speaker-release.py build-assets/mac-arm64/nemotron/component.json
 
-      - name: Smoke test installed Nemotron on CPU and available GPU
-        run: python scripts/smoke-nemotron.py mac-arm64
+      # The hosted VM's paravirtualized Metal driver crashes upstream inference; qualify Metal on a physical Mac.
+      - name: Smoke test installed Nemotron on CPU
+        run: python scripts/smoke-nemotron.py mac-arm64 --cpu-only
 
       - name: Upload Nemotron component
         uses: actions/upload-artifact@v4
