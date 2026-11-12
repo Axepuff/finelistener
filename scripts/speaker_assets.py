@@ -1,5 +1,6 @@
 """Hash-checked acquisition shared by speaker component builds."""
 import hashlib
+import shutil
 import urllib.request
 
 def digest(file):
@@ -20,7 +21,11 @@ def acquire(entry, cache):
     cache.mkdir(parents=True, exist_ok=True)
     if not target.exists():
         temporary = target.with_suffix(target.suffix + ".partial")
-        urllib.request.urlretrieve(entry["url"], temporary)
+        request = urllib.request.Request(entry["url"], headers={
+            "User-Agent": "FineListener-build/1.0 (+https://github.com/Axepuff/finelistener)",
+        })
+        with urllib.request.urlopen(request) as response, temporary.open("wb") as stream:
+            shutil.copyfileobj(response, stream)
         checked(temporary, entry)
         temporary.replace(target)
     checked(target, entry)
