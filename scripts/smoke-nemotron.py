@@ -62,9 +62,15 @@ def main():
             wav.writeframes(b''.join(struct.pack('<h', round(1000 * math.sin(index * 2 * math.pi * 440 / 16000))) for index in range(48000)))
         for device in devices:
             output = work / 'result.json'
-            subprocess.run([binary, 'diarize', str(audio), '--model', str(runtime / manifest['model']),
+            command = [binary, 'diarize', str(audio), '--model', str(runtime / manifest['model']),
                             '--device', device, '--preset', 'v3-offline', '--concurrency', '1', '--format', 'json', '--output', str(output)],
-                           cwd=work, env=env, check=True, capture_output=True, timeout=60)
+            result = subprocess.run(command[0], cwd=work, env=env, capture_output=True, timeout=60)
+            if result.returncode:
+                print(result.stderr.decode('utf-8', errors='replace'), flush=True)
+                if sys.platform == 'darwin':
+                    subprocess.run(['/usr/bin/lldb', '--batch', '-o', 'run', '-o', 'thread backtrace all', '--', *command[0]],
+                                   cwd=work, env=env, timeout=120, check=False)
+                result.check_returncode()
             result = json.loads(output.read_text(encoding='utf-8'))
             if not isinstance(result.get('segments'), list) or any(not (0 <= segment['start'] < segment['end'] <= 3.01) for segment in result['segments']):
                 raise ValueError('Invalid diarization result')
