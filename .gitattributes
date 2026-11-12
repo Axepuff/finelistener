@@ -1,2 +1,5 @@
 resources/nemotron/notices/* text eol=lf
 resources/nemotron/*.manifest text eol=lf
+scripts/build-whisper.sh text eol=lf
+scripts/build-miniaudio.sh text eol=lf
+scripts/prepare-models.sh text eol=lf
