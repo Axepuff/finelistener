@@ -13,7 +13,7 @@ if (!['win-x64-cpu', 'win-x64-gpu'].includes(variant)) {
 process.env.BUILD_VARIANT = variant;
 const config = require('../forge.config');
 const resources = config.packagerConfig.extraResource;
-const communityResource = path.resolve(root, 'build-assets', variant, 'community');
+const communityResource = path.resolve(root, 'build-assets', variant, variant === 'win-x64-gpu' ? 'nemotron' : 'community');
 if (!resources.includes(communityResource) || !fs.existsSync(path.join(communityResource, 'component.json'))) {
     throw new Error('Prepare speaker assets before measuring the installer');
 }

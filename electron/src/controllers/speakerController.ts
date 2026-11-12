@@ -1,6 +1,7 @@
 import type { BrowserWindow, IpcMain } from 'electron';
 import { SessionSpeakerWorkflow } from '../services/SessionSpeakerWorkflow';
 import { SpeakerDiarizationService } from '../services/SpeakerDiarizationService';
+import { SpeakerAnalysisError } from '../services/speakerProcess';
 import type { SessionsService } from '../services/SessionsService';
 import type { SessionRawSpan, SessionSpeakerAssignment } from '../types/sessions';
 
@@ -37,7 +38,7 @@ export function registerSpeakerController(
             return await action();
         } catch (error) {
             console.error(`Speaker ${operation} failed`, error);
-            throw new Error('Speaker action failed.');
+            throw new Error(error instanceof SpeakerAnalysisError ? error.code : 'Speaker action failed.');
         }
     };
 

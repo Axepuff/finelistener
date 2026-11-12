@@ -3,19 +3,27 @@ App that converts audio to txt
 
 ## Audio and speaker labels
 
-Sessions default to Optimized audio. Original/Optimized is remembered per session and applies to playback and subsequent recognition/analysis; original recordings and existing transcripts are preserved. Transcribe saves recognition before local Community-1 speaker analysis. Speaker labels default on, with a remembered opt-out and optional exact system/file speaker count. Microphone-only sessions need no speaker model.
+Sessions default to Optimized audio. Original/Optimized is remembered per session and applies to playback and subsequent recognition/analysis; original recordings and existing transcripts are preserved. Transcribe saves Whisper recognition before local speaker analysis. Speaker labels default on, with a remembered opt-out. Microphone-only sessions use a fixed identity without downloading or running a speaker model.
 
 Plain Text contains speech only. Timecodes groups adjacent same-speaker/source fragments across gaps up to five seconds; expand a turn to edit original fragments. Search, copy and TXT export use the selected view. A failed or stopped analysis retains saved text and can be retried separately.
 
-Community-1 runs in a private Python worker. Packaged builds download a pinned component on first use and reuse it offline after installation; size/status and cancellation are available in the UI. System Python and Hugging Face login are not required for inference. CUDA initialization failures retry once on CPU and remain visible.
+| Build | Speaker engine | Speaker count | GPU failure |
+| --- | --- | --- | --- |
+| Windows x64 GPU | Nemotron 3 Q8, NeMo-Speech.cpp 0.3.0, Vulkan | Automatic only | Safe error; retry after fixing the driver, no CPU fallback |
+| Windows x64 CPU | Community-1, private Python worker | Automatic or exact | CPU route |
+| macOS arm64 | Community-1, private Python worker | Automatic or exact | CPU route |
 
-## Preparing Community-1 release assets
+Packaged builds download a pinned component on first use and reuse it offline after verification; size, preparation, progress and cancellation are available in the UI. System Python, CUDA Toolkit and Hugging Face login are not required for inference. Nemotron requires a working Vulkan driver. Its native overlapping intervals remain acoustic evidence; ambiguous text retains Unknown. Saved Community-1 and sherpa results remain readable without reanalysis.
 
-Use Python 3.12 with pip to run scripts/prepare-community.py for win-x64-cpu, win-x64-gpu or mac-arm64 on the corresponding host. The script acquires hash-pinned private Python archives and wheels; model acquisition requires maintainer-approved gated access through HF_TOKEN or an already acquired --model-dir. Only pinned model files enter artifacts. The worker never receives acquisition credentials.
+## Preparing speaker release assets
 
-The build lock is scripts/community-assets.json. Build resources contain the component manifest; oversized runtime/model archives are release-associated downloads, split when needed. npm run measure:community:installer -- win-x64-cpu (or win-x64-gpu) produces matched Windows baseline/component installer measurements and enforces the 200000000-byte addition limit. scripts/verify-community-release.py validates components and all three platform manifests before release upload.
+On Windows, `npm run prebuild:assets:win-gpu` runs `scripts/prepare-nemotron.py` to prepare the pinned native Vulkan runtime, Q8 model and license notices from `scripts/nemotron-assets.json`. The Python build script uses only the standard library; no Python runtime is shipped in this component. It enables UTF-8 paths in the executable manifest (Windows 10 1903 or later), records the modification, and hashes every resulting file. Runtime DLLs stay isolated from Whisper.
 
-See [Community-1 acceptance](docs/testing/community-1-acceptance.md) for observed application checks, artifact sizes and unresolved clean-install, platform, listening and redistribution gates.
+For `win-x64-cpu` and `mac-arm64`, use Python 3.12 with pip to run `scripts/prepare-community.py` on the corresponding host. The build lock is `scripts/community-assets.json`. Model acquisition requires maintainer-approved gated access through `HF_TOKEN` or an already acquired `--model-dir`; the worker never receives acquisition credentials.
+
+Build resources contain manifests and notices; runtime/model archives are release-associated downloads, split when needed. `npm run measure:speaker:installer -- win-x64-gpu` (or `win-x64-cpu`) produces matched Windows baseline/component installer measurements and enforces the 200000000-byte addition limit. `scripts/verify-community-release.py` validates both component formats and all three platform manifests before release upload.
+
+See [Nemotron acceptance](docs/testing/nemotron-acceptance.md), [ADR 0008](docs/adr/0008-nemotron-vulkan-speaker-analysis.md), and the historical [Community-1 acceptance](docs/testing/community-1-acceptance.md) for evidence and release checks.
 
 ## TypeScript toolchain
 

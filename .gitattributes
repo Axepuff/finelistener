@@ -1,0 +1,2 @@
+resources/nemotron/notices/* text eol=lf
+resources/nemotron/*.manifest text eol=lf

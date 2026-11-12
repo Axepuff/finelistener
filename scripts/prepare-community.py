@@ -4,7 +4,6 @@ Run on the target platform with Python 3.12 and pip. Model acquisition is a
 separate maintainer action subject to Community-1's access conditions.
 """
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -12,37 +11,12 @@ import shutil
 import subprocess
 import sys
 import tarfile
-import urllib.request
 import zipfile
+from speaker_assets import acquire, checked, digest
 
 ROOT = Path(__file__).resolve().parent.parent
 VERSION = "community-1-pyannote4-torch28-r1"
 PART_SIZE = 1_500_000_000
-
-
-def digest(file):
-    result = hashlib.sha256()
-    with file.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            result.update(block)
-    return result.hexdigest()
-
-
-def checked(file, entry):
-    if not file.is_file() or file.stat().st_size != entry["bytes"] or digest(file) != entry["sha256"]:
-        raise ValueError(f"Integrity check failed: {file.name}")
-
-
-def acquire(entry, cache):
-    target = cache / entry["name"]
-    cache.mkdir(parents=True, exist_ok=True)
-    if not target.exists():
-        temporary = target.with_suffix(target.suffix + ".partial")
-        urllib.request.urlretrieve(entry["url"], temporary)
-        checked(temporary, entry)
-        temporary.replace(target)
-    checked(target, entry)
-    return target
 
 
 def main():

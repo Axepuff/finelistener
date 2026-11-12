@@ -3,7 +3,8 @@ import { tmpdir } from 'os';
 import path from 'path';
 import { expect, it } from 'vitest';
 import { AudioPreprocessor } from './AudioPreprocessor';
-import { parseSpeakerIntervals, runSpeakerProcess } from './SpeakerDiarizationService';
+import { parseSpeakerIntervals } from './SpeakerDiarizationService';
+import { runSpeakerProcess } from './speakerProcess';
 
 const makeWav = (): Buffer => {
     const sampleRate = 16000;

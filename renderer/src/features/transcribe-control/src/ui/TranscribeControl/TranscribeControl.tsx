@@ -59,7 +59,7 @@ const TranscribeControl: React.FC = observer(() => {
         if (!result.ok) appendLog(result.message);
     };
 
-    const handlePrepareCuda = async () => {
+    const handlePrepareSpeakerComponent = async () => {
         const result = await store.prepareSpeakerAssets(true);
         if (!result.ok) appendLog(result.message);
     };
@@ -78,8 +78,7 @@ const TranscribeControl: React.FC = observer(() => {
     const hasSystemAudio = store.workspace.activeSession?.sourceKind === 'imported'
         || store.workspace.activeSession?.tracks?.some((track) => track.source === 'system');
     const preparingSpeakerAssets = store.operations.kind === 'preparing-speaker-assets';
-    const canPrepareCuda = store.speakers.enabled && hasSystemAudio
-        && (!store.speakers.assets?.cpuReady || (store.speakers.assets.cudaAvailable && !store.speakers.assets.cudaReady));
+    const canPrepareSpeakerComponent = store.speakers.enabled && hasSystemAudio && !store.speakers.componentReady;
 
     return (
         <Stack gap={12} justify="space-between" h="100%">
@@ -156,7 +155,9 @@ const TranscribeControl: React.FC = observer(() => {
                     label="Add speaker labels after transcription"
                     description="Recognition is saved first. Speaker analysis can be retried separately."
                 />
-                {store.speakers.enabled && hasSystemAudio ? (
+                {store.speakers.enabled && hasSystemAudio ? store.speakers.assets?.engine === 'nemotron-3' ? (
+                    <Text size="xs" c="dimmed">Nemotron counts speakers automatically. Exact counts are unavailable.</Text>
+                ) : (
                     <NumberInput
                         label="System or file speakers"
                         description="Leave empty for automatic counting. The microphone speaker is excluded."
@@ -164,15 +165,18 @@ const TranscribeControl: React.FC = observer(() => {
                         allowDecimal={false}
                         value={store.speakers.speakerCount ?? ''}
                         onChange={(value) => store.speakers.setSpeakerCount(typeof value === 'number' ? value : null)}
-                        disabled={store.operations.isBusy}
+                        disabled={store.operations.isBusy || !store.speakers.supportsExactCount}
                     />
                 ) : null}
-                {canPrepareCuda ? (
+                {store.speakers.enabled && hasSystemAudio && store.speakers.assets?.vulkanAvailable === false ? (
+                    <Alert color="yellow" title="GPU unavailable">Update your graphics driver and retry speaker analysis.</Alert>
+                ) : null}
+                {canPrepareSpeakerComponent ? (
                     <Stack gap={6}>
-                        <Text size="xs" c="dimmed">Community-1 runs locally. Its component is downloaded on first use; recognition is saved first.</Text>
+                        <Text size="xs" c="dimmed">{store.speakers.engineName} runs locally. Its component is downloaded on first use; recognition is saved first.</Text>
                         {store.speakers.assets?.downloadBytes ? <Text size="xs">Download size: {(store.speakers.assets.downloadBytes / 1_000_000).toFixed(0)} MB</Text> : <Text size="xs">The release component is unavailable in this build.</Text>}
                         <Group gap={8}>
-                            <Button size="compact-sm" variant="light" disabled={store.operations.isBusy} onClick={() => { void handlePrepareCuda(); }}>
+                            <Button size="compact-sm" variant="light" disabled={store.operations.isBusy} onClick={() => { void handlePrepareSpeakerComponent(); }}>
                                 Prepare speaker component
                             </Button>
                             {preparingSpeakerAssets ? (

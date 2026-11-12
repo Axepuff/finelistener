@@ -1,5 +1,5 @@
 import type { WhisperModelName } from './whisper';
-import type { RecordingSource } from './sessions';
+import type { RecordingSource, SpeakerEngine } from './sessions';
 
 export type Segment = { start: number; end: number };
 
@@ -64,9 +64,21 @@ export interface SpeakerAnalysisProgressEvent {
 }
 
 export interface SpeakerAssetStatus {
+    engine?: SpeakerEngine;
+    ready?: boolean;
+    vulkanAvailable?: boolean;
     downloadBytes?: number;
     runtimeRevision?: string;
     cpuReady: boolean;
     cudaReady: boolean;
     cudaAvailable: boolean;
 }
+
+export const SPEAKER_ERROR_MESSAGES = {
+    SPEAKER_ASSETS_UNAVAILABLE: 'Speaker components are unavailable. Prepare or repair the component and try again.',
+    SPEAKER_GPU_UNAVAILABLE: 'GPU speaker analysis is unavailable. Update your graphics driver and try again.',
+    SPEAKER_GPU_FAILED: 'GPU speaker analysis could not finish. Check your graphics driver and try again.',
+    SPEAKER_COUNT_UNSUPPORTED: 'Nemotron counts speakers automatically. Clear the exact speaker count and try again.',
+} as const;
+
+export type SpeakerErrorCode = keyof typeof SPEAKER_ERROR_MESSAGES;

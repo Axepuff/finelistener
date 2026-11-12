@@ -89,8 +89,12 @@ describe('speaker analysis in the renderer', () => {
         expect(store.transcription.plainText).toBe('Hello');
     });
 
-    it('retains existing labels when a confirmed rerun fails', async () => {
-        const analyzeSpeakers = vi.fn(() => Promise.reject(new Error('native process failed')));
+    it.each([
+        ['native process failed', 'Speaker analysis failed. The saved transcript is unchanged.'],
+        ["Error invoking remote method 'sessions:analyze-speakers': Error: SPEAKER_GPU_UNAVAILABLE", 'GPU speaker analysis is unavailable. Update your graphics driver and try again.'],
+        ['SPEAKER_COUNT_UNSUPPORTED', 'Nemotron counts speakers automatically. Clear the exact speaker count and try again.'],
+    ])('retains existing labels and shows a safe message when a confirmed rerun fails: %s', async (failure, message) => {
+        const analyzeSpeakers = vi.fn(() => Promise.reject(new Error(failure)));
         const fake = createFakeRendererAdapter({ analyzeSpeakers });
         const store = new AppStore(fake.adapter);
         void store.speakers.setEnabled(false);
@@ -104,6 +108,7 @@ describe('speaker analysis in the renderer', () => {
             expect((await store.analyzeSpeakers(true)).ok).toBe(false);
             expect(store.transcription.savedTranscript?.speakers?.generation).toBe('generation-1');
             expect(store.speakers.status).toBe('error');
+            expect(store.speakers.errorMessage).toBe(message);
         } finally {
             error.mockRestore();
         }

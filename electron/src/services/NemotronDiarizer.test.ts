@@ -1,0 +1,88 @@
+import fs from 'fs/promises';
+import { tmpdir } from 'os';
+import path from 'path';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { analyzeNemotron } from './NemotronDiarizer';
+import { runSpeakerProcess } from './speakerProcess';
+
+vi.mock('./speakerProcess', async (original) => ({
+    ...await original<typeof import('./speakerProcess')>(), runSpeakerProcess: vi.fn(),
+}));
+
+let directory: string;
+let wav: string;
+let segments: unknown[];
+const doctor = { version: '0.3.0', features: { backend_vulkan: true, backend_cuda: false },
+    driver_runtime_compatible: true, devices: [{ name: 'Vulkan0', type: 'gpu' }] };
+
+beforeEach(async () => {
+    directory = await fs.mkdtemp(path.join(tmpdir(), 'nemotron protocol '));
+    wav = path.join(directory, 'audio.wav');
+    const audio = Buffer.alloc(44 + 32000);
+    audio.write('RIFF'); audio.writeUInt32LE(audio.length - 8, 4); audio.write('WAVEfmt ', 8);
+    audio.writeUInt32LE(16, 16); audio.writeUInt16LE(1, 20); audio.writeUInt16LE(1, 22);
+    audio.writeUInt32LE(16000, 24); audio.writeUInt32LE(32000, 28);
+    audio.writeUInt16LE(2, 32); audio.writeUInt16LE(16, 34); audio.write('data', 36); audio.writeUInt32LE(32000, 40);
+    await fs.writeFile(wav, audio);
+    segments = [{ start: 0, end: 0.8, speaker: 7 }, { start: 0.2, end: 1, speaker: 'voice-x' }];
+    vi.mocked(runSpeakerProcess).mockReset().mockImplementation(async (_binary, args) => {
+        if (args.includes('doctor')) return { stdout: JSON.stringify(doctor), stderr: '' };
+        await fs.writeFile(args[args.indexOf('--output') + 1], JSON.stringify({ segments }));
+        return { stdout: '', stderr: '' };
+    });
+});
+
+afterEach(async () => { await fs.rm(directory, { recursive: true, force: true }); });
+
+it('preserves overlapping native evidence, arbitrary IDs and pinned GPU provenance in one stateful run', async () => {
+    const progress = vi.fn();
+    const result = await analyzeNemotron(directory, wav, new AbortController().signal, progress);
+    expect(result).toMatchObject({ engine: 'nemotron-3', backend: 'vulkan', device: 'vulkan:0',
+        preset: 'v3-offline', fallbackUsed: false, intervals: [
+            { startSec: 0, endSec: 0.8, speakerId: '7' },
+            { startSec: 0.2, endSec: 1, speakerId: 'voice-x' },
+        ] });
+    const [, args, , work, env] = vi.mocked(runSpeakerProcess).mock.calls[1];
+    expect(args).toEqual(['diarize', wav, '--model', path.join(directory, 'model/Nemotron-3-Diarization.q8_0.gguf'),
+        '--device', 'vulkan:0', '--preset', 'v3-offline', '--concurrency', '1', '--format', 'json',
+        '--output', path.join(work, 'result.json')]);
+    expect(env?.OMP_THREAD_LIMIT).toBe('2');
+    expect(env?.NEMO_SPEECH_DIAR_PRESET).toBeUndefined();
+    expect(progress.mock.calls).toEqual([[{ phase: 'analyzing' }]]);
+    expect(runSpeakerProcess).toHaveBeenCalledTimes(2);
+    await expect(fs.access(work)).rejects.toThrow();
+});
+
+it('accepts empty acoustic output for silent audio', async () => {
+    segments = [];
+    expect((await analyzeNemotron(directory, wav, new AbortController().signal)).intervals).toEqual([]);
+});
+
+it.each([
+    { start: -0.1, end: 1, speaker: 1 },
+    { start: 0, end: 1.2, speaker: 1 },
+    { start: 0.5, end: 0.5, speaker: 1 },
+    { start: 0, end: 1, speaker: null },
+    { start: 0, end: 1, speaker: '' },
+])('rejects malformed native evidence without saving partial results: %j', async (segment) => {
+    segments.push(segment);
+    await expect(analyzeNemotron(directory, wav, new AbortController().signal))
+        .rejects.toMatchObject({ code: 'SPEAKER_GPU_FAILED' });
+});
+
+it('refuses a CPU-only doctor result before inference', async () => {
+    vi.mocked(runSpeakerProcess).mockResolvedValue({ stdout: JSON.stringify({ ...doctor,
+        devices: [{ name: 'CPU', type: 'cpu' }] }), stderr: '' });
+    await expect(analyzeNemotron(directory, wav, new AbortController().signal))
+        .rejects.toMatchObject({ code: 'SPEAKER_GPU_UNAVAILABLE' });
+    expect(runSpeakerProcess).toHaveBeenCalledOnce();
+});
+
+it('does not retry a failed GPU process on CPU and removes its temporary output', async () => {
+    vi.mocked(runSpeakerProcess).mockResolvedValueOnce({ stdout: JSON.stringify(doctor), stderr: '' })
+        .mockRejectedValueOnce(new Error('GPU initialization failed'));
+    await expect(analyzeNemotron(directory, wav, new AbortController().signal))
+        .rejects.toMatchObject({ code: 'SPEAKER_GPU_FAILED' });
+    expect(runSpeakerProcess).toHaveBeenCalledTimes(2);
+    await expect(fs.access(vi.mocked(runSpeakerProcess).mock.calls[1][3])).rejects.toThrow();
+});

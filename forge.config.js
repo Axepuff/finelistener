@@ -45,7 +45,7 @@ const VARIANT_CONFIG = {
             buildAssetsDir('win-x64-gpu', 'whisper'),
             path.resolve(__dirname, 'build-assets/models'),
             buildAssetsDir('win-x64-gpu', 'miniaudio-loopback'),
-            buildAssetsDir('win-x64-gpu', 'community'),
+            buildAssetsDir('win-x64-gpu', 'nemotron'),
         ],
         asarUnpack: [
             '**/node_modules/ffmpeg-static/**',

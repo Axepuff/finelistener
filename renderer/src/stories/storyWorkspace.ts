@@ -5,7 +5,8 @@ import { AppStore } from '../stores/appStore';
 import { createFakeRendererAdapter } from '../stores/testing/fakeRendererAdapter';
 import { STORY_AUDIO_PATH } from './storyAudio';
 
-export type WorkspaceScenario = 'empty' | 'ready' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error';
+export type WorkspaceScenario = 'empty' | 'ready' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error'
+    | 'nemotron' | 'nemotron-downloading' | 'nemotron-analyzing' | 'nemotron-error';
 
 export interface StoryWorkspace {
     store: AppStore;
@@ -39,7 +40,8 @@ const transcriptSource = transcript.segments.map((segment) => (
 )).join('\n');
 
 export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise<StoryWorkspace> => {
-    const hasTranscript = scenario === 'transcript' || scenario === 'long-transcript' || scenario === 'speakers';
+    const isNemotron = scenario.startsWith('nemotron');
+    const hasTranscript = scenario === 'transcript' || scenario === 'long-transcript' || scenario === 'speakers' || isNemotron;
     let session: SessionDetails = {
         id: 'storybook-session',
         title: 'Design discussion.wav',
@@ -58,7 +60,12 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
                 endSec: (index + 1) / 5,
                 text: `Passage ${index + 1}. ${transcript.segments[index % 3].text}`,
             })),
-        } : structuredClone(scenario === 'speakers' ? speakerTranscript : transcript) : undefined,
+        } : structuredClone(scenario === 'speakers' || isNemotron ? speakerTranscript : transcript) : undefined,
+    };
+    if (isNemotron && session.transcript?.speakers) session.transcript.speakers.provenance = {
+        version: 1, engine: 'nemotron-3', modelRevision: 'demo-model', runtimeRevision: 'demo-runtime',
+        modelSha256: 'demo', runtimeSha256: 'demo', audioMode: 'optimized', backend: 'vulkan',
+        device: 'vulkan:0', preset: 'v3-offline', assignmentPolicy: 'conservative-overlap-v1', acousticIntervals: [],
     };
     const isRecorder = scenario.startsWith('recording');
     let sessions: SessionListItem[] = scenario === 'empty' || isRecorder ? [] : [session];
@@ -78,6 +85,9 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
     };
     const fake = createFakeRendererAdapter({
         runtimePlatform: 'win32',
+        ...(isNemotron ? { getSpeakerAssets: () => Promise.resolve({ engine: 'nemotron-3' as const,
+            ready: scenario !== 'nemotron-downloading', cpuReady: false, cudaReady: false, cudaAvailable: false,
+            vulkanAvailable: scenario !== 'nemotron-error', downloadBytes: 123_671_929 }) } : {}),
         listSessions: () => Promise.resolve(sessions),
         getSession: () => Promise.resolve(session),
         importAudio: () => {
@@ -157,6 +167,17 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
     }
     if (scenario === 'recording-error') await store.recording.startRecording();
     if (scenario === 'recording') emitRecording();
+    if (isNemotron) {
+        await store.speakers.setEnabled(true);
+        if (scenario === 'nemotron-downloading' || scenario === 'nemotron-analyzing') {
+            store.operations.begin(scenario === 'nemotron-downloading' ? 'preparing-speaker-assets' : 'analyzing-speakers');
+            store.speakers.begin();
+            store.speakers.updateProgress({ sessionId: session.id,
+                phase: scenario === 'nemotron-downloading' ? 'downloading' : 'analyzing',
+                ...(scenario === 'nemotron-downloading' ? { downloadedBytes: 61_835_965, totalBytes: 123_671_929 } : {}) });
+        }
+        if (scenario === 'nemotron-error') store.speakers.fail('GPU speaker analysis is unavailable. Update your graphics driver and try again.');
+    }
 
     return {
         store,

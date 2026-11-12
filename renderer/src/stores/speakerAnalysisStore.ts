@@ -1,6 +1,10 @@
 import type { SpeakerAnalysisProgressEvent, SpeakerAssetStatus } from 'electron/src/types/transcription';
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { RendererAdapter } from './rendererAdapter';
+import { SPEAKER_ERROR_MESSAGES } from '../../../electron/src/types/transcription';
+
+export const speakerErrorMessage = (error: unknown): string | undefined => error instanceof Error ?
+    Object.entries(SPEAKER_ERROR_MESSAGES).find(([code]) => error.message === code || error.message.endsWith(`: ${code}`))?.[1] : undefined;
 
 export class SpeakerAnalysisStore {
     enabled = true;
@@ -31,6 +35,18 @@ export class SpeakerAnalysisStore {
 
     constructor(private readonly adapter: RendererAdapter | null) {
         makeAutoObservable<this, 'adapter'>(this, { adapter: false }, { autoBind: true });
+    }
+
+    get engineName(): string {
+        return this.assets?.engine === 'nemotron-3' ? 'Nemotron 3' : 'Community-1';
+    }
+
+    get supportsExactCount(): boolean {
+        return this.assets !== null && this.assets.engine !== 'nemotron-3';
+    }
+
+    get componentReady(): boolean {
+        return this.assets?.ready ?? Boolean(this.assets?.cpuReady && (!this.assets.cudaAvailable || this.assets.cudaReady));
     }
 
     initialize(): void {

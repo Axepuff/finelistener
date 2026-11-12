@@ -1,4 +1,4 @@
-"""Verify pinned release components, including multipart assets, before upload."""
+"""Verify Community and Nemotron release components, including multipart assets, before upload."""
 import argparse
 import hashlib
 import json
@@ -23,8 +23,18 @@ def verify(manifest_file, directory, tag):
     if tag and tag != expected:
         raise ValueError('Release tag differs from the application version')
     prefix = 'https://github.com/Axepuff/finelistener/releases/download/' + expected + '/'
-    if manifest['version'] != 'community-1-pyannote4-torch28-r1' or not manifest['url'].startswith(prefix):
+    native = manifest['variant'] == 'win-x64-gpu'
+    lock = json.loads((ROOT / 'scripts/nemotron-assets.json').read_text()) if native else None
+    revision = lock['version'] if native else 'community-1-pyannote4-torch28-r1'
+    if manifest['version'] != revision or not manifest['url'].startswith(prefix):
         raise ValueError('Component revision/URL differs from the pinned application')
+    if native:
+        if (manifest['modelRevision'] != lock['model']['revision']
+                or manifest['runtimeRevision'] != lock['runtime']['revision']
+                or manifest['runtimeSha256'] != lock['runtime']['sha256']
+                or manifest['files'][manifest['model']] != {key: lock['model'][key] for key in ['bytes', 'sha256']}
+                or any(manifest['files'].get('notices/' + name) != entry for name, entry in lock['notices'].items())):
+            raise ValueError('Nemotron revision, model or notices differ from the build lock')
     if manifest.get('parts'):
         total = 0
         combined = hashlib.sha256()
@@ -51,6 +61,13 @@ def verify(manifest_file, directory, tag):
             for info in package.infolist():
                 if info.file_size != manifest['files'][info.filename]['bytes']:
                     raise ValueError('Archive entry size mismatch')
+                if native:
+                    with package.open(info) as stream:
+                        result = hashlib.sha256()
+                        for block in iter(lambda: stream.read(1024 * 1024), b''):
+                            result.update(block)
+                    if result.hexdigest() != manifest['files'][info.filename]['sha256']:
+                        raise ValueError('Archive entry hash mismatch')
     if not manifest['files'] or any(name.startswith('/') or ':' in name or '\\' in name
                                     or '..' in name.split('/') for name in manifest['files']):
         raise ValueError('Unsafe file manifest')
@@ -65,7 +82,7 @@ def main():
     args = parser.parse_args()
     if args.all:
         manifests = list(args.all.rglob('*-component.json'))
-        if {json.loads(f.read_text())['variant'] for f in manifests} != {'win-x64-cpu', 'win-x64-gpu', 'mac-arm64'}:
+        if len(manifests) != 3 or {json.loads(f.read_text())['variant'] for f in manifests} != {'win-x64-cpu', 'win-x64-gpu', 'mac-arm64'}:
             raise ValueError('All three release variants are required')
         for file in manifests:
             verify(file, file.parent, args.release_tag)

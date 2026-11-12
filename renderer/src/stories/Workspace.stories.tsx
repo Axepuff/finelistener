@@ -43,6 +43,32 @@ export const AudioReady: Story = { parameters: { scenario: 'ready' } };
 export const Transcribing: Story = { parameters: { scenario: 'transcribing' } };
 export const TranscriptionError: Story = { parameters: { scenario: 'error', docs: { description: { story: 'An intentional adapter failure demonstrates the real transcription error state. The developer console contains the expected failure log.' } } } };
 export const LongTranscript: Story = { parameters: { scenario: 'long-transcript' } };
+export const Nemotron: Story = {
+    parameters: { scenario: 'nemotron' },
+    play: async ({ canvas, canvasElement }) => {
+        const page = within(canvasElement.ownerDocument.body);
+        await expect(canvas.queryByRole('textbox', { name: 'System or file speakers' })).not.toBeInTheDocument();
+        await expect(canvas.getByText('Nemotron counts speakers automatically. Exact counts are unavailable.')).toBeVisible();
+        await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
+        await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
+        await expect(page.queryByRole('textbox', { name: 'Speaker count' })).not.toBeInTheDocument();
+        await waitFor(() => expect(page.getByText('Nemotron 3 · VULKAN · Optimized')).toBeVisible());
+        await userEvent.click(page.getByRole('button', { name: 'Analyze speakers again' }));
+        await waitFor(() => expect(page.getByRole('dialog', { name: 'Replace speaker labels?' })).toBeVisible());
+        await userEvent.click(page.getByRole('button', { name: 'Cancel' }));
+    },
+};
+export const NemotronDownloading: Story = { parameters: { scenario: 'nemotron-downloading' } };
+export const NemotronAnalyzing: Story = {
+    parameters: { scenario: 'nemotron-analyzing' },
+    play: async ({ canvas }) => {
+        await expect(canvas.getByText('Analyzing speakers', { exact: true })).toBeVisible();
+        await expect(canvas.queryByText(/Analyzing speakers \(/)).not.toBeInTheDocument();
+        await userEvent.click(canvas.getByRole('button', { name: 'Cancel' }));
+        await expect(canvas.queryByText('Analyzing speakers', { exact: true })).not.toBeInTheDocument();
+    },
+};
+export const NemotronError: Story = { parameters: { scenario: 'nemotron-error' } };
 export const SpeakersBeforeAnalysis: Story = {
     play: async ({ canvas, canvasElement }) => {
         const page = within(canvasElement.ownerDocument.body);

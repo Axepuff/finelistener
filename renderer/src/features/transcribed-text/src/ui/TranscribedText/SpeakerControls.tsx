@@ -83,7 +83,9 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                     <Stack gap={8}>
                         {hasSystemAudio ? (
                             <>
-                                <NumberInput
+                                {speakerState.assets?.engine === 'nemotron-3' ? (
+                                    <Text size="xs" c="dimmed">Nemotron counts speakers automatically. Exact counts are unavailable.</Text>
+                                ) : <NumberInput
                                     label="Speaker count"
                                     placeholder="Auto"
                                     description={store.workspace.activeSession?.tracks?.some((track) => track.source === 'microphone') ? 'Excludes the microphone speaker.' : undefined}
@@ -91,9 +93,9 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                                     allowDecimal={false}
                                     value={speakerState.speakerCount ?? ''}
                                     onChange={(value) => speakerState.setSpeakerCount(typeof value === 'number' ? value : null)}
-                                    disabled={isBusy}
+                                    disabled={isBusy || !speakerState.supportsExactCount}
                                     size="xs"
-                                />
+                                />}
                                 <Divider />
                             </>
                         ) : null}
@@ -123,7 +125,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                                 Prepare CUDA component
                             </Button>
                         ) : null}
-                        {transcript.speakers?.provenance ? <Text size="xs" c="dimmed">Community-1 · {transcript.speakers.provenance.backend.toUpperCase()} · {transcript.speakers.provenance.audioMode === 'optimized' ? 'Optimized' : 'Original'}</Text> : null}
+                        {transcript.speakers?.provenance ? <Text size="xs" c="dimmed">{transcript.speakers.provenance.engine === 'nemotron-3' ? 'Nemotron 3' : 'Community-1'} · {transcript.speakers.provenance.backend.toUpperCase()} · {transcript.speakers.provenance.audioMode === 'optimized' ? 'Optimized' : 'Original'}</Text> : null}
                     </Stack>
                 </Popover.Dropdown>
             </Popover>

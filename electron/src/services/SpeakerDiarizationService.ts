@@ -1,4 +1,3 @@
-import { spawn } from 'child_process';
 import { createHash, randomUUID } from 'crypto';
 import fs from 'fs';
 import fsp from 'fs/promises';
@@ -10,6 +9,8 @@ import { app } from 'electron';
 import type { SessionSpeakerInterval } from '../types/sessions';
 import type { SpeakerAssetStatus } from '../types/transcription';
 import { AudioPreprocessor } from './AudioPreprocessor';
+import { analyzeNemotron, NEMOTRON_COMPONENT, verifyNemotronGpu, type NemotronAnalysisResult } from './NemotronDiarizer';
+import { runSpeakerProcess, SpeakerAnalysisError } from './speakerProcess';
 
 const VERSION = 'community-1-pyannote4-torch28-r1';
 
@@ -20,7 +21,8 @@ export interface SpeakerAnalysisOptions {
     preferCuda?: boolean;
 }
 
-export interface SpeakerAnalysisResult {
+interface CommunityAnalysisResult {
+    engine?: 'pyannote-community-1';
     intervals: SessionSpeakerInterval[];
     backend: 'cpu' | 'cuda';
     fallbackUsed: boolean;
@@ -28,6 +30,8 @@ export interface SpeakerAnalysisResult {
     modelRevision?: string;
     runtimeRevision?: string;
 }
+
+export type SpeakerAnalysisResult = CommunityAnalysisResult | NemotronAnalysisResult;
 
 export interface SpeakerPreparationProgress {
     downloadedBytes: number;
@@ -44,17 +48,31 @@ interface FileEntry {
     sha256: string;
 }
 
-interface ComponentManifest {
+interface ComponentBase {
     version: string;
     variant: 'win-x64-cpu' | 'win-x64-gpu' | 'mac-arm64';
     url: string;
     bytes: number;
     sha256: string;
     files: Record<string, FileEntry>;
-    python: string;
     modelRevision: string;
     parts?: Array<{ url: string; bytes: number; sha256: string }>;
 }
+
+interface CommunityComponent extends ComponentBase {
+    version: typeof VERSION;
+    python: string;
+}
+
+interface NemotronComponent extends ComponentBase {
+    version: typeof NEMOTRON_COMPONENT.version;
+    executable: string;
+    model: string;
+    runtimeRevision: string;
+    runtimeSha256: string;
+}
+
+type ComponentManifest = CommunityComponent | NemotronComponent;
 
 const isWithin = (root: string, candidate: string): boolean => {
     const relative = path.relative(root, candidate);
@@ -121,7 +139,7 @@ const filesMatch = async (root: string, entries: Record<string, FileEntry>, hash
 
 const safeArchiveEntries = (listing: string, files: Record<string, FileEntry>): boolean => {
     const names = listing.split(/\r?\n/).filter(Boolean);
-    if (names.length !== Object.keys(files).length) return false;
+    if (names.length !== Object.keys(files).length || new Set(names).size !== names.length) return false;
     return names.every((name) => {
         const normalized = name.replace(/\\/g, '/');
         return !normalized.startsWith('/') && !/^[a-z]:/i.test(normalized)
@@ -129,49 +147,6 @@ const safeArchiveEntries = (listing: string, files: Record<string, FileEntry>): 
             && Object.hasOwn(files, normalized);
     });
 };
-
-export const runSpeakerProcess = (binary: string, args: string[], signal: AbortSignal, cwd: string, env?: NodeJS.ProcessEnv, onProgress?: (percent: number) => void, stdoutLimit = 2_000_000): Promise<{ stdout: string; stderr: string }> =>
-    new Promise((resolve, reject) => {
-        const child = spawn(binary, args, { cwd, env, signal, windowsHide: true });
-        const timeout = setTimeout(() => { processError = new Error('Speaker worker timed out'); child.kill(); }, 2 * 60 * 60 * 1000);
-        let stdout = '';
-        let stderr = '';
-        let processError: Error | null = null;
-        let progressBuffer = '';
-        let lastPercent = -1;
-        child.stdout.setEncoding('utf8');
-        child.stderr.setEncoding('utf8');
-        child.stdout.on('data', (chunk: string) => {
-            stdout += chunk;
-            if (stdout.length > stdoutLimit) {
-                processError = new Error('Speaker worker output exceeded the limit');
-                child.kill();
-            }
-        });
-        child.stderr.on('data', (chunk: string) => {
-            stderr = (stderr + chunk).slice(-100_000);
-            progressBuffer += chunk;
-            const lines = progressBuffer.split(/[\r\n]/);
-            progressBuffer = (lines.pop() ?? '').slice(-1000);
-            for (const line of lines) {
-                const match = /^progress (\d+(?:\.\d+)?)%$/.exec(line.trim());
-                if (!match) continue;
-                const percent = Math.min(100, Math.floor(Number(match[1])));
-                if (percent > lastPercent) {
-                    lastPercent = percent;
-                    onProgress?.(percent);
-                }
-            }
-        });
-        child.on('error', (error) => { processError = error; });
-        child.on('close', (code) => {
-            clearTimeout(timeout);
-            if (signal.aborted) reject(new Error('Speaker analysis cancelled'));
-            else if (processError) reject(processError);
-            else if (code !== 0) reject(Object.assign(new Error(`${path.basename(binary)} exited with ${code}: ${stderr}`), { exitCode: code }));
-            else resolve({ stdout, stderr });
-        });
-    });
 
 const download = async (url: string, target: string, signal: AbortSignal, onProgress?: (progress: SpeakerPreparationProgress) => void): Promise<void> => {
     if (!url.startsWith('https://github.com/Axepuff/finelistener/releases/download/')) throw new Error('Invalid speaker component URL');
@@ -207,10 +182,14 @@ export class SpeakerDiarizationService {
     private readonly audio = new AudioPreprocessor();
 
     private bundleRoot(): string {
-        if (app.isPackaged) return path.join(process.resourcesPath, 'community');
-        const variants = process.platform === 'win32' ? ['win-x64-gpu', 'win-x64-cpu'] : ['mac-arm64'];
-        const roots = variants.map((variant) => path.join(app.getAppPath(), 'build-assets', variant, 'community'));
-        return roots.find((root) => fs.existsSync(path.join(root, 'component.json'))) ?? roots[0];
+        if (app.isPackaged) {
+            const native = path.join(process.resourcesPath, 'nemotron');
+            const community = path.join(process.resourcesPath, 'community');
+            return process.platform === 'win32' && (fs.existsSync(native) || !fs.existsSync(community)) ? native : community;
+        }
+        const variant = process.platform === 'win32' ?
+            (process.env.BUILD_VARIANT === 'win-x64-cpu' ? 'win-x64-cpu' : 'win-x64-gpu') : 'mac-arm64';
+        return path.join(app.getAppPath(), 'build-assets', variant, variant === 'win-x64-gpu' ? 'nemotron' : 'community');
     }
 
     private async component(): Promise<ComponentManifest | null> {
@@ -218,39 +197,69 @@ export class SpeakerDiarizationService {
             const manifest = await readJson<ComponentManifest>(path.join(this.bundleRoot(), 'component.json'));
             const expectedPlatform = process.platform === 'win32' ? manifest.variant.startsWith('win-x64-') :
                 process.platform === 'darwin' && manifest.variant === 'mac-arm64';
-            return manifest.version === VERSION && expectedPlatform && process.arch === (process.platform === 'darwin' ? 'arm64' : 'x64')
+            const native = path.basename(this.bundleRoot()) === 'nemotron';
+            const validRuntime = native ? manifest.version === NEMOTRON_COMPONENT.version
+                && process.platform === 'win32' && manifest.variant === 'win-x64-gpu'
+                && manifest.executable === NEMOTRON_COMPONENT.executable && manifest.model === NEMOTRON_COMPONENT.model
+                && manifest.runtimeRevision === NEMOTRON_COMPONENT.runtimeRevision
+                && manifest.runtimeSha256 === NEMOTRON_COMPONENT.runtimeSha256
+                && manifest.modelRevision === NEMOTRON_COMPONENT.modelRevision
+                && manifest.files?.[manifest.model]?.sha256 === NEMOTRON_COMPONENT.modelSha256
+                && Object.hasOwn(manifest.files, manifest.executable) && Object.hasOwn(manifest.files, 'bin/ggml-vulkan.dll')
+                && Object.hasOwn(manifest.files, 'notices/model-LICENSE') :
+                manifest.version === VERSION && Object.hasOwn(manifest.files, manifest.python)
+                && Object.hasOwn(manifest.files, 'worker.py') && Object.hasOwn(manifest.files, 'model/config.yaml');
+            return validRuntime && expectedPlatform && process.arch === (process.platform === 'darwin' ? 'arm64' : 'x64')
                 && Number.isSafeInteger(manifest.bytes) && manifest.bytes > 0 && /^[a-f0-9]{64}$/i.test(manifest.sha256)
                 && validFileEntries(manifest.files) && Object.keys(manifest.files).length > 0
-                && Object.hasOwn(manifest.files, manifest.python) && Object.hasOwn(manifest.files, 'worker.py')
-                && Object.hasOwn(manifest.files, 'model/config.yaml') && /^[a-f0-9]{40}$/.test(manifest.modelRevision)
+                && /^[a-f0-9]{40}$/.test(manifest.modelRevision)
                 && manifest.url.startsWith('https://github.com/Axepuff/finelistener/releases/download/v' + app.getVersion() + '/') ? manifest : null;
         } catch { return null; }
     }
 
     private installedRoot(component: ComponentManifest): string {
-        return path.join(app.getPath('userData'), 'community', component.variant + '-' + component.sha256.slice(0, 16));
+        return path.join(app.getPath('userData'), component.version === VERSION ? 'community' : 'nemotron', component.variant + '-' + component.sha256.slice(0, 16));
     }
 
     private async readyRoot(component: ComponentManifest, signal?: AbortSignal): Promise<string | null> {
         const candidates = [this.installedRoot(component)];
-        if (!app.isPackaged) candidates.unshift(path.join(app.getAppPath(), 'build-assets', 'community-runtime', component.variant));
+        if (!app.isPackaged) candidates.unshift(path.join(app.getAppPath(), 'build-assets',
+            component.version === VERSION ? 'community-runtime' : 'nemotron-runtime', component.variant));
         for (const root of candidates) if (await filesMatch(root, component.files, true, signal)) return root;
         return null;
     }
 
-    public async getAssetStatus(): Promise<SpeakerAssetStatus> {
+    public async getAssetStatus(signal?: AbortSignal): Promise<SpeakerAssetStatus> {
+        signal?.throwIfAborted();
         const component = await this.component();
-        const ready = component ? Boolean(await this.readyRoot(component)) : false;
+        const root = component ? await this.readyRoot(component, signal) : null;
+        const ready = Boolean(root);
+        if (path.basename(this.bundleRoot()) === 'nemotron') {
+            let vulkanAvailable: boolean | undefined;
+            if (root) {
+                try {
+                    const timeout = AbortSignal.timeout(10_000);
+                    await verifyNemotronGpu(root, signal ? AbortSignal.any([signal, timeout]) : timeout);
+                    vulkanAvailable = true;
+                } catch (error) {
+                    signal?.throwIfAborted();
+                    console.warn('Nemotron GPU check failed', error); vulkanAvailable = false;
+                }
+            }
+            return { engine: 'nemotron-3', ready, vulkanAvailable,
+                cpuReady: false, cudaReady: false, cudaAvailable: false,
+                downloadBytes: component?.bytes, runtimeRevision: component?.version };
+        }
         const gpu = component?.variant === 'win-x64-gpu';
         const driver = process.platform === 'win32' && fs.existsSync(path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'nvcuda.dll'));
-        return { cpuReady: ready, cudaReady: ready && gpu, cudaAvailable: Boolean(gpu && driver),
+        return { engine: 'pyannote-community-1', ready, cpuReady: ready, cudaReady: ready && gpu, cudaAvailable: Boolean(gpu && driver),
             downloadBytes: component?.bytes, runtimeRevision: component?.version };
     }
 
     public async prepareAssets(_includeCuda: boolean, signal: AbortSignal, onProgress?: (progress: SpeakerPreparationProgress) => void): Promise<void> {
         signal.throwIfAborted();
         const component = await this.component();
-        if (!component) throw new Error('Community-1 release component manifest is unavailable');
+        if (!component) throw new SpeakerAnalysisError('SPEAKER_ASSETS_UNAVAILABLE');
         if (await this.readyRoot(component, signal)) return;
         const target = this.installedRoot(component);
         const parent = path.dirname(target);
@@ -273,15 +282,15 @@ export class SpeakerDiarizationService {
                 }
                 if (completedBytes !== component.bytes) throw new Error('Component part sizes do not match');
             } else await download(component.url, archive, signal, onProgress);
-            if ((await fsp.stat(archive)).size !== component.bytes || await hashFile(archive, signal) !== component.sha256) throw new Error('Community component integrity check failed');
+            if ((await fsp.stat(archive)).size !== component.bytes || await hashFile(archive, signal) !== component.sha256) throw new Error('Speaker component integrity check failed');
             await fsp.mkdir(extracted);
             const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe') : '/usr/bin/tar';
             const listing = await runSpeakerProcess(tar, ['-tf', archive], signal, temporary);
-            if (!safeArchiveEntries(listing.stdout, component.files)) throw new Error('Unexpected community archive entries');
+            if (!safeArchiveEntries(listing.stdout, component.files)) throw new Error('Unexpected speaker archive entries');
             const types = await runSpeakerProcess(tar, ['-tvf', archive], signal, temporary, undefined, undefined, 8_000_000);
             if (types.stdout.split(/\r?\n/).filter(Boolean).some((line) => !line.startsWith('-'))) throw new Error('Only regular archive files are allowed');
             await runSpeakerProcess(tar, ['-xf', archive, '-C', extracted], signal, temporary);
-            if (!await filesMatch(extracted, component.files, true, signal)) throw new Error('Community component files failed validation');
+            if (!await filesMatch(extracted, component.files, true, signal)) throw new Error('Speaker component files failed validation');
             signal.throwIfAborted();
             const backup = target + '.previous-' + randomUUID();
             let previous = false;
@@ -290,6 +299,9 @@ export class SpeakerDiarizationService {
             try { await fsp.rename(extracted, target); }
             catch (error) { if (previous) await fsp.rename(backup, target); throw error; }
             if (previous) await fsp.rm(backup, { recursive: true, force: true });
+        } catch (error) {
+            signal.throwIfAborted();
+            throw new SpeakerAnalysisError('SPEAKER_ASSETS_UNAVAILABLE', { cause: error });
         } finally { await fsp.rm(temporary, { recursive: true, force: true }); }
     }
 
@@ -299,13 +311,20 @@ export class SpeakerDiarizationService {
             || (options.endSec !== undefined && (!Number.isFinite(options.endSec) || options.endSec <= options.startSec))
             || (options.speakerCount !== undefined && (!Number.isSafeInteger(options.speakerCount) || options.speakerCount < 1))) throw new Error('Invalid speaker range/count');
         const component = await this.component();
+        if (path.basename(this.bundleRoot()) === 'nemotron' && options.speakerCount !== undefined) {
+            throw new SpeakerAnalysisError('SPEAKER_COUNT_UNSUPPORTED');
+        }
         const root = component && await this.readyRoot(component, signal);
-        if (!component || !root) throw new Error('Community-1 assets are not ready');
+        if (!component || !root) throw new SpeakerAnalysisError('SPEAKER_ASSETS_UNAVAILABLE');
         signal.throwIfAborted();
         onProgress?.({ phase: 'converting' });
         const segment = options.endSec === undefined && options.startSec === 0 ? undefined :
             { start: options.startSec, end: options.endSec ?? Number.MAX_SAFE_INTEGER };
         const prepared = await this.audio.prepareAudioSegmentExactly(audioPath, segment, signal);
+        if (component.version === NEMOTRON_COMPONENT.version) {
+            try { return await analyzeNemotron(root, prepared.wavPath, signal, onProgress); }
+            finally { await prepared.cleanup(); }
+        }
         const work = await fsp.mkdtemp(path.join(os.tmpdir(), 'finelistener-community-'));
         try {
             const run = async (backend: 'cpu' | 'cuda', fallbackUsed: boolean): Promise<SpeakerAnalysisResult> => {
@@ -327,7 +346,7 @@ export class SpeakerDiarizationService {
                         && (options.endSec === undefined || interval.endSec <= options.endSec - options.startSec + 0.01)
                         && typeof interval.speakerId === 'string' && interval.speakerId.length <= 200);
                 if (result.protocol !== 1 || result.backend !== backend || !valid(result.regularIntervals) || !valid(result.exclusiveIntervals)) throw new Error('Invalid Community worker output');
-                return { intervals: result.exclusiveIntervals, regularIntervals: result.regularIntervals, backend, fallbackUsed,
+                return { engine: 'pyannote-community-1', intervals: result.exclusiveIntervals, regularIntervals: result.regularIntervals, backend, fallbackUsed,
                     modelRevision: component.modelRevision, runtimeRevision: component.version };
             };
             if (options.preferCuda && component.variant === 'win-x64-gpu') {

@@ -14,7 +14,7 @@ import { ActivityLogStore } from './activityLogStore';
 import { ForegroundOperationStore } from './foregroundOperationStore';
 import type { RendererAdapter } from './rendererAdapter';
 import { SessionsStore } from './sessionsStore';
-import { SpeakerAnalysisStore } from './speakerAnalysisStore';
+import { SpeakerAnalysisStore, speakerErrorMessage } from './speakerAnalysisStore';
 import { TranscriptionStore, type StartTranscriptionOptions, type TranscriptionRunRequest } from './transcriptionStore';
 import {
     commandFailure,
@@ -576,9 +576,10 @@ export class AppStore {
             await this.awaitSpeakerStop(operation);
             if (!this.operations.owns(operation) || this.disposed) return commandSuccess(undefined);
             console.error('Speaker analysis failed', error);
-            this.speakers.fail('Speaker analysis failed. The saved transcript is unchanged.');
+            const message = speakerErrorMessage(error) ?? 'Speaker analysis failed. The saved transcript is unchanged.';
+            this.speakers.fail(message);
 
-            return commandFailure('Speaker analysis failed. The saved transcript is unchanged.');
+            return commandFailure(message);
         } finally {
             if (this.speakerAnalysisRequestStartedOperationId === operation.id) {
                 this.speakerAnalysisRequestStartedOperationId = null;
@@ -656,8 +657,9 @@ export class AppStore {
             await this.awaitSpeakerStop(operation);
             if (!this.operations.owns(operation) || this.disposed) return commandSuccess(undefined);
             console.error('Failed to prepare speaker analysis assets', error);
-            this.speakers.fail('Speaker analysis assets could not be prepared.');
-            return commandFailure('Speaker analysis assets could not be prepared.');
+            const message = speakerErrorMessage(error) ?? 'Speaker analysis assets could not be prepared.';
+            this.speakers.fail(message);
+            return commandFailure(message);
         } finally {
             runInAction(() => this.operations.finish(operation));
         }
