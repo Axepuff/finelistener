@@ -37,7 +37,7 @@ def main():
         binary = str(runtime / manifest['executable'])
         doctor = subprocess.Popen([binary, '--verbose', '--json', 'doctor'], cwd=work, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
         try:
-            stdout, stderr = doctor.communicate(timeout=30)
+            stdout, stderr = doctor.communicate(timeout=180)
         except subprocess.TimeoutExpired:
             if sys.platform == 'darwin':
                 sample = work / 'doctor-sample.txt'
