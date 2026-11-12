@@ -25,6 +25,8 @@ Each `prebuild:assets:*` command runs `python scripts/prepare-nemotron.py <win-x
 
 Build resources contain manifests and notices; runtime/model ZIPs are release-associated downloads (about 110 MB CPU, 124 MB Vulkan, 117 MB Metal). `npm run measure:speaker:installer -- win-x64-gpu` (or `win-x64-cpu`) produces matched Windows baseline/component installer measurements and enforces the 200000000-byte addition limit. `scripts/verify-speaker-release.py` validates all three platform manifests and every archive member before upload. The Nemotron components PR workflow prepares each platform and runs `scripts/smoke-nemotron.py` against the extracted archive on its target OS. The smoke check uses only three seconds of generated audio on CPU and, when available, GPU; it is not a performance benchmark.
 
+The hosted macOS workflow explicitly uses `--cpu-only`: the pinned upstream runtime crashes in the VM's paravirtualized Metal driver during inference. CPU on Apple Silicon passes; Metal execution and performance still require qualification on a physical Mac with `python scripts/smoke-nemotron.py mac-arm64`. First-time Metal capability detection can take about a minute while the OS compiles shaders.
+
 See [Nemotron acceptance](docs/testing/nemotron-acceptance.md), [ADR 0008](docs/adr/0008-nemotron-vulkan-speaker-analysis.md), and the historical [Community-1 acceptance](docs/testing/community-1-acceptance.md) for evidence and release checks.
 
 ## TypeScript toolchain
