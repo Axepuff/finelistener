@@ -2,9 +2,21 @@
 
 Observed on Windows x64 with an NVIDIA GeForce GTX 1070 on 2026-11-12. Private audio, transcripts and generated binaries remain under ignored `.artifact-work/` and `build-assets/`; they are not repository fixtures.
 
+## Final r3 component checks
+
+The Windows GPU component now includes a pinned LunarG Vulkan loader as a fallback. The upstream Vulkan executable depends on `vulkan-1.dll`, which is absent on a clean Windows Server 2022 runner. Before the fix, `python scripts/smoke-nemotron.py win-x64-gpu` failed there with `0xC0000135`, while the CPU component passed. After the fix, [all five native component jobs](https://github.com/Axepuff/finelistener/actions/runs/43187764882) passed, including both Windows variants on Windows Server 2022 and Windows latest. The older runner explicitly reported `systemVulkanLoaderAvailable: false` and then `device: cpu, smokePassed: true` for the GPU component. No graphics driver or system runtime was installed for that check.
+
+The fallback lives outside the executable directory and follows System32 in the restricted search path, preserving the installed driver's loader preference. Its official archive and notices are pinned in the build lock. Asset requests identify FineListener to the distribution CDN; a default Python user agent reproducibly received HTTP 403, while the identified request downloaded bytes matching the published SHA-256.
+
+The r3 archives verified locally: CPU 109,991,841 bytes, Windows GPU 124,163,296 bytes, and macOS 117,144,379 bytes. Native CPU smoke passed on both Windows components and Vulkan smoke passed on the local GTX 1070. The compiled service repeated the three-second CPU checks and the GPU checks: 30 seconds in 0.574 seconds and 4,101.397 seconds in 20.133 seconds, with all 7 and 864 intervals still matching the reference CLI. Real ZIP installation, per-file hashes, offline inference, cancellation cleanup, corruption rejection and atomic repair passed again. Evidence remains in `.artifact-work/native-check/{results,assets-check}.json` inside the isolated PR checkout.
+
+Matched r3 Windows GPU Squirrel installers measured 345,259,520 bytes without and 345,303,040 bytes with speaker resources: **43,520 bytes added**, with identical application ASAR hashes. Bundled metadata/notices total 121,451 bytes; the external component installs 179,713,339 bytes. Evidence: `.artifact-work/installer-gpu-r3.log` and `build-assets/installer-measurements/win-x64-gpu/1794473749186/` in that checkout.
+
+Typecheck, lint, build and all 247 unit tests passed after the r3 change. Renderer behavior is unchanged from the 17 passing Storybook tests below. The CPU and macOS runtime binaries and model are unchanged from r2, including the physical M1 checks. The sections below retain the earlier r2/r1 measurements with their original scope.
+
 ## CPU and Apple Silicon extension
 
-The current implementation uses Nemotron only. The r2 component lock provides Windows CPU, Windows Vulkan (also CPU-capable), and Apple Silicon Metal (also CPU-capable) runtimes. Auto chooses an available GPU before inference, otherwise CPU; the persisted CPU option forces CPU on either GPU build. Explicit GPU failures preserve prior results and require an explicit retry. Community and sherpa code, workers, acquisition locks and release resources are removed; only old saved-session provenance remains readable.
+The current implementation uses Nemotron only. The component lock provides Windows CPU, Windows Vulkan (also CPU-capable), and Apple Silicon Metal (also CPU-capable) runtimes. Auto chooses an available GPU before inference, otherwise CPU; the persisted CPU option forces CPU on either GPU build. Explicit GPU failures preserve prior results and require an explicit retry. Community and sherpa code, workers, acquisition locks and release resources are removed; only old saved-session provenance remains readable.
 
 All three locally prepared archives passed `scripts/verify-speaker-release.py --all`: Windows CPU 109,991,717 bytes, Vulkan 123,672,110 bytes, Metal 117,144,255 bytes. The native tar installer extracted the Windows archives into a path with spaces and Cyrillic characters. `scripts/smoke-nemotron.py` passed CPU on both Windows distributions and Vulkan on the GPU distribution. CPU checks used three seconds of synthetic audio, with no timing benchmark or long recording.
 

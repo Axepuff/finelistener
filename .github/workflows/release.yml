@@ -135,6 +135,15 @@ jobs:
 
       - run: npm ci
 
+      - name: Prepare Nemotron before compiling Whisper
+        run: python scripts/prepare-nemotron.py win-x64-gpu
+
+      - name: Verify Nemotron release component
+        run: python scripts/verify-speaker-release.py build-assets/win-x64-gpu/nemotron/component.json
+
+      - name: Smoke test installed Nemotron on CPU and available GPU
+        run: python scripts/smoke-nemotron.py win-x64-gpu
+
       - name: Restore the pinned Whisper GPU build
         id: whisper-gpu-cache
         uses: actions/cache/restore@v4
@@ -161,19 +170,13 @@ jobs:
           path: build-assets/win-x64-gpu/whisper
           key: ${{ steps.whisper-gpu-cache.outputs.cache-primary-key }}
 
-      - name: Build miniaudio and prepare models and Nemotron
+      - name: Build miniaudio and prepare Whisper models
         shell: bash
-        run: bash scripts/build-miniaudio.sh win-x64-gpu && bash scripts/prepare-models.sh && python scripts/prepare-nemotron.py win-x64-gpu
+        run: bash scripts/build-miniaudio.sh win-x64-gpu && bash scripts/prepare-models.sh
 
       - name: Build and package
         shell: bash
         run: npm run make:win-gpu
-
-      - name: Verify Nemotron release component
-        run: python scripts/verify-speaker-release.py build-assets/win-x64-gpu/nemotron/component.json
-
-      - name: Smoke test installed Nemotron on CPU and available GPU
-        run: python scripts/smoke-nemotron.py win-x64-gpu
 
       - name: Upload Nemotron component
         uses: actions/upload-artifact@v4
