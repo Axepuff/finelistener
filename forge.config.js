@@ -21,7 +21,7 @@ const VARIANT_CONFIG = {
         extraResource: [
             buildAssetsDir('mac-arm64', 'whisper'),
             path.resolve(__dirname, 'build-assets/models'),
-            buildAssetsDir('mac-arm64', 'community'),
+            buildAssetsDir('mac-arm64', 'nemotron'),
         ],
         asarUnpack: [
             '**/node_modules/ffmpeg-static/**',
@@ -69,7 +69,7 @@ const VARIANT_CONFIG = {
             buildAssetsDir('win-x64-cpu', 'whisper'),
             path.resolve(__dirname, 'build-assets/models'),
             buildAssetsDir('win-x64-cpu', 'miniaudio-loopback'),
-            buildAssetsDir('win-x64-cpu', 'community'),
+            buildAssetsDir('win-x64-cpu', 'nemotron'),
         ],
         asarUnpack: [
             '**/node_modules/ffmpeg-static/**',

@@ -9,7 +9,7 @@ import type {
 } from '../types/sessions';
 import type { AnalyzeSpeakersOptions, SpeakerAnalysisProgressEvent, SpeakerAssetStatus } from '../types/transcription';
 import type { SessionsService } from './SessionsService';
-import type { SpeakerAnalysisResult } from './SpeakerDiarizationService';
+import type { SpeakerDiarizationService } from './SpeakerDiarizationService';
 import { SpeakerAnalysisError } from './speakerProcess';
 import {
     createSpeakerMetadata,
@@ -17,24 +17,6 @@ import {
     materializeRecognitionTranscript,
 } from './sessionTranscript';
 import { deriveSourceTranscript } from './transcriptDuplicateFilter';
-
-interface SpeakerRuntime {
-    getAssetStatus(signal?: AbortSignal): Promise<SpeakerAssetStatus>;
-    prepareAssets(
-        preferCuda: boolean,
-        signal: AbortSignal,
-        onProgress?: (progress: { downloadedBytes: number; totalBytes?: number }) => void,
-    ): Promise<void>;
-    analyze(
-        audioPath: string,
-        options: { startSec: number; endSec?: number; speakerCount?: number; preferCuda?: boolean },
-        signal: AbortSignal,
-        onProgress?: (progress: { phase: 'converting' | 'analyzing' | 'fallback'; percent?: number }) => void,
-    ): Promise<SpeakerAnalysisResult>;
-}
-
-const validCount = (count: unknown): boolean => count === undefined
-    || (typeof count === 'number' && Number.isSafeInteger(count) && count > 0);
 
 interface SpeakerOperation {
     controller: AbortController;
@@ -47,7 +29,7 @@ export class SessionSpeakerWorkflow {
 
     constructor(
         private readonly sessions: SessionsService,
-        private readonly runtime: SpeakerRuntime,
+        private readonly runtime: Pick<SpeakerDiarizationService, 'getAssetStatus' | 'prepareAssets' | 'analyze'>,
         private readonly progress: (event: SpeakerAnalysisProgressEvent) => void,
     ) {}
 
@@ -82,11 +64,11 @@ export class SessionSpeakerWorkflow {
         return !operation.committed;
     }
 
-    public async prepareAssets(includeCuda: boolean): Promise<SpeakerAssetStatus> {
+    public async prepareAssets(): Promise<SpeakerAssetStatus> {
         return this.runExclusive(async (signal) => {
             const sessionId = this.sessions.getActiveSessionId() ?? '';
             this.progress({ sessionId, phase: 'preparing' });
-            await this.runtime.prepareAssets(includeCuda, signal, (bytes) => {
+            await this.runtime.prepareAssets(signal, (bytes) => {
                 this.progress({ sessionId, phase: 'downloading', ...bytes });
             });
             signal.throwIfAborted();
@@ -95,7 +77,8 @@ export class SessionSpeakerWorkflow {
     }
 
     public async analyze(sessionId: string, options: AnalyzeSpeakersOptions): Promise<SessionDetails> {
-        if (!validCount(options?.speakerCount)) throw new Error('Invalid speaker count');
+        if (options.speakerCount !== undefined) throw new SpeakerAnalysisError('SPEAKER_COUNT_UNSUPPORTED');
+        if (options.compute !== undefined && !['auto', 'cpu', 'gpu'].includes(options.compute)) throw new Error('Invalid speaker compute mode');
         return this.runExclusive(async (signal, markCommitted) => {
             const activeSessionId = this.sessions.getActiveSessionId();
             if (activeSessionId !== null && activeSessionId !== sessionId) {
@@ -145,39 +128,28 @@ export class SessionSpeakerWorkflow {
                     trackEnd === undefined ? rangeEnd : Math.min(rangeEnd, trackEnd);
                 if (endSec === undefined || endSec > startSec) {
                     this.progress({ sessionId, phase: 'preparing' });
-                    const assets = await this.runtime.getAssetStatus(signal);
-                    if (assets.engine === 'nemotron-3' && options.speakerCount !== undefined) {
-                        throw new SpeakerAnalysisError('SPEAKER_COUNT_UNSUPPORTED');
-                    }
-                    await this.runtime.prepareAssets(false, signal, (bytes) => {
+                    await this.runtime.prepareAssets(signal, (bytes) => {
                         this.progress({ sessionId, phase: 'downloading', ...bytes });
                     });
                     signal.throwIfAborted();
-                    const preparedAssets = await this.runtime.getAssetStatus(signal);
                     this.progress({ sessionId, phase: 'converting' });
                     const selectedAudio = await this.sessions.prepareSourceAudio(audioPath, audioMode, signal);
                     const result = await this.runtime.analyze(selectedAudio, {
                         startSec, endSec, speakerCount: options.speakerCount,
-                        preferCuda: preparedAssets.cudaReady && preparedAssets.cudaAvailable,
+                        compute: options.compute,
                     }, signal, (event) => this.progress({ sessionId, ...event }));
                     signal.throwIfAborted();
-                    if (result.fallbackUsed) this.progress({ sessionId, phase: 'fallback' });
                     const mapIntervals = (items: SessionSpeakerInterval[]) => items.map((interval) => ({
                         startSec: offsetSec + startSec + interval.startSec,
                         endSec: offsetSec + startSec + interval.endSec,
                         speakerId: generation + ':' + interval.speakerId,
                     }));
-                    if (result.engine === 'nemotron-3') provenance = {
+                    provenance = {
                         version: 1, engine: result.engine, modelRevision: result.modelRevision,
                         runtimeRevision: result.runtimeRevision, audioMode, backend: result.backend, ...settings,
                         device: result.device, preset: result.preset, modelSha256: result.modelSha256,
                         runtimeSha256: result.runtimeSha256, assignmentPolicy: 'conservative-overlap-v1',
                         acousticIntervals: mapIntervals(result.intervals),
-                    };
-                    else if (result.modelRevision && result.runtimeRevision) provenance = {
-                        version: 1, engine: 'pyannote-community-1', modelRevision: result.modelRevision,
-                        runtimeRevision: result.runtimeRevision, audioMode, backend: result.backend, ...settings,
-                        regularIntervals: mapIntervals(result.regularIntervals ?? []), exclusiveIntervals: mapIntervals(result.intervals),
                     };
                     for (const interval of result.intervals) {
                         if (!Number.isFinite(interval.startSec) || !Number.isFinite(interval.endSec)

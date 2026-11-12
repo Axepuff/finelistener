@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Box, Button, Checkbox, Group, Loader, Modal, NumberInput, Progress, Select, Stack, Switch, Text } from '@mantine/core';
+import { ActionIcon, Alert, Box, Button, Checkbox, Group, Loader, Modal, Progress, Select, Stack, Switch, Text } from '@mantine/core';
 import { IconHeadphones, IconPlayerStopFilled, IconBackspaceFilled } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useState } from 'react';
@@ -60,7 +60,7 @@ const TranscribeControl: React.FC = observer(() => {
     };
 
     const handlePrepareSpeakerComponent = async () => {
-        const result = await store.prepareSpeakerAssets(true);
+        const result = await store.prepareSpeakerAssets();
         if (!result.ok) appendLog(result.message);
     };
 
@@ -155,25 +155,18 @@ const TranscribeControl: React.FC = observer(() => {
                     label="Add speaker labels after transcription"
                     description="Recognition is saved first. Speaker analysis can be retried separately."
                 />
-                {store.speakers.enabled && hasSystemAudio ? store.speakers.assets?.engine === 'nemotron-3' ? (
-                    <Text size="xs" c="dimmed">Nemotron counts speakers automatically. Exact counts are unavailable.</Text>
-                ) : (
-                    <NumberInput
-                        label="System or file speakers"
-                        description="Leave empty for automatic counting. The microphone speaker is excluded."
-                        min={1}
-                        allowDecimal={false}
-                        value={store.speakers.speakerCount ?? ''}
-                        onChange={(value) => store.speakers.setSpeakerCount(typeof value === 'number' ? value : null)}
-                        disabled={store.operations.isBusy || !store.speakers.supportsExactCount}
-                    />
+                {store.speakers.enabled && hasSystemAudio ? (
+                    <Select label="Speaker analysis device" data={store.speakers.computeOptions}
+                        value={store.speakers.compute} onChange={(value) => { void store.speakers.setCompute(value); }}
+                        disabled={store.operations.isBusy}
+                        description="Nemotron 3 counts speakers automatically. Auto uses CPU when no GPU is available." />
                 ) : null}
-                {store.speakers.enabled && hasSystemAudio && store.speakers.assets?.vulkanAvailable === false ? (
-                    <Alert color="yellow" title="GPU unavailable">Update your graphics driver and retry speaker analysis.</Alert>
+                {store.speakers.enabled && hasSystemAudio && store.speakers.compute === 'gpu' && store.speakers.assets?.gpuAvailable === false ? (
+                    <Alert color="yellow" title="GPU unavailable">Select CPU or update your graphics driver.</Alert>
                 ) : null}
                 {canPrepareSpeakerComponent ? (
                     <Stack gap={6}>
-                        <Text size="xs" c="dimmed">{store.speakers.engineName} runs locally. Its component is downloaded on first use; recognition is saved first.</Text>
+                        <Text size="xs" c="dimmed">Nemotron 3 runs locally. Its component is downloaded on first use; recognition is saved first.</Text>
                         {store.speakers.assets?.downloadBytes ? <Text size="xs">Download size: {(store.speakers.assets.downloadBytes / 1_000_000).toFixed(0)} MB</Text> : <Text size="xs">The release component is unavailable in this build.</Text>}
                         <Group gap={8}>
                             <Button size="compact-sm" variant="light" disabled={store.operations.isBusy} onClick={() => { void handlePrepareSpeakerComponent(); }}>

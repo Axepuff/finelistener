@@ -2,6 +2,16 @@
 
 Observed on Windows x64 with an NVIDIA GeForce GTX 1070 on 2026-11-12. Private audio, transcripts and generated binaries remain under ignored `.artifact-work/` and `build-assets/`; they are not repository fixtures.
 
+## CPU and Apple Silicon extension
+
+The current implementation uses Nemotron only. The r2 component lock provides Windows CPU, Windows Vulkan (also CPU-capable), and Apple Silicon Metal (also CPU-capable) runtimes. Auto chooses an available GPU before inference, otherwise CPU; the persisted CPU option forces CPU on either GPU build. Explicit GPU failures preserve prior results and require an explicit retry. Community and sherpa code, workers, acquisition locks and release resources are removed; only old saved-session provenance remains readable.
+
+All three locally prepared archives passed `scripts/verify-speaker-release.py --all`: Windows CPU 109,991,717 bytes, Vulkan 123,672,110 bytes, Metal 117,144,255 bytes. The native tar installer extracted the Windows archives into a path with spaces and Cyrillic characters. `scripts/smoke-nemotron.py` passed CPU on both Windows distributions and Vulkan on the GPU distribution. CPU checks used three seconds of synthetic audio, with no timing benchmark or long recording.
+
+After the extension, typecheck, lint, build, all 247 unit tests and 17 Storybook tests passed. Added adapter cases exercise CPU-only systems, forcing CPU despite an available GPU, Metal selection, and Auto without a GPU. The workflow range test verifies actual CPU provenance and offsets once. Renderer tests cover capturing the compute preference before recognition; the Storybook interaction changes CPU selection and verifies it survives closing/reopening settings. The PR's Nemotron components workflow prepares and smoke-tests all three runtimes on their target OS. Hosted CI without an accelerator must explicitly report a skipped GPU smoke; it does not qualify Metal performance on a physical Mac.
+
+The measurements below document the earlier Windows Vulkan r1 integration. Their CPU/macOS exclusions describe that earlier scope and are not the current product support matrix. Full-recording GPU performance, packaged IPC and paired installer figures were measured on that integration build, not on a macOS host.
+
 ## Pinned component
 
 The lock in `scripts/nemotron-assets.json` pins NeMo-Speech.cpp 0.3.0 Vulkan (22,417,032-byte upstream archive, SHA-256 `72b3b8b41bfe2be0320eff4e9d310594e4f99deefcde4a157799a039656963ce`) and the 107,012,128-byte Q8 model (SHA-256 `08456d9e22cd9a323c0364d98375f3746d6e68507ebb705cd46438c534c7a3a1`). The model revision is `52a432672732425e4c19765b9fec9b5810e6f4ba`. The UTF-8 manifest modification is recorded as runtime revision `nemo-speech-0.3.0+utf8.1`; component manifests hash the modified executable and all DLLs, model files and notices separately.
@@ -37,10 +47,10 @@ Storybook covers Native settings, component download, phase-only analysis/cancel
 
 ## Release checks
 
-Run `npm run typecheck`, `npm run lint`, `npm run test -- --run`, `npm run test:storybook -- --run` and `npm run build`. Verify the prepared component with `python scripts/verify-community-release.py build-assets/win-x64-gpu/nemotron/component.json`. Measure paired Windows installers with `npm run measure:speaker:installer -- win-x64-gpu` from a stable checkout.
+Run `npm run typecheck`, `npm run lint`, `npm run test -- --run`, `npm run test:storybook -- --run` and `npm run build`. Verify prepared components with `python scripts/verify-speaker-release.py --all build-assets/release-components`, then run `python scripts/smoke-nemotron.py <variant>` on each target OS. Measure paired Windows installers with `npm run measure:speaker:installer -- win-x64-gpu` or `win-x64-cpu` from a stable checkout.
 
 Completed locally: typecheck, lint, build, 243 unit tests (30 files), 16 Storybook tests (2 files), component archive verification and the paired installer measurement above. The owned Storybook server and packaged test application were stopped after verification.
 
 Before opening the PR, typecheck, lint, build, all 243 unit tests and 17 Storybook tests passed again on top of main `4fcee586` (including the newer narrow-pane UI scenario). The native implementation and component payload are unchanged from the measured integration build; installer and GPU timings above refer to that integration build.
 
-CPU/macOS engine routing remains Community-1; native Vulkan runtime acceptance on this Windows machine does not qualify those platforms. Fresh OS installation, driver diversity and signed/distributed release downloads require release-environment checks. Release publication is not part of the local implementation task.
+Fresh OS installation, driver diversity, physical Metal GPU performance and signed/distributed release downloads require release-environment checks. Release publication is not part of the local implementation task.

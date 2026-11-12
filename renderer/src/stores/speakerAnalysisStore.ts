@@ -1,4 +1,4 @@
-import type { SpeakerAnalysisProgressEvent, SpeakerAssetStatus } from 'electron/src/types/transcription';
+import type { SpeakerAnalysisProgressEvent, SpeakerAssetStatus, SpeakerCompute } from 'electron/src/types/transcription';
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { RendererAdapter } from './rendererAdapter';
 import { SPEAKER_ERROR_MESSAGES } from '../../../electron/src/types/transcription';
@@ -9,7 +9,7 @@ export const speakerErrorMessage = (error: unknown): string | undefined => error
 export class SpeakerAnalysisStore {
     enabled = true;
 
-    speakerCount: number | null = null;
+    compute: SpeakerCompute = 'auto';
 
     phase: SpeakerAnalysisProgressEvent['phase'] | null = null;
 
@@ -23,11 +23,11 @@ export class SpeakerAnalysisStore {
 
     errorMessage: string | null = null;
 
-    usedCpuFallback = false;
-
     assets: SpeakerAssetStatus | null = null;
 
     private preferenceRequestId = 0;
+
+    private computeRequestId = 0;
 
     private assetRequestId = 0;
 
@@ -37,16 +37,14 @@ export class SpeakerAnalysisStore {
         makeAutoObservable<this, 'adapter'>(this, { adapter: false }, { autoBind: true });
     }
 
-    get engineName(): string {
-        return this.assets?.engine === 'nemotron-3' ? 'Nemotron 3' : 'Community-1';
-    }
-
-    get supportsExactCount(): boolean {
-        return this.assets !== null && this.assets.engine !== 'nemotron-3';
+    get computeOptions() {
+        return [{ value: 'auto', label: 'Auto (GPU when available)' }, { value: 'cpu', label: 'CPU' },
+            { value: 'gpu', label: this.assets?.gpuBackend ? `GPU (${this.assets.gpuBackend === 'metal' ? 'Metal' : 'Vulkan'})` : 'GPU',
+                disabled: this.assets !== null && this.assets.gpuBackend === null }];
     }
 
     get componentReady(): boolean {
-        return this.assets?.ready ?? Boolean(this.assets?.cpuReady && (!this.assets.cudaAvailable || this.assets.cudaReady));
+        return this.assets?.ready ?? false;
     }
 
     initialize(): void {
@@ -59,12 +57,18 @@ export class SpeakerAnalysisStore {
         }).catch((error: unknown) => {
             console.error('Failed to load speaker label preference', error);
         });
+        const computeRequestId = ++this.computeRequestId;
+        void this.adapter?.getUiPreference('speakerCompute').then((compute) => {
+            if (this.disposed || computeRequestId !== this.computeRequestId) return;
+            runInAction(() => { this.compute = compute; });
+        }).catch((error: unknown) => { console.error('Failed to load speaker compute preference', error); });
         void this.refreshAssets();
     }
 
     dispose(): void {
         this.disposed = true;
         this.preferenceRequestId += 1;
+        this.computeRequestId += 1;
         this.assetRequestId += 1;
     }
 
@@ -79,8 +83,12 @@ export class SpeakerAnalysisStore {
         }
     }
 
-    setSpeakerCount(count: number | null): void {
-        this.speakerCount = count !== null && Number.isSafeInteger(count) && count > 0 ? count : null;
+    async setCompute(compute: string | null): Promise<void> {
+        if (compute !== 'auto' && compute !== 'cpu' && compute !== 'gpu') return;
+        this.computeRequestId += 1;
+        this.compute = compute;
+        try { await this.adapter?.setUiPreference('speakerCompute', compute); }
+        catch (error) { console.error('Failed to save speaker compute preference', error); }
     }
 
     async refreshAssets(): Promise<void> {
@@ -107,7 +115,6 @@ export class SpeakerAnalysisStore {
         this.downloadedBytes = 0;
         this.totalBytes = 0;
         this.errorMessage = null;
-        this.usedCpuFallback = false;
     }
 
     updateProgress(event: SpeakerAnalysisProgressEvent): void {
@@ -115,7 +122,6 @@ export class SpeakerAnalysisStore {
         this.phase = event.phase;
         this.percent = event.percent !== undefined && Number.isFinite(event.percent) ?
             Math.max(0, Math.min(100, event.percent)) : null;
-        if (event.phase === 'fallback') this.usedCpuFallback = true;
         this.downloadedBytes = event.downloadedBytes ?? 0;
         this.totalBytes = event.totalBytes ?? 0;
     }
@@ -142,7 +148,5 @@ export class SpeakerAnalysisStore {
         this.status = 'idle';
         this.phase = null;
         this.errorMessage = null;
-        this.usedCpuFallback = false;
-        this.speakerCount = null;
     }
 }

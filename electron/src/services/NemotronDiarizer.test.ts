@@ -13,7 +13,7 @@ let directory: string;
 let wav: string;
 let segments: unknown[];
 const doctor = { version: '0.3.0', features: { backend_vulkan: true, backend_cuda: false },
-    driver_runtime_compatible: true, devices: [{ name: 'Vulkan0', type: 'gpu' }] };
+    driver_runtime_compatible: true, devices: [{ name: 'CPU', type: 'cpu' }, { name: 'Vulkan0', type: 'gpu' }] };
 
 beforeEach(async () => {
     directory = await fs.mkdtemp(path.join(tmpdir(), 'nemotron protocol '));
@@ -36,9 +36,9 @@ afterEach(async () => { await fs.rm(directory, { recursive: true, force: true })
 
 it('preserves overlapping native evidence, arbitrary IDs and pinned GPU provenance in one stateful run', async () => {
     const progress = vi.fn();
-    const result = await analyzeNemotron(directory, wav, new AbortController().signal, progress);
+    const result = await analyzeNemotron(directory, 'win-x64-gpu', 'gpu', wav, new AbortController().signal, progress);
     expect(result).toMatchObject({ engine: 'nemotron-3', backend: 'vulkan', device: 'vulkan:0',
-        preset: 'v3-offline', fallbackUsed: false, intervals: [
+        preset: 'v3-offline', intervals: [
             { startSec: 0, endSec: 0.8, speakerId: '7' },
             { startSec: 0.2, endSec: 1, speakerId: 'voice-x' },
         ] });
@@ -55,7 +55,7 @@ it('preserves overlapping native evidence, arbitrary IDs and pinned GPU provenan
 
 it('accepts empty acoustic output for silent audio', async () => {
     segments = [];
-    expect((await analyzeNemotron(directory, wav, new AbortController().signal)).intervals).toEqual([]);
+    expect((await analyzeNemotron(directory, 'win-x64-gpu', 'gpu', wav, new AbortController().signal)).intervals).toEqual([]);
 });
 
 it.each([
@@ -66,14 +66,14 @@ it.each([
     { start: 0, end: 1, speaker: '' },
 ])('rejects malformed native evidence without saving partial results: %j', async (segment) => {
     segments.push(segment);
-    await expect(analyzeNemotron(directory, wav, new AbortController().signal))
+    await expect(analyzeNemotron(directory, 'win-x64-gpu', 'gpu', wav, new AbortController().signal))
         .rejects.toMatchObject({ code: 'SPEAKER_GPU_FAILED' });
 });
 
-it('refuses a CPU-only doctor result before inference', async () => {
+it('refuses an explicitly requested GPU when only CPU is available', async () => {
     vi.mocked(runSpeakerProcess).mockResolvedValue({ stdout: JSON.stringify({ ...doctor,
         devices: [{ name: 'CPU', type: 'cpu' }] }), stderr: '' });
-    await expect(analyzeNemotron(directory, wav, new AbortController().signal))
+    await expect(analyzeNemotron(directory, 'win-x64-gpu', 'gpu', wav, new AbortController().signal))
         .rejects.toMatchObject({ code: 'SPEAKER_GPU_UNAVAILABLE' });
     expect(runSpeakerProcess).toHaveBeenCalledOnce();
 });
@@ -81,8 +81,32 @@ it('refuses a CPU-only doctor result before inference', async () => {
 it('does not retry a failed GPU process on CPU and removes its temporary output', async () => {
     vi.mocked(runSpeakerProcess).mockResolvedValueOnce({ stdout: JSON.stringify(doctor), stderr: '' })
         .mockRejectedValueOnce(new Error('GPU initialization failed'));
-    await expect(analyzeNemotron(directory, wav, new AbortController().signal))
+    await expect(analyzeNemotron(directory, 'win-x64-gpu', 'gpu', wav, new AbortController().signal))
         .rejects.toMatchObject({ code: 'SPEAKER_GPU_FAILED' });
     expect(runSpeakerProcess).toHaveBeenCalledTimes(2);
     await expect(fs.access(vi.mocked(runSpeakerProcess).mock.calls[1][3])).rejects.toThrow();
+});
+
+it.each([
+    ['win-x64-cpu', 'auto', false, 'cpu', 'cpu'],
+    ['win-x64-gpu', 'auto', false, 'cpu', 'cpu'],
+    ['win-x64-gpu', 'cpu', true, 'cpu', 'cpu'],
+    ['mac-arm64', 'cpu', true, 'cpu', 'cpu'],
+    ['mac-arm64', 'auto', false, 'cpu', 'cpu'],
+    ['mac-arm64', 'auto', true, 'metal', 'metal'],
+] as const)('runs %s in %s mode with GPU availability %s and records the actual backend', async (variant, compute, gpuAvailable, backend, device) => {
+    const status = { ...doctor,
+        features: { backend_cuda: false, backend_vulkan: variant === 'win-x64-gpu', backend_metal: variant === 'mac-arm64' },
+        driver_runtime_compatible: gpuAvailable || variant === 'win-x64-cpu',
+        devices: [{ name: 'CPU', type: 'cpu' }, ...(gpuAvailable ? [{ name: variant === 'mac-arm64' ? 'Metal' : 'Vulkan0', type: 'gpu' }] : [])],
+    };
+    vi.mocked(runSpeakerProcess).mockResolvedValueOnce({ stdout: JSON.stringify(status), stderr: '' });
+    const result = await analyzeNemotron(directory, variant, compute, wav, new AbortController().signal);
+    expect(result).toMatchObject({ backend, device, intervals: [
+        { startSec: 0, endSec: 0.8, speakerId: '7' }, { startSec: 0.2, endSec: 1, speakerId: 'voice-x' },
+    ] });
+    const [binary, args] = vi.mocked(runSpeakerProcess).mock.calls[1];
+    expect(binary).toBe(path.join(directory, variant === 'mac-arm64' ? 'bin/nemo-speech' : 'bin/nemo-speech.exe'));
+    expect(args[args.indexOf('--device') + 1]).toBe(device);
+    expect(runSpeakerProcess).toHaveBeenCalledTimes(2);
 });

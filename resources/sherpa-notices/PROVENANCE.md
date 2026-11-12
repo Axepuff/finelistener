@@ -1,9 +1,0 @@
-# Speaker diarization assets
-
-The runtime is [sherpa-onnx v1.13.8](https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.8), copyright Xiaomi Corporation and contributors, licensed under Apache-2.0. The shipped CLI and ONNX Runtime libraries are selected from the release archives pinned by URL, exact byte size, and SHA256 in `scripts/sherpa-assets.json`. The same lock file pins both model downloads. `scripts/prepare-sherpa.py` verifies every source before staging files.
-
-The float32 segmentation model is `model.onnx` from [sherpa-onnx-pyannote-segmentation-3-0](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-segmentation-models). Its archive includes the MIT license copied beside this notice.
-
-The float32 embedding model is [`3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx`](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models), published by ModelScope/iic under Apache-2.0. The Apache-2.0 text is included beside this notice. The name of this model does not establish Russian quality.
-
-The optional Windows CUDA 12/cuDNN 9 component is built from the pinned v1.13.8 GPU archive plus official NVIDIA CUDA 12.8.1 and cuDNN 9.10.2.21 redistributables. This cuDNN version supports Pascal GPUs; newer versions do not. The URLs, exact download sizes, and SHA256 values are in `scripts/sherpa-assets.json`. The component includes only the diarization CLI, its ONNX Runtime libraries, cuBLAS, CUDA Runtime, cuDNN DLLs, and their license notices. cuFFT is not part of the fixed models' runtime closure. It also includes four pinned Microsoft VC143 CRT DLLs from the licensed Visual Studio 2022 Build Tools redistribution directory, with a separate notice. Its build-generated manifest records the application release URL, exact package size, SHA256, and each extracted file hash. CPU and CUDA libraries reside in separate directories.

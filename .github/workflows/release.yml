@@ -28,7 +28,7 @@ jobs:
 
   build-mac:
     needs: lint-and-typecheck
-    runs-on: macos-14  # Apple Silicon (arm64)
+    runs-on: macos-15  # Apple Silicon (arm64)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,30 +43,26 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Prepare model acquisition tooling
-        run: python -m pip install huggingface_hub==2.1.1
-
       - run: npm ci
 
       - name: Build whisper.cpp (Metal) and prepare models
         run: npm run prebuild:assets:mac
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
 
       - name: Build and package
         run: npm run make:mac
 
-      - name: Verify Community release component
-        run: python scripts/verify-community-release.py build-assets/mac-arm64/community/component.json
+      - name: Verify Nemotron release component
+        run: python scripts/verify-speaker-release.py build-assets/mac-arm64/nemotron/component.json
 
-      - name: Upload Community component
+      - name: Smoke test installed Nemotron on CPU and available GPU
+        run: python scripts/smoke-nemotron.py mac-arm64
+
+      - name: Upload Nemotron component
         uses: actions/upload-artifact@v4
         with:
-          name: community-mac-arm64
+          name: nemotron-mac-arm64
           path: |
-            build-assets/release-components/*.part*
             build-assets/release-components/*.zip
-            !build-assets/release-components/*win-x64-gpu.zip
             build-assets/release-components/*-component.json
           compression-level: 0
           if-no-files-found: error
@@ -119,7 +115,10 @@ jobs:
         run: npm run make:win-gpu
 
       - name: Verify Nemotron release component
-        run: python scripts/verify-community-release.py build-assets/win-x64-gpu/nemotron/component.json
+        run: python scripts/verify-speaker-release.py build-assets/win-x64-gpu/nemotron/component.json
+
+      - name: Smoke test installed Nemotron on CPU and available GPU
+        run: python scripts/smoke-nemotron.py win-x64-gpu
 
       - name: Upload Nemotron component
         uses: actions/upload-artifact@v4
@@ -155,32 +154,28 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Prepare model acquisition tooling
-        run: python -m pip install huggingface_hub==2.1.1
-
       - run: npm ci
 
       - name: Build whisper.cpp (CPU), miniaudio, and prepare models
         shell: bash
         run: npm run prebuild:assets:win-cpu
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
 
       - name: Build and package
         shell: bash
         run: npm run make:win-cpu
 
-      - name: Verify Community release component
-        run: python scripts/verify-community-release.py build-assets/win-x64-cpu/community/component.json
+      - name: Verify Nemotron release component
+        run: python scripts/verify-speaker-release.py build-assets/win-x64-cpu/nemotron/component.json
 
-      - name: Upload Community component
+      - name: Smoke test installed Nemotron on CPU and available GPU
+        run: python scripts/smoke-nemotron.py win-x64-cpu
+
+      - name: Upload Nemotron component
         uses: actions/upload-artifact@v4
         with:
-          name: community-win-x64-cpu
+          name: nemotron-win-x64-cpu
           path: |
-            build-assets/release-components/*.part*
             build-assets/release-components/*.zip
-            !build-assets/release-components/*win-x64-gpu.zip
             build-assets/release-components/*-component.json
           compression-level: 0
           if-no-files-found: error
@@ -204,7 +199,7 @@ jobs:
           path: artifacts
 
       - name: Verify speaker release components
-        run: python3 scripts/verify-community-release.py --all artifacts --release-tag "$GITHUB_REF_NAME"
+        run: python3 scripts/verify-speaker-release.py --all artifacts --release-tag "$GITHUB_REF_NAME"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

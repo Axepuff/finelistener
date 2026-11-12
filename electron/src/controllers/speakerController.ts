@@ -43,10 +43,9 @@ export function registerSpeakerController(
     };
 
     ipc.handle('sessions:get-speaker-assets', () => safe('asset status', () => workflow.getAssetStatus()));
-    ipc.handle('sessions:prepare-speaker-assets', (_event, includeCuda: unknown) => safe('asset preparation', () => {
+    ipc.handle('sessions:prepare-speaker-assets', () => safe('asset preparation', () => {
         ensureAvailable();
-        if (typeof includeCuda !== 'boolean') throw new Error('Invalid asset request');
-        return workflow.prepareAssets(includeCuda);
+        return workflow.prepareAssets();
     }));
     ipc.handle('sessions:analyze-speakers', (_event, sessionId: unknown, options: unknown) => safe('analysis', () => {
         ensureAvailable();

@@ -1,16 +1,5 @@
 {
-  "version": "nemotron-3-nemo030-q8-r1",
-  "variant": "win-x64-gpu",
-  "runtime": {
-    "name": "nemo-vulkan.zip",
-    "revision": "nemo-speech-0.3.0+utf8.1",
-    "sourceCommit": "20999cc921d2b14aa58708f61756a8b2e787ba20",
-    "url": "https://github.com/NVIDIA/NeMo-Speech.cpp/releases/download/v0.3.0/nemo-speech-0.3.0-windows-x86_64-vulkan.zip",
-    "bytes": 22417032,
-    "sha256": "72b3b8b41bfe2be0320eff4e9d310594e4f99deefcde4a157799a039656963ce",
-    "prefix": "nemo-speech-0.3.0-windows-x86_64-vulkan/",
-    "license": "Apache-2.0; bundled third-party notices"
-  },
+  "version": "nemotron-3-nemo030-q8-r2",
   "model": {
     "name": "Nemotron-3-Diarization.q8_0.gguf",
     "revision": "52a432672732425e4c19765b9fec9b5810e6f4ba",
@@ -28,6 +17,38 @@
     "model-README.md": {
       "bytes": 44081,
       "sha256": "111370508eeeb0f397b13cef6c0d5c6cfa55a0f7089c8df7dd54dd2e8e597e86"
+    }
+  },
+  "runtimes": {
+    "win-x64-cpu": {
+      "name": "nemo-cpu.zip",
+      "revision": "nemo-speech-0.3.0+utf8.1",
+      "sourceCommit": "20999cc921d2b14aa58708f61756a8b2e787ba20",
+      "url": "https://github.com/NVIDIA/NeMo-Speech.cpp/releases/download/v0.3.0/nemo-speech-0.3.0-windows-x86_64-cpu.zip",
+      "bytes": 8694509,
+      "sha256": "4ed9740e361e4653f56c3dce7d1e81883a1c8b831c1bd7d01567fff1130b5b05",
+      "prefix": "nemo-speech-0.3.0-windows-x86_64-cpu/",
+      "license": "Apache-2.0; bundled third-party notices"
+    },
+    "win-x64-gpu": {
+      "name": "nemo-vulkan.zip",
+      "revision": "nemo-speech-0.3.0+utf8.1",
+      "sourceCommit": "20999cc921d2b14aa58708f61756a8b2e787ba20",
+      "url": "https://github.com/NVIDIA/NeMo-Speech.cpp/releases/download/v0.3.0/nemo-speech-0.3.0-windows-x86_64-vulkan.zip",
+      "bytes": 22417032,
+      "sha256": "72b3b8b41bfe2be0320eff4e9d310594e4f99deefcde4a157799a039656963ce",
+      "prefix": "nemo-speech-0.3.0-windows-x86_64-vulkan/",
+      "license": "Apache-2.0; bundled third-party notices"
+    },
+    "mac-arm64": {
+      "name": "nemo-metal.tar.gz",
+      "revision": "nemo-speech-0.3.0",
+      "sourceCommit": "20999cc921d2b14aa58708f61756a8b2e787ba20",
+      "url": "https://github.com/NVIDIA/NeMo-Speech.cpp/releases/download/v0.3.0/nemo-speech-0.3.0-macos-aarch64-metal.tar.gz",
+      "bytes": 7239335,
+      "sha256": "2b972ed8b5dba07492212acf8cb75cbf34ecb141198ffa1997febe84b7c4d9ed",
+      "prefix": "nemo-speech-0.3.0-macos-aarch64-metal/",
+      "license": "Apache-2.0; bundled third-party notices"
     }
   }
 }

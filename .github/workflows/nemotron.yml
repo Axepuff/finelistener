@@ -1,0 +1,38 @@
+name: Nemotron components
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/nemotron.yml'
+      - 'scripts/*nemotron*'
+      - 'scripts/speaker_assets.py'
+      - 'scripts/verify-speaker-release.py'
+      - 'resources/nemotron/**'
+      - 'package.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-component:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            variant: win-x64-cpu
+          - os: windows-latest
+            variant: win-x64-gpu
+          - os: macos-15
+            variant: mac-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/prepare-nemotron.py ${{ matrix.variant }}
+      - run: python scripts/verify-speaker-release.py build-assets/${{ matrix.variant }}/nemotron/component.json
+      - run: python scripts/smoke-nemotron.py ${{ matrix.variant }}

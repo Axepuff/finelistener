@@ -4,6 +4,11 @@ import type { SessionsService } from './SessionsService';
 import { SessionSpeakerWorkflow } from './SessionSpeakerWorkflow';
 import type { SpeakerAnalysisResult } from './SpeakerDiarizationService';
 
+const analysisResult: SpeakerAnalysisResult = {
+    engine: 'nemotron-3', backend: 'cpu', device: 'cpu', preset: 'v3-offline', intervals: [],
+    modelRevision: 'model-revision', runtimeRevision: 'runtime-revision', modelSha256: 'model-hash', runtimeSha256: 'runtime-hash',
+};
+
 const microphoneTranscript: SessionTranscriptV1 = {
     version: 1,
     segments: [{ startSec: 0, endSec: 1, text: 'Hello', source: 'microphone' }],
@@ -21,7 +26,7 @@ const sessionFor = (transcript: SessionTranscriptV1): SessionDetails => ({
     tracks: [{ source: 'microphone', filePath: 'mic.wav', startOffsetMs: 0 }], transcript,
 });
 
-it('labels a microphone-only transcript without loading assets or invoking sherpa', async () => {
+it('labels a microphone-only transcript without loading assets or invoking Nemotron', async () => {
     let session = sessionFor(microphoneTranscript);
     const sessions = {
         prepareSourceAudio: (audioPath: string) => Promise.resolve(audioPath),
@@ -48,7 +53,7 @@ it('labels a microphone-only transcript without loading assets or invoking sherp
     expect(result.transcript?.segments[0].speakerId).toBe(result.transcript?.speakers?.speakers[0].id);
 });
 
-it.each(['community', 'nemotron'] as const)('analyzes only the selected system range with %s and applies offsets once', async (engine) => {
+it('analyzes only the selected system range and applies offsets once to labels and native provenance', async () => {
     let session: SessionDetails = {
         ...sessionFor({ ...microphoneTranscript,
             sourceRun: {
@@ -80,38 +85,31 @@ it.each(['community', 'nemotron'] as const)('analyzes only the selected system r
         }),
     } as unknown as SessionsService;
     const runtime = {
-        getAssetStatus: vi.fn(() => Promise.resolve({ engine: engine === 'nemotron' ? 'nemotron-3' as const : 'pyannote-community-1' as const,
-            cpuReady: true, cudaReady: false, cudaAvailable: false })),
+        getAssetStatus: vi.fn(() => Promise.resolve({ ready: true, gpuBackend: null })),
         prepareAssets: vi.fn(() => Promise.resolve()),
-        analyze: vi.fn((_path: string, _options: { startSec: number; endSec?: number; speakerCount?: number }): Promise<SpeakerAnalysisResult> => Promise.resolve({
-            intervals: [{ startSec: 1, endSec: 2, speakerId: 'speaker_0' }],
-            fallbackUsed: false,
-            ...(engine === 'nemotron' ? { engine: 'nemotron-3', backend: 'vulkan', device: 'vulkan:0', preset: 'v3-offline',
-                modelRevision: 'model-revision', runtimeRevision: 'runtime-revision', modelSha256: 'model-hash', runtimeSha256: 'runtime-hash' } as const :
-                { backend: 'cpu' } as const),
+        analyze: vi.fn((_path: string, _options: { startSec: number; endSec?: number; compute?: string }) => Promise.resolve({
+            ...analysisResult, intervals: [{ startSec: 1, endSec: 2, speakerId: 'speaker_0' }],
         })),
     };
     const workflow = new SessionSpeakerWorkflow(sessions, runtime, vi.fn());
 
-    const result = await workflow.analyze('one', engine === 'community' ? { speakerCount: 2 } : {});
+    const result = await workflow.analyze('one', { compute: 'cpu' });
 
     expect(runtime.analyze).toHaveBeenCalledTimes(1);
     expect(runtime.analyze.mock.calls[0][0]).toBe('system.wav');
     expect(runtime.analyze.mock.calls[0][1]).toMatchObject({ startSec: 2, endSec: 6,
-        speakerCount: engine === 'community' ? 2 : undefined });
+        compute: 'cpu' });
     expect(result.transcript?.speakers?.intervals).toMatchObject([
         { startSec: 5, endSec: 6 },
     ]);
     expect(result.transcript?.speakers?.speakers.map((speaker) => speaker.name)).toEqual([
         'Microphone speaker', 'Speaker 1',
     ]);
-    if (engine === 'nemotron') {
-        expect(result.transcript?.speakers?.provenance).toMatchObject({ engine: 'nemotron-3', backend: 'vulkan',
-            assignmentPolicy: 'conservative-overlap-v1', range: { start: 4, end: 8 },
-            acousticIntervals: [{ startSec: 5, endSec: 6 }] });
-        expect(result.transcript?.speakers?.provenance).not.toHaveProperty('exclusiveIntervals');
-        expect(result.transcript?.speakers?.provenance).not.toHaveProperty('speakerCount');
-    }
+    expect(result.transcript?.speakers?.provenance).toMatchObject({ engine: 'nemotron-3', backend: 'cpu', device: 'cpu',
+        assignmentPolicy: 'conservative-overlap-v1', range: { start: 4, end: 8 },
+        acousticIntervals: [{ startSec: 5, endSec: 6 }] });
+    expect(result.transcript?.speakers?.provenance).not.toHaveProperty('exclusiveIntervals');
+    expect(result.transcript?.speakers?.provenance).not.toHaveProperty('speakerCount');
 });
 
 it('rejects unsupported exact counts before downloading or replacing saved speaker results', async () => {
@@ -120,8 +118,7 @@ it('rejects unsupported exact counts before downloading or replacing saved speak
     const replaceTranscriptIfCurrent = vi.fn();
     const sessions = { getSession: () => Promise.resolve(session), getActiveSessionId: () => 'one',
         getActiveSessionGeneration: () => 0, recognitionFingerprint: () => 'original', replaceTranscriptIfCurrent } as unknown as SessionsService;
-    const runtime = { getAssetStatus: () => Promise.resolve({ engine: 'nemotron-3' as const,
-        cpuReady: false, cudaReady: false, cudaAvailable: false }), prepareAssets: vi.fn(), analyze: vi.fn() };
+    const runtime = { getAssetStatus: () => Promise.resolve({ ready: false, gpuBackend: null }), prepareAssets: vi.fn(), analyze: vi.fn() };
     await expect(new SessionSpeakerWorkflow(sessions, runtime, vi.fn()).analyze('one', { speakerCount: 2 }))
         .rejects.toMatchObject({ code: 'SPEAKER_COUNT_UNSUPPORTED' });
     expect(runtime.prepareAssets).not.toHaveBeenCalled();
@@ -146,9 +143,9 @@ it('analyzes an imported mono source even when it sounds like a microphone', asy
         }),
     } as unknown as SessionsService;
     const runtime = {
-        getAssetStatus: vi.fn(() => Promise.resolve({ cpuReady: true, cudaReady: false, cudaAvailable: false })),
+        getAssetStatus: vi.fn(() => Promise.resolve({ ready: true, gpuBackend: null })),
         prepareAssets: vi.fn(() => Promise.resolve()),
-        analyze: vi.fn((_path: string) => Promise.resolve({ intervals: [], backend: 'cpu' as const, fallbackUsed: false })),
+        analyze: vi.fn((_path: string) => Promise.resolve(analysisResult)),
     };
 
     await new SessionSpeakerWorkflow(sessions, runtime, vi.fn()).analyze('one', {});
@@ -223,7 +220,7 @@ it('does not replace an existing result after cancellation', async () => {
         replaceTranscriptIfCurrent,
     } as unknown as SessionsService;
     const runtime = {
-        getAssetStatus: vi.fn(() => Promise.resolve({ cpuReady: true, cudaReady: false, cudaAvailable: false })),
+        getAssetStatus: vi.fn(() => Promise.resolve({ ready: true, gpuBackend: null })),
         prepareAssets: vi.fn(() => Promise.resolve()),
         analyze: vi.fn(async (_path, _options, signal: AbortSignal) => {
             await new Promise<void>((_resolve, reject) => {

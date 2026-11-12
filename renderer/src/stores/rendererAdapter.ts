@@ -24,7 +24,7 @@ export interface RendererAdapter {
     analyzeSpeakers: (sessionId: string, options: AnalyzeSpeakersOptions) => Promise<SessionDetails>;
     stopSpeakerAnalysis: () => Promise<boolean>;
     getSpeakerAssets: () => Promise<SpeakerAssetStatus>;
-    prepareSpeakerAssets: (includeCuda: boolean) => Promise<SpeakerAssetStatus>;
+    prepareSpeakerAssets: () => Promise<SpeakerAssetStatus>;
     renameSpeaker: (sessionId: string, speakerId: string, name: string) => Promise<SessionDetails>;
     assignSpeaker: (sessionId: string, span: SessionRawSpan | SessionSpeakerAssignment, speakerId: string | null) => Promise<SessionDetails>;
     mergeSpeakers: (sessionId: string, sourceId: string | null, targetId: string | null) => Promise<SessionDetails>;
@@ -84,7 +84,7 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
         analyzeSpeakers: (sessionId, options) => api.sessions.analyzeSpeakers(sessionId, options),
         stopSpeakerAnalysis: () => api.sessions.stopSpeakerAnalysis(),
         getSpeakerAssets: () => api.sessions.getSpeakerAssets(),
-        prepareSpeakerAssets: (includeCuda) => api.sessions.prepareSpeakerAssets(includeCuda),
+        prepareSpeakerAssets: () => api.sessions.prepareSpeakerAssets(),
         renameSpeaker: (sessionId, speakerId, name) => api.sessions.renameSpeaker(sessionId, speakerId, name),
         assignSpeaker: (sessionId, span, speakerId) => api.sessions.assignSpeaker(sessionId, span, speakerId),
         mergeSpeakers: (sessionId, sourceId, targetId) => api.sessions.mergeSpeakers(sessionId, sourceId, targetId),

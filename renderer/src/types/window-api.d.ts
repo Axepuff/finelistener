@@ -31,7 +31,7 @@ declare global {
                 analyzeSpeakers: (sessionId: string, options: AnalyzeSpeakersOptions) => Promise<SessionDetails>;
                 stopSpeakerAnalysis: () => Promise<boolean>;
                 getSpeakerAssets: () => Promise<SpeakerAssetStatus>;
-                prepareSpeakerAssets: (includeCuda: boolean) => Promise<SpeakerAssetStatus>;
+                prepareSpeakerAssets: () => Promise<SpeakerAssetStatus>;
                 renameSpeaker: (sessionId: string, speakerId: string, name: string) => Promise<SessionDetails>;
                 assignSpeaker: (sessionId: string, span: SessionRawSpan | SessionSpeakerAssignment, speakerId: string | null) => Promise<SessionDetails>;
                 mergeSpeakers: (sessionId: string, sourceId: string | null, targetId: string | null) => Promise<SessionDetails>;

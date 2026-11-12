@@ -7,21 +7,23 @@ Sessions default to Optimized audio. Original/Optimized is remembered per sessio
 
 Plain Text contains speech only. Timecodes groups adjacent same-speaker/source fragments across gaps up to five seconds; expand a turn to edit original fragments. Search, copy and TXT export use the selected view. A failed or stopped analysis retains saved text and can be retried separately.
 
-| Build | Speaker engine | Speaker count | GPU failure |
-| --- | --- | --- | --- |
-| Windows x64 GPU | Nemotron 3 Q8, NeMo-Speech.cpp 0.3.0, Vulkan | Automatic only | Safe error; retry after fixing the driver, no CPU fallback |
-| Windows x64 CPU | Community-1, private Python worker | Automatic or exact | CPU route |
-| macOS arm64 | Community-1, private Python worker | Automatic or exact | CPU route |
+All builds use **Nemotron 3 Diarization Q8 with NeMo-Speech.cpp 0.3.0**. Speaker count is automatic.
 
-Packaged builds download a pinned component on first use and reuse it offline after verification; size, preparation, progress and cancellation are available in the UI. System Python, CUDA Toolkit and Hugging Face login are not required for inference. Nemotron requires a working Vulkan driver. Its native overlapping intervals remain acoustic evidence; ambiguous text retains Unknown. Saved Community-1 and sherpa results remain readable without reanalysis.
+| Build | Speaker analysis devices |
+| --- | --- |
+| Windows x64 CPU | CPU; no graphics card required |
+| Windows x64 GPU | Vulkan GPU or CPU |
+| macOS Apple Silicon (arm64) | Metal GPU or CPU |
+
+The remembered **Speaker analysis device** setting applies to automatic analysis and standalone retry. Auto selects an available GPU before inference, otherwise CPU. CPU forces CPU even on a GPU-capable computer; GPU requires a compatible device. An inference failure preserves the saved transcript and existing labels. A failed GPU run is not silently retried on CPU: select CPU and retry explicitly.
+
+Packaged builds download a pinned component on first use and reuse it offline after verification; size, preparation, progress and cancellation are available in the UI. System Python, CUDA Toolkit and Hugging Face login are not required for speaker inference. Native overlapping intervals remain acoustic evidence; ambiguous text retains Unknown. The sherpa and Community runtimes, workers and build dependencies have been removed. Their saved results remain readable without reanalysis or deleting user data.
 
 ## Preparing speaker release assets
 
-On Windows, `npm run prebuild:assets:win-gpu` runs `scripts/prepare-nemotron.py` to prepare the pinned native Vulkan runtime, Q8 model and license notices from `scripts/nemotron-assets.json`. The Python build script uses only the standard library; no Python runtime is shipped in this component. It enables UTF-8 paths in the executable manifest (Windows 10 1903 or later), records the modification, and hashes every resulting file. Runtime DLLs stay isolated from Whisper.
+Each `prebuild:assets:*` command runs `python scripts/prepare-nemotron.py <win-x64-cpu|win-x64-gpu|mac-arm64>`. The lock is `scripts/nemotron-assets.json`. Python 3.12 and its standard library are sufficient for acquisition; no gated credentials, pip packages or Python runtime are shipped. Windows preparation enables UTF-8 paths in the executable manifest (Windows 10 1903 or later) and records the modification. macOS preparation preserves executable permissions and copies the upstream dylib aliases as regular files. Runtime libraries stay isolated from Whisper.
 
-For `win-x64-cpu` and `mac-arm64`, use Python 3.12 with pip to run `scripts/prepare-community.py` on the corresponding host. The build lock is `scripts/community-assets.json`. Model acquisition requires maintainer-approved gated access through `HF_TOKEN` or an already acquired `--model-dir`; the worker never receives acquisition credentials.
-
-Build resources contain manifests and notices; runtime/model archives are release-associated downloads, split when needed. `npm run measure:speaker:installer -- win-x64-gpu` (or `win-x64-cpu`) produces matched Windows baseline/component installer measurements and enforces the 200000000-byte addition limit. `scripts/verify-community-release.py` validates both component formats and all three platform manifests before release upload.
+Build resources contain manifests and notices; runtime/model ZIPs are release-associated downloads (about 110 MB CPU, 124 MB Vulkan, 117 MB Metal). `npm run measure:speaker:installer -- win-x64-gpu` (or `win-x64-cpu`) produces matched Windows baseline/component installer measurements and enforces the 200000000-byte addition limit. `scripts/verify-speaker-release.py` validates all three platform manifests and every archive member before upload. The Nemotron components PR workflow prepares each platform and runs `scripts/smoke-nemotron.py` against the extracted archive on its target OS. The smoke check uses only three seconds of generated audio on CPU and, when available, GPU; it is not a performance benchmark.
 
 See [Nemotron acceptance](docs/testing/nemotron-acceptance.md), [ADR 0008](docs/adr/0008-nemotron-vulkan-speaker-analysis.md), and the historical [Community-1 acceptance](docs/testing/community-1-acceptance.md) for evidence and release checks.
 

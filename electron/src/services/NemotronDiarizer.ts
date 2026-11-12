@@ -2,26 +2,34 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import type { SessionSpeakerInterval } from '../types/sessions';
+import type { SpeakerCompute, SpeakerGpuBackend } from '../types/transcription';
 import type { SpeakerAnalysisProgress } from './SpeakerDiarizationService';
 import { runSpeakerProcess, SpeakerAnalysisError } from './speakerProcess';
 
 export const NEMOTRON_COMPONENT = {
-    version: 'nemotron-3-nemo030-q8-r1',
-    runtimeRevision: 'nemo-speech-0.3.0+utf8.1',
-    runtimeSha256: '72b3b8b41bfe2be0320eff4e9d310594e4f99deefcde4a157799a039656963ce',
+    version: 'nemotron-3-nemo030-q8-r2',
     modelRevision: '52a432672732425e4c19765b9fec9b5810e6f4ba',
     modelSha256: '08456d9e22cd9a323c0364d98375f3746d6e68507ebb705cd46438c534c7a3a1',
-    executable: 'bin/nemo-speech.exe',
     model: 'model/Nemotron-3-Diarization.q8_0.gguf',
 } as const;
 
+export const NEMOTRON_RUNTIMES = {
+    'win-x64-cpu': { executable: 'bin/nemo-speech.exe', gpuBackend: null,
+        revision: 'nemo-speech-0.3.0+utf8.1', sha256: '4ed9740e361e4653f56c3dce7d1e81883a1c8b831c1bd7d01567fff1130b5b05' },
+    'win-x64-gpu': { executable: 'bin/nemo-speech.exe', gpuBackend: 'vulkan',
+        revision: 'nemo-speech-0.3.0+utf8.1', sha256: '72b3b8b41bfe2be0320eff4e9d310594e4f99deefcde4a157799a039656963ce' },
+    'mac-arm64': { executable: 'bin/nemo-speech', gpuBackend: 'metal',
+        revision: 'nemo-speech-0.3.0', sha256: '2b972ed8b5dba07492212acf8cb75cbf34ecb141198ffa1997febe84b7c4d9ed' },
+} as const;
+
+export type NemotronVariant = keyof typeof NEMOTRON_RUNTIMES;
+
 export interface NemotronAnalysisResult {
     engine: 'nemotron-3';
-    backend: 'vulkan';
-    device: 'vulkan:0';
+    backend: 'cpu' | SpeakerGpuBackend;
+    device: 'cpu' | 'vulkan:0' | 'metal';
     preset: 'v3-offline';
     intervals: SessionSpeakerInterval[];
-    fallbackUsed: false;
     modelRevision: string;
     runtimeRevision: string;
     modelSha256: string;
@@ -32,31 +40,37 @@ const environment = (root: string): NodeJS.ProcessEnv => {
     const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
     // Do not inherit CLI configuration, backend overrides or another engine's DLL search path.
     return {
-        SystemRoot: systemRoot, WINDIR: systemRoot,
-        USERPROFILE: process.env.USERPROFILE, LOCALAPPDATA: process.env.LOCALAPPDATA,
+        ...(process.platform === 'win32' ? { SystemRoot: systemRoot, WINDIR: systemRoot,
+            USERPROFILE: process.env.USERPROFILE, LOCALAPPDATA: process.env.LOCALAPPDATA } : { HOME: os.homedir() }),
         TEMP: os.tmpdir(), TMP: os.tmpdir(),
-        PATH: [path.join(root, 'bin'), path.join(systemRoot, 'System32'), systemRoot].join(path.delimiter),
+        PATH: process.platform === 'win32' ? [path.join(root, 'bin'), path.join(systemRoot, 'System32'), systemRoot].join(path.delimiter) : '/usr/bin:/bin',
         OMP_NUM_THREADS: '2', OMP_THREAD_LIMIT: '2', OPENBLAS_NUM_THREADS: '2', MKL_NUM_THREADS: '2',
         GGML_VK_DISABLE_GRAPH_OPTIMIZE: '1',
     };
 };
 
-export const verifyNemotronGpu = async (root: string, signal: AbortSignal): Promise<void> => {
+export const inspectNemotron = async (root: string, variant: NemotronVariant, signal: AbortSignal): Promise<{ gpuAvailable: boolean }> => {
+    const runtime = NEMOTRON_RUNTIMES[variant];
     try {
-        const output = await runSpeakerProcess(path.join(root, NEMOTRON_COMPONENT.executable),
-            ['--json', 'doctor'], signal, root, environment(root), undefined, 100_000, true);
+        // Doctor exits 1 when an accelerator is missing, even though CPU inference is available.
+        const output = await runSpeakerProcess(path.join(root, runtime.executable),
+            ['--json', 'doctor'], signal, root, environment(root), 100_000, true, [0, 1]);
         const status = JSON.parse(output.stdout) as {
-            version?: string; features?: { backend_vulkan?: boolean; backend_cuda?: boolean };
+            version?: string; features?: { backend_vulkan?: boolean; backend_cuda?: boolean; backend_metal?: boolean };
             devices?: Array<{ name?: string; type?: string }>; driver_runtime_compatible?: boolean;
         };
         const gpu = status.devices?.find((device) => device.type === 'gpu' || device.type === 'integrated-gpu');
-        if (status.version !== '0.3.0' || !status.features?.backend_vulkan || status.features.backend_cuda
-            || !status.driver_runtime_compatible || gpu?.name !== 'Vulkan0') {
-            throw new Error('The pinned Vulkan runtime did not report Vulkan0 as its first GPU');
+        if (status.version !== '0.3.0' || status.features?.backend_cuda
+            || Boolean(status.features?.backend_vulkan) !== (runtime.gpuBackend === 'vulkan')
+            || Boolean(status.features?.backend_metal) !== (runtime.gpuBackend === 'metal')
+            || !status.devices?.some((device) => device.type === 'cpu')) {
+            throw new Error('The native runtime does not match the pinned capabilities');
         }
+        return { gpuAvailable: Boolean(runtime.gpuBackend && status.driver_runtime_compatible && gpu
+            && (runtime.gpuBackend !== 'vulkan' || gpu.name === 'Vulkan0')) };
     } catch (error) {
         signal.throwIfAborted();
-        throw new SpeakerAnalysisError('SPEAKER_GPU_UNAVAILABLE', { cause: error });
+        throw new SpeakerAnalysisError('SPEAKER_ASSETS_UNAVAILABLE', { cause: error });
     }
 };
 
@@ -104,36 +118,41 @@ const parseIntervals = (json: string, duration: number): SessionSpeakerInterval[
     });
 };
 
-export const analyzeNemotron = async (root: string, wavPath: string, signal: AbortSignal,
+export const analyzeNemotron = async (root: string, variant: NemotronVariant, compute: SpeakerCompute, wavPath: string, signal: AbortSignal,
     onProgress?: (progress: SpeakerAnalysisProgress) => void): Promise<NemotronAnalysisResult> => {
     const work = await fs.mkdtemp(path.join(os.tmpdir(), 'finelistener-nemotron-'));
+    const runtime = NEMOTRON_RUNTIMES[variant];
+    let backend: NemotronAnalysisResult['backend'] = 'cpu';
     try {
-        await verifyNemotronGpu(root, signal);
+        const { gpuAvailable } = await inspectNemotron(root, variant, signal);
+        if (compute === 'gpu' && !gpuAvailable) throw new SpeakerAnalysisError('SPEAKER_GPU_UNAVAILABLE');
+        if (compute !== 'cpu' && gpuAvailable && runtime.gpuBackend) backend = runtime.gpuBackend;
+        const device = backend === 'vulkan' ? 'vulkan:0' : backend;
         const duration = await preparedDuration(wavPath);
         const outputPath = path.join(work, 'result.json');
         onProgress?.({ phase: 'analyzing' });
         let intervals: SessionSpeakerInterval[] = [];
         if (duration > 0) {
             const started = performance.now();
-            // The pinned runtime throws on missing/failed GPU initialization. Never retry with --device cpu.
-            await runSpeakerProcess(path.join(root, NEMOTRON_COMPONENT.executable), [
+            // Auto selects once, before inference. A failed GPU run never silently retries on CPU.
+            await runSpeakerProcess(path.join(root, runtime.executable), [
                 'diarize', wavPath, '--model', path.join(root, NEMOTRON_COMPONENT.model),
-                '--device', 'vulkan:0', '--preset', 'v3-offline', '--concurrency', '1',
+                '--device', device, '--preset', 'v3-offline', '--concurrency', '1',
                 '--format', 'json', '--output', outputPath,
-            ], signal, work, environment(root), undefined, 100_000, true);
+            ], signal, work, environment(root), 100_000, true);
             if ((await fs.stat(outputPath)).size > 16_000_000) throw new Error('Nemotron output exceeded the limit');
             intervals = parseIntervals(await fs.readFile(outputPath, 'utf8'), duration);
-            console.info('Nemotron Vulkan analysis completed', { seconds: (performance.now() - started) / 1000,
+            console.info('Nemotron analysis completed', { backend, seconds: (performance.now() - started) / 1000,
                 duration, intervals: intervals.length });
         }
         signal.throwIfAborted();
-        return { engine: 'nemotron-3', backend: 'vulkan', device: 'vulkan:0', preset: 'v3-offline',
-            intervals, fallbackUsed: false, modelRevision: NEMOTRON_COMPONENT.modelRevision,
-            runtimeRevision: NEMOTRON_COMPONENT.runtimeRevision, modelSha256: NEMOTRON_COMPONENT.modelSha256,
-            runtimeSha256: NEMOTRON_COMPONENT.runtimeSha256 };
+        return { engine: 'nemotron-3', backend, device, preset: 'v3-offline',
+            intervals, modelRevision: NEMOTRON_COMPONENT.modelRevision,
+            runtimeRevision: runtime.revision, modelSha256: NEMOTRON_COMPONENT.modelSha256,
+            runtimeSha256: runtime.sha256 };
     } catch (error) {
         signal.throwIfAborted();
         if (error instanceof SpeakerAnalysisError) throw error;
-        throw new SpeakerAnalysisError('SPEAKER_GPU_FAILED', { cause: error });
+        throw new SpeakerAnalysisError(backend === 'cpu' ? 'SPEAKER_ANALYSIS_FAILED' : 'SPEAKER_GPU_FAILED', { cause: error });
     } finally { await fs.rm(work, { recursive: true, force: true }); }
 };

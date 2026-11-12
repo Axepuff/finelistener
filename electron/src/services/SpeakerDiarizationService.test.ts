@@ -3,7 +3,6 @@ import { tmpdir } from 'os';
 import path from 'path';
 import { expect, it } from 'vitest';
 import { AudioPreprocessor } from './AudioPreprocessor';
-import { parseSpeakerIntervals } from './SpeakerDiarizationService';
 import { runSpeakerProcess } from './speakerProcess';
 
 const makeWav = (): Buffer => {
@@ -29,41 +28,15 @@ const makeWav = (): Buffer => {
     return wav;
 };
 
-it('parses v1.13.8 CLI intervals relative to a selected range', () => {
-    const output = 'progress 100.00%\nStarted\n0.318 -- 6.865 speaker_00\n7.017 -- 10.747 speaker_01\n';
-    expect(parseSpeakerIntervals(output, 30, 38)).toEqual([
-        { startSec: 0.318, endSec: 6.865, speakerId: 'speaker_00' },
-        { startSec: 7.017, endSec: 8, speakerId: 'speaker_01' },
-    ]);
-    expect(parseSpeakerIntervals(output, 5)).toEqual([
-        { startSec: 0, endSec: 1.8650000000000002, speakerId: 'speaker_00' },
-        { startSec: 2.0170000000000003, endSec: 5.747, speakerId: 'speaker_01' },
-    ]);
+it('accepts a doctor warning exit only when explicitly allowed and retains its JSON', async () => {
+    const args = ['-e', 'process.stdout.write(JSON.stringify({ devices: ["CPU"] })); process.exitCode = 1'];
+    const signal = new AbortController().signal;
+    await expect(runSpeakerProcess(process.execPath, args, signal, tmpdir())).rejects.toMatchObject({ exitCode: 1 });
+    const result = await runSpeakerProcess(process.execPath, args, signal, tmpdir(), undefined, 1000, false, [0, 1]);
+    expect(JSON.parse(result.stdout)).toEqual({ devices: ['CPU'] });
 });
 
-it('reports split native progress before completion without leaking diagnostic text', async () => {
-    const values: number[] = [];
-    let observed!: () => void;
-    const progress = new Promise<void>((resolve) => { observed = resolve; });
-    const controller = new AbortController();
-    const running = runSpeakerProcess(process.execPath, ['-e',
-        "process.stderr.write('diagnostic 99%\\npro'); setTimeout(() => { process.stderr.write('gress 25.50%\\rprogress 25.90%\\n'); }, 30); setInterval(() => {}, 1000);",
-    ], controller.signal, tmpdir(), undefined, (percent) => { values.push(percent); observed(); });
-    const rejection = expect(running).rejects.toThrow('Speaker analysis cancelled');
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-        await Promise.race([progress, new Promise<never>((_resolve, reject) => {
-            timer = setTimeout(() => reject(new Error('No live progress')), 2000);
-        })]);
-        expect(values).toEqual([25]);
-    } finally {
-        if (timer) clearTimeout(timer);
-        controller.abort();
-        await rejection;
-    }
-});
-
-it('sends only the selected audio to sherpa preparation', async () => {
+it('sends only the selected audio to speaker preparation', async () => {
     const directory = await fs.mkdtemp(path.join(tmpdir(), 'finelistener-speaker-range-'));
     const sourcePath = path.join(directory, 'source.wav');
     const preprocessor = new AudioPreprocessor();

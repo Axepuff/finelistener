@@ -85,9 +85,8 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
     };
     const fake = createFakeRendererAdapter({
         runtimePlatform: 'win32',
-        ...(isNemotron ? { getSpeakerAssets: () => Promise.resolve({ engine: 'nemotron-3' as const,
-            ready: scenario !== 'nemotron-downloading', cpuReady: false, cudaReady: false, cudaAvailable: false,
-            vulkanAvailable: scenario !== 'nemotron-error', downloadBytes: 123_671_929 }) } : {}),
+        ...(isNemotron ? { getSpeakerAssets: () => Promise.resolve({ gpuBackend: 'vulkan' as const,
+            ready: scenario !== 'nemotron-downloading', gpuAvailable: scenario !== 'nemotron-error', downloadBytes: 123_671_929 }) } : {}),
         listSessions: () => Promise.resolve(sessions),
         getSession: () => Promise.resolve(session),
         importAudio: () => {
@@ -176,7 +175,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
                 phase: scenario === 'nemotron-downloading' ? 'downloading' : 'analyzing',
                 ...(scenario === 'nemotron-downloading' ? { downloadedBytes: 61_835_965, totalBytes: 123_671_929 } : {}) });
         }
-        if (scenario === 'nemotron-error') store.speakers.fail('GPU speaker analysis is unavailable. Update your graphics driver and try again.');
+        if (scenario === 'nemotron-error') store.speakers.fail('GPU speaker analysis is unavailable. Select CPU or update your graphics driver.');
     }
 
     return {
