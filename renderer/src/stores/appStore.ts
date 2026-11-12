@@ -14,7 +14,7 @@ import { ActivityLogStore } from './activityLogStore';
 import { ForegroundOperationStore } from './foregroundOperationStore';
 import type { RendererAdapter } from './rendererAdapter';
 import { SessionsStore } from './sessionsStore';
-import { SpeakerAnalysisStore } from './speakerAnalysisStore';
+import { SpeakerAnalysisStore, speakerErrorMessage } from './speakerAnalysisStore';
 import { TranscriptionStore, type StartTranscriptionOptions, type TranscriptionRunRequest } from './transcriptionStore';
 import {
     commandFailure,
@@ -421,7 +421,7 @@ export class AppStore {
             this.workspace.selectedSegment ?? undefined;
         const sessionId = this.workspace.activeSessionId ?? undefined;
         const labelSpeakersRequested = this.speakers.enabled;
-        const speakerCountRequested = this.speakers.speakerCount ?? undefined;
+        const speakerComputeRequested = this.speakers.compute;
         const fileName = audioPath.split(/[/\\]/).pop() || audioPath;
 
         if (selectedSegment) {
@@ -481,7 +481,7 @@ export class AppStore {
 
             if (sessionId && result.status === 'success' && this.transcription.savedTranscript?.segments.some((segment) => segment.text.trim()) && labelSpeakersRequested && isCurrent()) {
                 this.operations.transition(operation, 'analyzing-speakers');
-                return await this.runSpeakerAnalysis(sessionId, { speakerCount: speakerCountRequested, audioMode: request.optimized ? 'optimized' : 'original', range: request.segment, recognitionRevision: this.transcription.savedTranscript?.recognitionRevision }, operation);
+                return await this.runSpeakerAnalysis(sessionId, { compute: speakerComputeRequested, audioMode: request.optimized ? 'optimized' : 'original', range: request.segment, recognitionRevision: this.transcription.savedTranscript?.recognitionRevision }, operation);
             }
 
             return commandSuccess(undefined);
@@ -532,7 +532,7 @@ export class AppStore {
         if (!operation) return commandFailure('Another workspace operation is already running.');
 
         try {
-            return await this.runSpeakerAnalysis(sessionId, { speakerCount: this.speakers.speakerCount ?? undefined, audioMode: this.workspace.audioMode, recognitionRevision: this.transcription.savedTranscript?.recognitionRevision }, operation);
+            return await this.runSpeakerAnalysis(sessionId, { compute: this.speakers.compute, audioMode: this.workspace.audioMode, recognitionRevision: this.transcription.savedTranscript?.recognitionRevision }, operation);
         } finally {
             runInAction(() => this.operations.finish(operation));
         }
@@ -576,9 +576,10 @@ export class AppStore {
             await this.awaitSpeakerStop(operation);
             if (!this.operations.owns(operation) || this.disposed) return commandSuccess(undefined);
             console.error('Speaker analysis failed', error);
-            this.speakers.fail('Speaker analysis failed. The saved transcript is unchanged.');
+            const message = speakerErrorMessage(error) ?? 'Speaker analysis failed. The saved transcript is unchanged.';
+            this.speakers.fail(message);
 
-            return commandFailure('Speaker analysis failed. The saved transcript is unchanged.');
+            return commandFailure(message);
         } finally {
             if (this.speakerAnalysisRequestStartedOperationId === operation.id) {
                 this.speakerAnalysisRequestStartedOperationId = null;
@@ -634,7 +635,7 @@ export class AppStore {
         }
     }
 
-    async prepareSpeakerAssets(includeCuda: boolean): Promise<CommandResult> {
+    async prepareSpeakerAssets(): Promise<CommandResult> {
         if (!this.adapter) return commandFailure('Speaker analysis assets are not available.');
         const operation = this.operations.begin('preparing-speaker-assets');
         if (!operation) return commandFailure('Another workspace operation is already running.');
@@ -643,7 +644,7 @@ export class AppStore {
         this.speakers.updateProgress({ sessionId: this.workspace.activeSessionId ?? '', phase: 'downloading' });
 
         try {
-            const assets = await this.adapter.prepareSpeakerAssets(includeCuda);
+            const assets = await this.adapter.prepareSpeakerAssets();
             await this.awaitSpeakerStop(operation);
             if (!this.operations.owns(operation) || this.disposed) return commandSuccess(undefined);
             runInAction(() => {
@@ -656,8 +657,9 @@ export class AppStore {
             await this.awaitSpeakerStop(operation);
             if (!this.operations.owns(operation) || this.disposed) return commandSuccess(undefined);
             console.error('Failed to prepare speaker analysis assets', error);
-            this.speakers.fail('Speaker analysis assets could not be prepared.');
-            return commandFailure('Speaker analysis assets could not be prepared.');
+            const message = speakerErrorMessage(error) ?? 'Speaker analysis assets could not be prepared.';
+            this.speakers.fail(message);
+            return commandFailure(message);
         } finally {
             runInAction(() => this.operations.finish(operation));
         }

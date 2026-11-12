@@ -65,7 +65,7 @@ export const createFakeRendererAdapter = (
         setTranscriptDuplicateFilter: unavailable,
         analyzeSpeakers: unavailable,
         stopSpeakerAnalysis: () => Promise.resolve(false),
-        getSpeakerAssets: () => Promise.resolve({ cpuReady: false, cudaReady: false, cudaAvailable: false }),
+        getSpeakerAssets: () => Promise.resolve({ ready: false, gpuBackend: null }),
         prepareSpeakerAssets: unavailable,
         renameSpeaker: unavailable,
         assignSpeaker: unavailable,

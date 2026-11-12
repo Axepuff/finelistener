@@ -1,5 +1,5 @@
 import type { SessionSpeakerAssignment } from 'electron/src/types/sessions';
-import { ActionIcon, Alert, Button, Divider, Group, Loader, Modal, NumberInput, Popover, Progress, Select, Stack, Text, TextInput } from '@mantine/core';
+import { ActionIcon, Alert, Button, Divider, Group, Loader, Modal, Popover, Progress, Select, Stack, Text, TextInput } from '@mantine/core';
 import { IconArrowMerge, IconPencil, IconRefresh, IconSettings } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState } from 'react';
@@ -17,7 +17,6 @@ const phaseLabels = {
     converting: 'Preparing audio',
     analyzing: 'Analyzing speakers',
     saving: 'Saving speaker labels',
-    fallback: 'Switching to CPU analysis',
 };
 
 export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onCloseSpan }) => {
@@ -83,17 +82,9 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                     <Stack gap={8}>
                         {hasSystemAudio ? (
                             <>
-                                <NumberInput
-                                    label="Speaker count"
-                                    placeholder="Auto"
-                                    description={store.workspace.activeSession?.tracks?.some((track) => track.source === 'microphone') ? 'Excludes the microphone speaker.' : undefined}
-                                    min={1}
-                                    allowDecimal={false}
-                                    value={speakerState.speakerCount ?? ''}
-                                    onChange={(value) => speakerState.setSpeakerCount(typeof value === 'number' ? value : null)}
-                                    disabled={isBusy}
-                                    size="xs"
-                                />
+                                <Select label="Speaker analysis device" size="xs" data={speakerState.computeOptions}
+                                    value={speakerState.compute} onChange={(value) => { void speakerState.setCompute(value); }}
+                                    disabled={isBusy} description="Nemotron 3 counts speakers automatically. Auto uses CPU when no GPU is available." />
                                 <Divider />
                             </>
                         ) : null}
@@ -118,12 +109,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                                 }}>Merge speakers</Button>
                             </>
                         ) : null}
-                        {speakerState.assets?.cudaAvailable && !speakerState.assets.cudaReady ? (
-                            <Button size="compact-sm" variant="subtle" disabled={isBusy} onClick={() => { void execute(store.prepareSpeakerAssets(true)); }}>
-                                Prepare CUDA component
-                            </Button>
-                        ) : null}
-                        {transcript.speakers?.provenance ? <Text size="xs" c="dimmed">Community-1 · {transcript.speakers.provenance.backend.toUpperCase()} · {transcript.speakers.provenance.audioMode === 'optimized' ? 'Optimized' : 'Original'}</Text> : null}
+                        {transcript.speakers?.provenance ? <Text size="xs" c="dimmed">{transcript.speakers.provenance.engine === 'nemotron-3' ? 'Nemotron 3' : 'Community-1'} · {transcript.speakers.provenance.backend.toUpperCase()} · {transcript.speakers.provenance.audioMode === 'optimized' ? 'Optimized' : 'Original'}</Text> : null}
                     </Stack>
                 </Popover.Dropdown>
             </Popover>
@@ -201,7 +187,7 @@ export const SpeakerAnalysisStatus: React.FC = observer(() => {
         || store.operations.kind === 'preparing-speaker-assets';
     const hasError = speakerState.status === 'error' && speakerState.errorMessage;
 
-    if (!isRunning && !hasError && !speakerState.usedCpuFallback) return null;
+    if (!isRunning && !hasError) return null;
 
     return (
         <Stack gap={8}>
@@ -218,9 +204,7 @@ export const SpeakerAnalysisStatus: React.FC = observer(() => {
                 </Group>
             ) : null}
             {hasError ? <Alert color="yellow" title="Speaker action failed">{speakerState.errorMessage}</Alert> : null}
-            {speakerState.usedCpuFallback ? (
-                <Alert color="yellow" title="Using CPU">CUDA was unavailable. Speaker analysis continued on CPU.</Alert>
-            ) : null}
+
         </Stack>
     );
 });

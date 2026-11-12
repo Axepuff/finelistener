@@ -142,7 +142,7 @@ export const TranscribedText: React.FC = observer(() => {
                         onNextMatch={() => moveToMatch(1)}
                         speakerControls={showSpeakers ? <SpeakerControls key={store.workspace.activeSessionId ?? ''} selectedSpan={currentSelectedSpan} onCloseSpan={() => setSelectedSpan(null)} /> : undefined}
                     />
-                    {showSpeakers ? <SpeakerAnalysisStatus /> : null}
+                    <SpeakerAnalysisStatus />
 
                     {store.lifecycleState === 'transcribing' ? (
                         <Group gap={8} align="center" wrap="nowrap" style={{ width: '100%' }}>

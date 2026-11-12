@@ -39,36 +39,36 @@ const session = (savedTranscript: SessionTranscriptV1, sourceKind: SessionDetail
 });
 
 describe('speaker analysis in the renderer', () => {
-    it('offers optional CUDA preparation before transcription when speaker labels are enabled', async () => {
+    it('offers component preparation before transcription when speaker labels are enabled', async () => {
         const store = new AppStore(createFakeRendererAdapter().adapter);
         void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session(transcript));
         await store.speakers.setEnabled(true);
-        store.speakers.setAssets({ cpuReady: true, cudaReady: false, cudaAvailable: true });
+        store.speakers.setAssets({ ready: false, gpuBackend: 'vulkan' });
 
         const render = () => renderToStaticMarkup(createElement(MantineProvider, null,
             createElement(AppContext.Provider, { value: store }, createElement(TranscribeControl))));
 
         expect(render()).toContain('Prepare speaker component');
         expect(render()).toContain('recognition is saved first');
-        store.speakers.setAssets({ cpuReady: true, cudaReady: true, cudaAvailable: true });
+        store.speakers.setAssets({ ready: true, gpuBackend: 'vulkan' });
         expect(render()).not.toContain('Prepare speaker component');
     });
 
     it('does not replace freshly prepared assets with an older status response', async () => {
-        let resolveOldStatus: (value: { cpuReady: boolean; cudaReady: boolean; cudaAvailable: boolean }) => void = () => undefined;
+        let resolveOldStatus: (value: import('electron/src/types/transcription').SpeakerAssetStatus) => void = () => undefined;
         const fake = createFakeRendererAdapter({
             getSpeakerAssets: () => new Promise((resolve) => { resolveOldStatus = resolve; }),
-            prepareSpeakerAssets: () => Promise.resolve({ cpuReady: true, cudaReady: true, cudaAvailable: true }),
+            prepareSpeakerAssets: () => Promise.resolve({ ready: true, gpuBackend: 'vulkan' }),
         });
         const store = new AppStore(fake.adapter);
         void store.speakers.setEnabled(false);
         store.speakers.initialize();
-        expect((await store.prepareSpeakerAssets(true)).ok).toBe(true);
-        resolveOldStatus({ cpuReady: true, cudaReady: false, cudaAvailable: true });
+        expect((await store.prepareSpeakerAssets()).ok).toBe(true);
+        resolveOldStatus({ ready: false, gpuBackend: 'vulkan' });
         await Promise.resolve();
 
-        expect(store.speakers.assets?.cudaReady).toBe(true);
+        expect(store.speakers.assets?.ready).toBe(true);
         store.speakers.dispose();
     });
 
@@ -83,14 +83,18 @@ describe('speaker analysis in the renderer', () => {
         store.transcription.replaceSavedTranscript(transcript);
 
         expect((await store.analyzeSpeakers()).ok).toBe(true);
-        expect(analyzeSpeakers).toHaveBeenCalledWith('session-1', expect.objectContaining({ speakerCount: undefined, audioMode: 'original', recognitionRevision: 'revision-1' }));
+        expect(analyzeSpeakers).toHaveBeenCalledWith('session-1', expect.objectContaining({ compute: 'auto', audioMode: 'original', recognitionRevision: 'revision-1' }));
         expect(prepareSpeakerAssets).not.toHaveBeenCalled();
         expect(transcribe).not.toHaveBeenCalled();
         expect(store.transcription.plainText).toBe('Hello');
     });
 
-    it('retains existing labels when a confirmed rerun fails', async () => {
-        const analyzeSpeakers = vi.fn(() => Promise.reject(new Error('native process failed')));
+    it.each([
+        ['native process failed', 'Speaker analysis failed. The saved transcript is unchanged.'],
+        ["Error invoking remote method 'sessions:analyze-speakers': Error: SPEAKER_GPU_UNAVAILABLE", 'GPU speaker analysis is unavailable. Select CPU or update your graphics driver.'],
+        ['SPEAKER_COUNT_UNSUPPORTED', 'Nemotron counts speakers automatically. Clear the exact speaker count and try again.'],
+    ])('retains existing labels and shows a safe message when a confirmed rerun fails: %s', async (failure, message) => {
+        const analyzeSpeakers = vi.fn(() => Promise.reject(new Error(failure)));
         const fake = createFakeRendererAdapter({ analyzeSpeakers });
         const store = new AppStore(fake.adapter);
         void store.speakers.setEnabled(false);
@@ -104,6 +108,7 @@ describe('speaker analysis in the renderer', () => {
             expect((await store.analyzeSpeakers(true)).ok).toBe(false);
             expect(store.transcription.savedTranscript?.speakers?.generation).toBe('generation-1');
             expect(store.speakers.status).toBe('error');
+            expect(store.speakers.errorMessage).toBe(message);
         } finally {
             error.mockRestore();
         }
@@ -185,15 +190,15 @@ describe('speaker analysis in the renderer', () => {
         void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session({ version: 1, segments: [] }));
         await store.speakers.setEnabled(true);
-        store.speakers.setSpeakerCount(2);
+        await store.speakers.setCompute('cpu');
 
         const pending = store.startTranscription({ language: 'en', model: 'base', splitOnWord: true, useVad: true });
         await store.speakers.setEnabled(false);
-        store.speakers.setSpeakerCount(3);
+        await store.speakers.setCompute('gpu');
         finishRecognition('Hello');
 
         expect((await pending).ok).toBe(true);
-        expect(analyzeSpeakers).toHaveBeenCalledWith('session-1', expect.objectContaining({ speakerCount: 2, audioMode: 'original' }));
+        expect(analyzeSpeakers).toHaveBeenCalledWith('session-1', expect.objectContaining({ compute: 'cpu', audioMode: 'original' }));
     });
 
     it('requires a new replacement confirmation after a model download changes sessions', async () => {

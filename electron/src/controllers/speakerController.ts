@@ -1,6 +1,7 @@
 import type { BrowserWindow, IpcMain } from 'electron';
 import { SessionSpeakerWorkflow } from '../services/SessionSpeakerWorkflow';
 import { SpeakerDiarizationService } from '../services/SpeakerDiarizationService';
+import { SpeakerAnalysisError } from '../services/speakerProcess';
 import type { SessionsService } from '../services/SessionsService';
 import type { SessionRawSpan, SessionSpeakerAssignment } from '../types/sessions';
 
@@ -37,15 +38,17 @@ export function registerSpeakerController(
             return await action();
         } catch (error) {
             console.error(`Speaker ${operation} failed`, error);
-            throw new Error('Speaker action failed.');
+            throw new Error(error instanceof SpeakerAnalysisError ? error.code : 'Speaker action failed.');
         }
     };
 
-    ipc.handle('sessions:get-speaker-assets', () => safe('asset status', () => workflow.getAssetStatus()));
-    ipc.handle('sessions:prepare-speaker-assets', (_event, includeCuda: unknown) => safe('asset preparation', () => {
+    ipc.handle('sessions:get-speaker-assets', () => safe('asset status', () => {
         ensureAvailable();
-        if (typeof includeCuda !== 'boolean') throw new Error('Invalid asset request');
-        return workflow.prepareAssets(includeCuda);
+        return workflow.getAssetStatus();
+    }));
+    ipc.handle('sessions:prepare-speaker-assets', () => safe('asset preparation', () => {
+        ensureAvailable();
+        return workflow.prepareAssets();
     }));
     ipc.handle('sessions:analyze-speakers', (_event, sessionId: unknown, options: unknown) => safe('analysis', () => {
         ensureAvailable();

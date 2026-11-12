@@ -1,0 +1,85 @@
+# Nemotron integration acceptance — issue #17
+
+Observed on Windows x64 with an NVIDIA GeForce GTX 1070 on 2026-11-12. Private audio, transcripts and generated binaries remain under ignored `.artifact-work/` and `build-assets/`; they are not repository fixtures.
+
+## Final r3 component checks
+
+The Windows GPU component now includes a pinned LunarG Vulkan loader as a fallback. The upstream Vulkan executable depends on `vulkan-1.dll`, which is absent on a clean Windows Server 2022 runner. Before the fix, `python scripts/smoke-nemotron.py win-x64-gpu` failed there with `0xC0000135`, while the CPU component passed. After the fix, [all five native component jobs](https://github.com/Axepuff/finelistener/actions/runs/43187764882) passed, including both Windows variants on Windows Server 2022 and Windows latest. The older runner explicitly reported `systemVulkanLoaderAvailable: false` and then `device: cpu, smokePassed: true` for the GPU component. No graphics driver or system runtime was installed for that check.
+
+The fallback lives outside the executable directory and follows System32 in the restricted search path, preserving the installed driver's loader preference. Its official archive and notices are pinned in the build lock. Asset requests identify FineListener to the distribution CDN; a default Python user agent reproducibly received HTTP 403, while the identified request downloaded bytes matching the published SHA-256.
+
+The r3 archives verified locally: CPU 109,991,841 bytes, Windows GPU 124,163,296 bytes, and macOS 117,144,379 bytes. Native CPU smoke passed on both Windows components and Vulkan smoke passed on the local GTX 1070. The compiled service repeated the three-second CPU checks and the GPU checks: 30 seconds in 0.574 seconds and 4,101.397 seconds in 20.133 seconds, with all 7 and 864 intervals still matching the reference CLI. Real ZIP installation, per-file hashes, offline inference, cancellation cleanup, corruption rejection and atomic repair passed again. Evidence remains in `.artifact-work/native-check/{results,assets-check}.json` inside the isolated PR checkout.
+
+Matched r3 Windows GPU Squirrel installers measured 345,259,520 bytes without and 345,303,040 bytes with speaker resources: **43,520 bytes added**, with identical application ASAR hashes. Bundled metadata/notices total 121,451 bytes; the external component installs 179,713,339 bytes. Evidence: `.artifact-work/installer-gpu-r3.log` and `build-assets/installer-measurements/win-x64-gpu/1794473749186/` in that checkout.
+
+Typecheck, lint, build and all 247 unit tests passed after the r3 change. Renderer behavior is unchanged from the 17 passing Storybook tests below. The CPU and macOS runtime binaries and model are unchanged from r2, including the physical M1 checks. The sections below retain the earlier r2/r1 measurements with their original scope.
+
+The review follow-up bounds every capability probe to 10 seconds on Windows or 180 seconds on macOS, including probes before analysis, without applying that deadline to inference. Background status requests share an owned probe; shutdown and foreground speaker work cancel it and await cleanup, and IPC rejects new probes during shutdown. Six regression cases cover these contracts, including failures reproduced before the fix. Typecheck, lint, build and all 253 unit tests passed. Native component payloads and renderer UI are unchanged.
+
+## CPU and Apple Silicon extension
+
+The current implementation uses Nemotron only. The component lock provides Windows CPU, Windows Vulkan (also CPU-capable), and Apple Silicon Metal (also CPU-capable) runtimes. Auto chooses an available GPU before inference, otherwise CPU; the persisted CPU option forces CPU on either GPU build. Explicit GPU failures preserve prior results and require an explicit retry. Community and sherpa code, workers, acquisition locks and release resources are removed; only old saved-session provenance remains readable.
+
+All three locally prepared archives passed `scripts/verify-speaker-release.py --all`: Windows CPU 109,991,717 bytes, Vulkan 123,672,110 bytes, Metal 117,144,255 bytes. The native tar installer extracted the Windows archives into a path with spaces and Cyrillic characters. `scripts/smoke-nemotron.py` passed CPU on both Windows distributions and Vulkan on the GPU distribution. CPU checks used three seconds of synthetic audio, with no timing benchmark or long recording.
+
+After the extension, typecheck, lint, build, all 247 unit tests and 17 Storybook tests passed. Added adapter cases exercise CPU-only systems, forcing CPU despite an available GPU, Metal selection, and Auto without a GPU. The workflow range test verifies actual CPU provenance and offsets once. Renderer tests cover capturing the compute preference before recognition; the Storybook interaction changes CPU selection and verifies it survives closing/reopening settings. The PR's Nemotron components workflow prepares and smoke-tests all three runtimes on their target OS. Hosted CI without an accelerator must explicitly report a skipped GPU smoke; it does not qualify Metal performance on a physical Mac.
+
+The [target-OS component CI](https://github.com/Axepuff/finelistener/actions/runs/43170221456) passed all three variants on commit `564bef9`. Both Windows variants ran CPU; the Apple Silicon Metal archive also ran CPU. The Mac VM exposes a Metal device, but GPU inference crashes in `AppleParavirtGPUMetalIOGPUFamily` ([debugger evidence](https://github.com/Axepuff/finelistener/actions/runs/43164575732)); the same crash occurs with the [unmodified upstream archive](https://github.com/Axepuff/finelistener/actions/runs/43164899566). Mac CI now explicitly passes `--cpu-only`; physical Metal checks are recorded separately below. First-run doctor takes roughly 30–60 seconds compiling Metal shaders, so the app's cancellable status probe allows 180 seconds on macOS.
+
+On 2026-11-12 the user ran the PR component on a physical Apple M1 (16 GB, macOS 15.7.3). Archive verification and the three-second CPU smoke passed. Doctor reported the M1 GPU, Metal enabled, compatible runtime/driver and exit code 0. A separate forced-Metal three-second smoke completed with exit code 0 and 0.30 seconds wall time. The user then selected a local speech recording, converted it to mono 16 kHz PCM16 using macOS `afconvert`, and ran the same pinned CLI/model with `--device metal --preset v3-offline --concurrency 1`. Reported results:
+
+| Physical M1 input | Audio duration | CLI wall time | Intervals |
+| --- | ---: | ---: | ---: |
+| First 30 seconds | 30 s | 0.622 s | 1 |
+| Full recording | 2,983.168 s | 15.634 s | 745 |
+
+These are user-reported native CLI checks, not packaged macOS UI checks. Timings exclude conversion, include CLI startup/inference, and use a different recording from the Windows benchmark; they do not establish a cross-platform speed ranking or diarization quality score. The source audio and result JSON stayed on the user's Mac under ignored `build-assets/`; only aggregate timings/counts were shared.
+
+The current compiled service repeated both Windows CPU smoke checks on three seconds of audio. GPU-only reruns took 0.683 seconds for the 30-second sample (native inference 0.517 seconds) and 20.364 seconds for the 4,101.397-second recording (native inference 19.635 seconds). All 7 and 864 intervals respectively exactly matched the original CLI outputs. The production installer again passed real ZIP extraction into a Cyrillic temporary profile, offline inference, cancellation cleanup, corrupted archive rejection, modified-model detection and atomic repair. HTTPS was replaced only by a local archive stream. Evidence: `.artifact-work/pr-17/.artifact-work/native-check/{results,assets-check}.json` in the original checkout. A repository-local test profile hit a persistent Windows directory lock; the isolated OS temporary profile passed unchanged production code.
+
+The r2 paired Squirrel measurements added 39,424 bytes for the CPU distribution and 41,984 bytes for the GPU distribution; both are below 200,000,000 bytes, with identical application ASAR hashes within each pair. The actual packaged CPU executable also analyzed a three-second imported session through its preload IPC, saved Nemotron/CPU provenance and preserved the original text in an isolated Unicode profile. Evidence: `.artifact-work/pr-17/.artifact-work/installer-{cpu,gpu}.log`, `build-assets/installer-measurements/` inside that checkout, and `.artifact-work/pr-17/.artifact-work/native-check/packaged-cpu.json`.
+
+The measurements below document the earlier Windows Vulkan r1 integration. Their CPU/macOS exclusions describe that earlier scope and are not the current product support matrix. Packaged GPU IPC and earlier installer figures below were measured on that integration build, not on a macOS host.
+
+## Pinned component
+
+The lock in `scripts/nemotron-assets.json` pins NeMo-Speech.cpp 0.3.0 Vulkan (22,417,032-byte upstream archive, SHA-256 `72b3b8b41bfe2be0320eff4e9d310594e4f99deefcde4a157799a039656963ce`) and the 107,012,128-byte Q8 model (SHA-256 `08456d9e22cd9a323c0364d98375f3746d6e68507ebb705cd46438c534c7a3a1`). The model revision is `52a432672732425e4c19765b9fec9b5810e6f4ba`. The UTF-8 manifest modification is recorded as runtime revision `nemo-speech-0.3.0+utf8.1`; component manifests hash the modified executable and all DLLs, model files and notices separately.
+
+The locally generated component archive is 123,671,929 bytes; installed files total 177,978,483 bytes. Neither figure is an installer measurement. The installer bundles only the component manifest and notices.
+
+Matched Squirrel installers measured 343,337,984 bytes without the speaker resource and 343,378,944 bytes with it: **40,960 bytes added**, below the 200,000,000-byte limit. Bundled manifest/notices total 115,752 bytes. Both builds have identical `app.asar` SHA-256 `aa315be540b8dbbbac07453b09c243182fbf6dde30deb3d4cd1b67b3ec703973`. An initial pair differed only in a concurrently updated Vitest cache; the baseline was rebuilt after tests stopped and the equality guard then passed. Evidence: `.artifact-work/nemotron-integration-17/installer-measurement.json` and `build-assets/installer-measurements/win-x64-gpu/1794439817690/`.
+
+## Real GPU checks
+
+The compiled application service selected Vulkan device 0 via the native doctor command. Short and full inputs were analyzed in one CLI invocation each, with no CPU retry:
+
+| Input | Duration | Service wall time | Native inference | Intervals | Labels |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Short private sample | 30 s | 0.575 s | 0.400 s | 7 | 2 |
+| Full optimized private recording | 4,101.397 s | 20.288 s | 19.650 s | 864 | 2 |
+
+Both interval arrays exactly matched the prior standalone CLI results for the same WAV inputs. This establishes adapter parity, not a new listening assessment or DER score. The full input was already optimized: the service measurement includes segment preparation but excludes the earlier decode/optimization from the original file. A real full-file cancellation stopped the process and removed its working output. A separate run passed with both the runtime directory and input filename containing Cyrillic and CJK characters.
+
+Local evidence: `.artifact-work/nemotron-integration-17/service-checks.json`, `unicode-check.json`, and the corresponding bounded service logs. No private transcript text belongs in this report.
+
+## Installation and packaged application
+
+The production component service passed first install with real ZIP listing/extraction and per-file hashes, offline reuse/inference, cancelled-download cleanup, rejection of a corrupted archive, detection of a modified installed model and atomic repair. The test substituted a local archive stream only at the HTTPS response boundary; it did not verify a published GitHub download. Packaged resource lookup was exercised without the development runtime path. Evidence: `assets-check.json` in the same private artifact directory.
+
+The actual packaged executable then ran with a separate test profile and the verified installed component. Its real preload IPC completed standalone analysis in about 1.02 seconds, preserved raw text, and retained saved labels when an unsupported exact count was rejected. Whisper base recognized the 30-second sample in about 0.90 seconds and saved 13 segments before native analysis; the following Nemotron run persisted 7 intervals and Vulkan provenance. Evidence: `packaged-api-check.json`. These checks exercise packaged main/preload services; automatic renderer coordination is covered by store tests, while UI presentation was checked separately in Storybook. They do not claim a fresh OS install or a complete manual UI walkthrough of the packaged executable.
+
+## Automated coverage and UI
+
+Native adapter tests cover the doctor capability check, pinned GPU arguments, no CPU retry, overlapping/non-dense labels, empty output, malformed and out-of-range segments, and cleanup. Workflow tests cover selected system ranges and offsets, microphone bypass, unsupported counts before preparation/save, cancellation, stale recognition and preservation of saved transcripts. Shared mapping tests retain conservative Unknown outcomes, raw spans, corrections and merges. IPC tests ensure technical paths stay in logs while only safe error codes reach the renderer.
+
+Storybook covers Native settings, component download, phase-only analysis/cancel and GPU errors. Browser inspection verified settings, saved backend, download progress/cancel and a safe error while saved text stays visible. Both analysis and preparation status are visible in Plain Text as well as Speakers.
+
+## Release checks
+
+Run `npm run typecheck`, `npm run lint`, `npm run test -- --run`, `npm run test:storybook -- --run` and `npm run build`. Verify prepared components with `python scripts/verify-speaker-release.py --all build-assets/release-components`, then run `python scripts/smoke-nemotron.py <variant>` on each target OS. Measure paired Windows installers with `npm run measure:speaker:installer -- win-x64-gpu` or `win-x64-cpu` from a stable checkout.
+
+Completed locally: typecheck, lint, build, 243 unit tests (30 files), 16 Storybook tests (2 files), component archive verification and the paired installer measurement above. The owned Storybook server and packaged test application were stopped after verification.
+
+Before opening the PR, typecheck, lint, build, all 243 unit tests and 17 Storybook tests passed again on top of main `4fcee586` (including the newer narrow-pane UI scenario). The native implementation and component payload are unchanged from the measured integration build; installer and GPU timings above refer to that integration build.
+
+Fresh OS installation, broader driver diversity and signed/distributed release downloads require release-environment checks. Physical M1 Metal results are recorded above. Release publication is not part of the local implementation task.

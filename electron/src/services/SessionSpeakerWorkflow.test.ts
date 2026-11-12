@@ -1,7 +1,14 @@
 import { expect, it, vi } from 'vitest';
 import type { SessionDetails, SessionTranscriptV1 } from '../types/sessions';
+import type { SpeakerAssetStatus } from '../types/transcription';
 import type { SessionsService } from './SessionsService';
 import { SessionSpeakerWorkflow } from './SessionSpeakerWorkflow';
+import type { SpeakerAnalysisResult } from './SpeakerDiarizationService';
+
+const analysisResult: SpeakerAnalysisResult = {
+    engine: 'nemotron-3', backend: 'cpu', device: 'cpu', preset: 'v3-offline', intervals: [],
+    modelRevision: 'model-revision', runtimeRevision: 'runtime-revision', modelSha256: 'model-hash', runtimeSha256: 'runtime-hash',
+};
 
 const microphoneTranscript: SessionTranscriptV1 = {
     version: 1,
@@ -20,7 +27,78 @@ const sessionFor = (transcript: SessionTranscriptV1): SessionDetails => ({
     tracks: [{ source: 'microphone', filePath: 'mic.wav', startOffsetMs: 0 }], transcript,
 });
 
-it('labels a microphone-only transcript without loading assets or invoking sherpa', async () => {
+it('cancels shared background status checks and waits for native cleanup', async () => {
+    let closeProbe: () => void = () => undefined;
+    const closed = new Promise<void>((resolve) => { closeProbe = resolve; });
+    let probeSignal: AbortSignal | undefined;
+    const ready: SpeakerAssetStatus = { ready: true, gpuBackend: 'metal' };
+    const runtime = {
+        getAssetStatus: vi.fn(async (signal?: AbortSignal) => {
+            probeSignal = signal;
+            await closed;
+            signal?.throwIfAborted();
+            return ready;
+        }),
+        prepareAssets: vi.fn(), analyze: vi.fn(),
+    };
+    const workflow = new SessionSpeakerWorkflow({} as SessionsService, runtime, vi.fn());
+    const pending = workflow.getAssetStatus();
+    const repeated = workflow.getAssetStatus();
+    const settled = vi.fn();
+    const stopping = workflow.stopAndWait().then(settled);
+    try {
+        expect(probeSignal?.aborted).toBe(true);
+        expect(runtime.getAssetStatus).toHaveBeenCalledOnce();
+        await Promise.resolve();
+        expect(settled).not.toHaveBeenCalled();
+        closeProbe();
+        await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+        await expect(repeated).rejects.toMatchObject({ name: 'AbortError' });
+        await stopping;
+        expect(settled).toHaveBeenCalledWith(true);
+        await expect(workflow.getAssetStatus()).resolves.toEqual(ready);
+        expect(runtime.getAssetStatus).toHaveBeenCalledTimes(2);
+    } finally {
+        closeProbe();
+        await Promise.allSettled([pending, repeated, stopping]);
+    }
+});
+
+it('closes a background probe before starting foreground preparation', async () => {
+    let closeProbe: () => void = () => undefined;
+    const closed = new Promise<void>((resolve) => { closeProbe = resolve; });
+    let probeSignal: AbortSignal | undefined;
+    const ready: SpeakerAssetStatus = { ready: true, gpuBackend: 'metal' };
+    const runtime = {
+        getAssetStatus: vi.fn((_signal?: AbortSignal) => Promise.resolve(ready)).mockImplementationOnce(async (signal) => {
+            probeSignal = signal;
+            await closed;
+            signal?.throwIfAborted();
+            return ready;
+        }),
+        prepareAssets: vi.fn(() => Promise.resolve()), analyze: vi.fn(),
+    };
+    const sessions = { getActiveSessionId: () => null } as unknown as SessionsService;
+    const workflow = new SessionSpeakerWorkflow(sessions, runtime, vi.fn());
+    const pending = workflow.getAssetStatus();
+    const preparing = workflow.prepareAssets();
+    try {
+        expect(probeSignal?.aborted).toBe(true);
+        expect(workflow.isBusy).toBe(true);
+        expect(runtime.prepareAssets).not.toHaveBeenCalled();
+        await expect(workflow.getAssetStatus()).rejects.toThrow('Another speaker operation');
+        closeProbe();
+        await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+        await expect(preparing).resolves.toEqual(ready);
+        expect(runtime.prepareAssets).toHaveBeenCalledOnce();
+        expect(workflow.isBusy).toBe(false);
+    } finally {
+        closeProbe();
+        await Promise.allSettled([pending, preparing]);
+    }
+});
+
+it('labels a microphone-only transcript without loading assets or invoking Nemotron', async () => {
     let session = sessionFor(microphoneTranscript);
     const sessions = {
         prepareSourceAudio: (audioPath: string) => Promise.resolve(audioPath),
@@ -47,7 +125,7 @@ it('labels a microphone-only transcript without loading assets or invoking sherp
     expect(result.transcript?.segments[0].speakerId).toBe(result.transcript?.speakers?.speakers[0].id);
 });
 
-it('analyzes only the selected system range with the system speaker count', async () => {
+it('analyzes only the selected system range and applies offsets once to labels and native provenance', async () => {
     let session: SessionDetails = {
         ...sessionFor({ ...microphoneTranscript,
             sourceRun: {
@@ -79,26 +157,45 @@ it('analyzes only the selected system range with the system speaker count', asyn
         }),
     } as unknown as SessionsService;
     const runtime = {
-        getAssetStatus: vi.fn(() => Promise.resolve({ cpuReady: true, cudaReady: false, cudaAvailable: false })),
+        getAssetStatus: vi.fn(() => Promise.resolve({ ready: true, gpuBackend: null })),
         prepareAssets: vi.fn(() => Promise.resolve()),
-        analyze: vi.fn((_path: string, _options: { startSec: number; endSec?: number; speakerCount?: number }) => Promise.resolve({
-            intervals: [{ startSec: 1, endSec: 2, speakerId: 'speaker_0' }],
-            backend: 'cpu' as const, fallbackUsed: false,
+        analyze: vi.fn((_path: string, _options: { startSec: number; endSec?: number; compute?: string }) => Promise.resolve({
+            ...analysisResult, intervals: [{ startSec: 1, endSec: 2, speakerId: 'speaker_0' }],
         })),
     };
     const workflow = new SessionSpeakerWorkflow(sessions, runtime, vi.fn());
 
-    const result = await workflow.analyze('one', { speakerCount: 2 });
+    const result = await workflow.analyze('one', { compute: 'cpu' });
 
     expect(runtime.analyze).toHaveBeenCalledTimes(1);
     expect(runtime.analyze.mock.calls[0][0]).toBe('system.wav');
-    expect(runtime.analyze.mock.calls[0][1]).toMatchObject({ startSec: 2, endSec: 6, speakerCount: 2 });
+    expect(runtime.analyze.mock.calls[0][1]).toMatchObject({ startSec: 2, endSec: 6,
+        compute: 'cpu' });
     expect(result.transcript?.speakers?.intervals).toMatchObject([
         { startSec: 5, endSec: 6 },
     ]);
     expect(result.transcript?.speakers?.speakers.map((speaker) => speaker.name)).toEqual([
         'Microphone speaker', 'Speaker 1',
     ]);
+    expect(result.transcript?.speakers?.provenance).toMatchObject({ engine: 'nemotron-3', backend: 'cpu', device: 'cpu',
+        assignmentPolicy: 'conservative-overlap-v1', range: { start: 4, end: 8 },
+        acousticIntervals: [{ startSec: 5, endSec: 6 }] });
+    expect(result.transcript?.speakers?.provenance).not.toHaveProperty('exclusiveIntervals');
+    expect(result.transcript?.speakers?.provenance).not.toHaveProperty('speakerCount');
+});
+
+it('rejects unsupported exact counts before downloading or replacing saved speaker results', async () => {
+    const session = { ...sessionFor({ version: 1, segments: [{ startSec: 0, endSec: 1, text: 'Hello' }] }),
+        sourceKind: 'imported' as const, tracks: undefined };
+    const replaceTranscriptIfCurrent = vi.fn();
+    const sessions = { getSession: () => Promise.resolve(session), getActiveSessionId: () => 'one',
+        getActiveSessionGeneration: () => 0, recognitionFingerprint: () => 'original', replaceTranscriptIfCurrent } as unknown as SessionsService;
+    const runtime = { getAssetStatus: () => Promise.resolve({ ready: false, gpuBackend: null }), prepareAssets: vi.fn(), analyze: vi.fn() };
+    await expect(new SessionSpeakerWorkflow(sessions, runtime, vi.fn()).analyze('one', { speakerCount: 2 }))
+        .rejects.toMatchObject({ code: 'SPEAKER_COUNT_UNSUPPORTED' });
+    expect(runtime.prepareAssets).not.toHaveBeenCalled();
+    expect(runtime.analyze).not.toHaveBeenCalled();
+    expect(replaceTranscriptIfCurrent).not.toHaveBeenCalled();
 });
 
 it('analyzes an imported mono source even when it sounds like a microphone', async () => {
@@ -118,9 +215,9 @@ it('analyzes an imported mono source even when it sounds like a microphone', asy
         }),
     } as unknown as SessionsService;
     const runtime = {
-        getAssetStatus: vi.fn(() => Promise.resolve({ cpuReady: true, cudaReady: false, cudaAvailable: false })),
+        getAssetStatus: vi.fn(() => Promise.resolve({ ready: true, gpuBackend: null })),
         prepareAssets: vi.fn(() => Promise.resolve()),
-        analyze: vi.fn((_path: string) => Promise.resolve({ intervals: [], backend: 'cpu' as const, fallbackUsed: false })),
+        analyze: vi.fn((_path: string) => Promise.resolve(analysisResult)),
     };
 
     await new SessionSpeakerWorkflow(sessions, runtime, vi.fn()).analyze('one', {});
@@ -195,7 +292,7 @@ it('does not replace an existing result after cancellation', async () => {
         replaceTranscriptIfCurrent,
     } as unknown as SessionsService;
     const runtime = {
-        getAssetStatus: vi.fn(() => Promise.resolve({ cpuReady: true, cudaReady: false, cudaAvailable: false })),
+        getAssetStatus: vi.fn(() => Promise.resolve({ ready: true, gpuBackend: null })),
         prepareAssets: vi.fn(() => Promise.resolve()),
         analyze: vi.fn(async (_path, _options, signal: AbortSignal) => {
             await new Promise<void>((_resolve, reject) => {

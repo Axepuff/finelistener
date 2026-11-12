@@ -30,7 +30,7 @@ contextBridge.exposeInMainWorld('api', {
             ipcRenderer.invoke('sessions:analyze-speakers', sessionId, options),
         stopSpeakerAnalysis: () => ipcRenderer.invoke('sessions:stop-speaker-analysis'),
         getSpeakerAssets: () => ipcRenderer.invoke('sessions:get-speaker-assets'),
-        prepareSpeakerAssets: (includeCuda: boolean) => ipcRenderer.invoke('sessions:prepare-speaker-assets', includeCuda),
+        prepareSpeakerAssets: () => ipcRenderer.invoke('sessions:prepare-speaker-assets'),
         renameSpeaker: (sessionId: string, speakerId: string, name: string) =>
             ipcRenderer.invoke('sessions:rename-speaker', sessionId, speakerId, name),
         assignSpeaker: (sessionId: string, span: SessionRawSpan | SessionSpeakerAssignment, speakerId: string | null) =>

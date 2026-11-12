@@ -335,8 +335,8 @@ it('rejects an invalid group member and stale generation without partially persi
     await service.saveTranscript(session.id, { version: 1, recognitionRevision: 'r', segments: raw, recognitionSegments: raw,
         speakers: { version: 1, recognitionRevision: 'r', generation: 'g', settings: {}, intervals: [],
             speakers: [{ id: 'g:0', name: 'One' }], corrections: [], status: 'completed' } });
-    const workflow = new SessionSpeakerWorkflow(service, { getAssetStatus: () => Promise.resolve({ cpuReady: false, cudaReady: false, cudaAvailable: false }),
-        prepareAssets: () => Promise.resolve(), analyze: () => Promise.resolve({ intervals: [], backend: 'cpu', fallbackUsed: false }) }, () => undefined);
+    const workflow = new SessionSpeakerWorkflow(service, { getAssetStatus: () => Promise.resolve({ ready: false, gpuBackend: null }),
+        prepareAssets: () => Promise.resolve(), analyze: () => Promise.reject(new Error('Unexpected analysis during speaker edits')) }, () => undefined);
     const first = { segmentId: 'a', startChar: 0, endChar: 3 };
     const second = { segmentId: 'b', startChar: 0, endChar: 3 };
     await expect(workflow.assign(session.id, { recognitionRevision: 'r', generation: 'g', spans: [first, { ...second, endChar: 20 }] }, 'g:0')).rejects.toThrow();

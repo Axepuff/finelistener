@@ -21,7 +21,7 @@ const VARIANT_CONFIG = {
         extraResource: [
             buildAssetsDir('mac-arm64', 'whisper'),
             path.resolve(__dirname, 'build-assets/models'),
-            buildAssetsDir('mac-arm64', 'community'),
+            buildAssetsDir('mac-arm64', 'nemotron'),
         ],
         asarUnpack: [
             '**/node_modules/ffmpeg-static/**',
@@ -45,7 +45,7 @@ const VARIANT_CONFIG = {
             buildAssetsDir('win-x64-gpu', 'whisper'),
             path.resolve(__dirname, 'build-assets/models'),
             buildAssetsDir('win-x64-gpu', 'miniaudio-loopback'),
-            buildAssetsDir('win-x64-gpu', 'community'),
+            buildAssetsDir('win-x64-gpu', 'nemotron'),
         ],
         asarUnpack: [
             '**/node_modules/ffmpeg-static/**',
@@ -69,7 +69,7 @@ const VARIANT_CONFIG = {
             buildAssetsDir('win-x64-cpu', 'whisper'),
             path.resolve(__dirname, 'build-assets/models'),
             buildAssetsDir('win-x64-cpu', 'miniaudio-loopback'),
-            buildAssetsDir('win-x64-cpu', 'community'),
+            buildAssetsDir('win-x64-cpu', 'nemotron'),
         ],
         asarUnpack: [
             '**/node_modules/ffmpeg-static/**',
@@ -244,7 +244,9 @@ module.exports = {
             NSAudioCaptureUsageDescription: 'This app records system audio for transcription.',
         },
         extraResource,
-        ignore: [...packagerIgnore, /[\\/]\.artifact-work(?:[\\/]|$)/, /[\\/]build-assets(?:[\\/]|$)/, /[\\/]outputs(?:[\\/]|$)/],
+        ignore: [...packagerIgnore, /[\\/]\.artifact-work(?:[\\/]|$)/, /[\\/]build-assets(?:[\\/]|$)/, /[\\/]outputs(?:[\\/]|$)/,
+            // SDK actions download build tools into the checkout; they are not application resources.
+            /[\\/]VULKAN_SDK(?:[\\/]|$)/, /[\\/]vulkan_sdk\.exe$/, /[\\/]cuda_installer-[^\\/]+(?:[\\/]|$)/],
     },
     rebuildConfig: {},
     makers,

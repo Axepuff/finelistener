@@ -57,18 +57,35 @@ export interface SessionSpeakerAssignment {
     spans: SessionRawSpan[];
 }
 
-export interface SessionSpeakerProvenance {
+interface SpeakerProvenanceBase {
     version: 1;
-    engine: 'pyannote-community-1';
     modelRevision: string;
     runtimeRevision: string;
     audioMode: SessionAudioMode;
-    backend: 'cpu' | 'cuda';
     range?: { start: number; end: number };
     speakerCount?: number;
+}
+
+// Retained only to read saved sessions; new analysis always uses Nemotron.
+interface LegacySpeakerProvenance extends SpeakerProvenanceBase {
+    engine: 'pyannote-community-1';
+    backend: 'cpu' | 'cuda';
     regularIntervals: SessionSpeakerInterval[];
     exclusiveIntervals: SessionSpeakerInterval[];
 }
+
+export interface NemotronSpeakerProvenance extends SpeakerProvenanceBase {
+    engine: 'nemotron-3';
+    backend: 'cpu' | 'vulkan' | 'metal';
+    device: 'cpu' | 'vulkan:0' | 'metal';
+    preset: 'v3-offline';
+    modelSha256: string;
+    runtimeSha256: string;
+    assignmentPolicy: 'conservative-overlap-v1';
+    acousticIntervals: SessionSpeakerInterval[];
+}
+
+export type SessionSpeakerProvenance = LegacySpeakerProvenance | NemotronSpeakerProvenance;
 
 export interface SessionSpeakerInterval {
     startSec: number;

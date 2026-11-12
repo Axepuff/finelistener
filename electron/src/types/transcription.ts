@@ -49,6 +49,7 @@ export interface SessionTranscribeOpts extends TranscribeOpts {
 }
 
 export interface AnalyzeSpeakersOptions {
+    compute?: SpeakerCompute;
     audioMode?: 'original' | 'optimized';
     recognitionRevision?: string;
     range?: Segment;
@@ -58,15 +59,28 @@ export interface AnalyzeSpeakersOptions {
 export interface SpeakerAnalysisProgressEvent {
     sessionId: string;
     percent?: number;
-    phase: 'preparing' | 'downloading' | 'converting' | 'analyzing' | 'saving' | 'fallback';
+    phase: 'preparing' | 'downloading' | 'converting' | 'analyzing' | 'saving';
     downloadedBytes?: number;
     totalBytes?: number;
 }
 
+export type SpeakerCompute = 'auto' | 'cpu' | 'gpu';
+export type SpeakerGpuBackend = 'vulkan' | 'metal';
+
 export interface SpeakerAssetStatus {
+    ready: boolean;
+    gpuBackend: SpeakerGpuBackend | null;
+    gpuAvailable?: boolean;
     downloadBytes?: number;
     runtimeRevision?: string;
-    cpuReady: boolean;
-    cudaReady: boolean;
-    cudaAvailable: boolean;
 }
+
+export const SPEAKER_ERROR_MESSAGES = {
+    SPEAKER_ASSETS_UNAVAILABLE: 'Speaker components are unavailable. Prepare or repair the component and try again.',
+    SPEAKER_GPU_UNAVAILABLE: 'GPU speaker analysis is unavailable. Select CPU or update your graphics driver.',
+    SPEAKER_GPU_FAILED: 'GPU speaker analysis could not finish. Select CPU or check your graphics driver and retry.',
+    SPEAKER_ANALYSIS_FAILED: 'Speaker analysis could not finish. Please try again.',
+    SPEAKER_COUNT_UNSUPPORTED: 'Nemotron counts speakers automatically. Clear the exact speaker count and try again.',
+} as const;
+
+export type SpeakerErrorCode = keyof typeof SPEAKER_ERROR_MESSAGES;

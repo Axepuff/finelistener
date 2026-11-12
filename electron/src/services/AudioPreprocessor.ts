@@ -413,7 +413,8 @@ export class AudioPreprocessor {
         const ffmpegExecutable = this.getFfmpegExecutable();
 
         return new Promise<string>((resolve, reject) => {
-            const ffmpeg = spawn(ffmpegExecutable, args, { windowsHide: true, signal });
+            const ffmpeg = spawn(ffmpegExecutable, ['-threads', '2', '-filter_threads', '2',
+                '-filter_complex_threads', '2', ...args], { windowsHide: true, signal });
             let stderr = '';
             let processError: Error | null = null;
 

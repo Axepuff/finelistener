@@ -43,6 +43,32 @@ export const AudioReady: Story = { parameters: { scenario: 'ready' } };
 export const Transcribing: Story = { parameters: { scenario: 'transcribing' } };
 export const TranscriptionError: Story = { parameters: { scenario: 'error', docs: { description: { story: 'An intentional adapter failure demonstrates the real transcription error state. The developer console contains the expected failure log.' } } } };
 export const LongTranscript: Story = { parameters: { scenario: 'long-transcript' } };
+export const Nemotron: Story = {
+    parameters: { scenario: 'nemotron' },
+    play: async ({ canvas, canvasElement }) => {
+        const page = within(canvasElement.ownerDocument.body);
+        await expect(canvas.queryByRole('textbox', { name: 'System or file speakers' })).not.toBeInTheDocument();
+        await expect(canvas.getByText('Nemotron 3 counts speakers automatically. Auto uses CPU when no GPU is available.')).toBeVisible();
+        await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
+        await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
+        await expect(page.queryByRole('textbox', { name: 'Speaker count' })).not.toBeInTheDocument();
+        await waitFor(() => expect(page.getByText('Nemotron 3 · VULKAN · Optimized')).toBeVisible());
+        await userEvent.click(page.getByRole('button', { name: 'Analyze speakers again' }));
+        await waitFor(() => expect(page.getByRole('dialog', { name: 'Replace speaker labels?' })).toBeVisible());
+        await userEvent.click(page.getByRole('button', { name: 'Cancel' }));
+    },
+};
+export const NemotronDownloading: Story = { parameters: { scenario: 'nemotron-downloading' } };
+export const NemotronAnalyzing: Story = {
+    parameters: { scenario: 'nemotron-analyzing' },
+    play: async ({ canvas }) => {
+        await expect(canvas.getByText('Analyzing speakers', { exact: true })).toBeVisible();
+        await expect(canvas.queryByText(/Analyzing speakers \(/)).not.toBeInTheDocument();
+        await userEvent.click(canvas.getByRole('button', { name: 'Cancel' }));
+        await expect(canvas.queryByText('Analyzing speakers', { exact: true })).not.toBeInTheDocument();
+    },
+};
+export const NemotronError: Story = { parameters: { scenario: 'nemotron-error' } };
 export const SpeakersBeforeAnalysis: Story = {
     play: async ({ canvas, canvasElement }) => {
         const page = within(canvasElement.ownerDocument.body);
@@ -52,13 +78,13 @@ export const SpeakersBeforeAnalysis: Story = {
         await expect(page.queryByRole('button', { name: 'Analyze speakers' })).not.toBeInTheDocument();
         await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
         await expect(page.getByRole('button', { name: 'Analyze speakers' })).toBeEnabled();
-        const count = page.getByRole('textbox', { name: 'Speaker count' });
-        await expect(count).toHaveAttribute('placeholder', 'Auto');
-        await userEvent.type(count, '3');
+        const device = page.getByRole('textbox', { name: 'Speaker analysis device' });
+        await expect(device).toHaveValue('Auto (GPU when available)');
+        await userEvent.click(device);
+        await userEvent.click(page.getByRole('option', { name: /^CPU$/ }));
         await userEvent.keyboard('{Escape}');
         await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
-        await expect(page.getByRole('textbox', { name: 'Speaker count' })).toHaveValue('3');
-        await userEvent.clear(page.getByRole('textbox', { name: 'Speaker count' }));
+        await expect(page.getByRole('textbox', { name: 'Speaker analysis device' })).toHaveValue('CPU');
         await userEvent.keyboard('{Escape}');
         await expect(canvas.getByRole('button', { name: 'Copy transcript' })).toBeDisabled();
         await expect(canvas.getByRole('button', { name: 'Save .txt' })).toBeDisabled();
@@ -140,7 +166,7 @@ export const NarrowSpeakers: Story = {
         await expect(button.right).toBeLessThanOrEqual(pane.right);
         await userEvent.click(settings);
         const page = within(canvasElement.ownerDocument.body);
-        await waitFor(() => expect(page.getByRole('textbox', { name: 'Speaker count' })).toBeVisible());
+        await waitFor(() => expect(page.getByRole('textbox', { name: 'Speaker analysis device' })).toBeVisible());
         await expect(page.getByRole('button', { name: 'Merge speakers' })).toBeEnabled();
     },
 };

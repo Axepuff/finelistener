@@ -3,19 +3,31 @@ App that converts audio to txt
 
 ## Audio and speaker labels
 
-Sessions default to Optimized audio. Original/Optimized is remembered per session and applies to playback and subsequent recognition/analysis; original recordings and existing transcripts are preserved. Transcribe saves recognition before local Community-1 speaker analysis. Speaker labels default on, with a remembered opt-out and optional exact system/file speaker count. Microphone-only sessions need no speaker model.
+Sessions default to Optimized audio. Original/Optimized is remembered per session and applies to playback and subsequent recognition/analysis; original recordings and existing transcripts are preserved. Transcribe saves Whisper recognition before local speaker analysis. Speaker labels default on, with a remembered opt-out. Microphone-only sessions use a fixed identity without downloading or running a speaker model.
 
 Plain Text contains speech only. Timecodes groups adjacent same-speaker/source fragments across gaps up to five seconds; expand a turn to edit original fragments. Search, copy and TXT export use the selected view. A failed or stopped analysis retains saved text and can be retried separately.
 
-Community-1 runs in a private Python worker. Packaged builds download a pinned component on first use and reuse it offline after installation; size/status and cancellation are available in the UI. System Python and Hugging Face login are not required for inference. CUDA initialization failures retry once on CPU and remain visible.
+All builds use **Nemotron 3 Diarization Q8 with NeMo-Speech.cpp 0.3.0**. Speaker count is automatic.
 
-## Preparing Community-1 release assets
+| Build | Speaker analysis devices |
+| --- | --- |
+| Windows x64 CPU | CPU; no graphics card required |
+| Windows x64 GPU | Vulkan GPU or CPU |
+| macOS Apple Silicon (arm64) | Metal GPU or CPU |
 
-Use Python 3.12 with pip to run scripts/prepare-community.py for win-x64-cpu, win-x64-gpu or mac-arm64 on the corresponding host. The script acquires hash-pinned private Python archives and wheels; model acquisition requires maintainer-approved gated access through HF_TOKEN or an already acquired --model-dir. Only pinned model files enter artifacts. The worker never receives acquisition credentials.
+The remembered **Speaker analysis device** setting applies to automatic analysis and standalone retry. Auto selects an available GPU before inference, otherwise CPU. CPU forces CPU even on a GPU-capable computer; GPU requires a compatible device. An inference failure preserves the saved transcript and existing labels. A failed GPU run is not silently retried on CPU: select CPU and retry explicitly.
 
-The build lock is scripts/community-assets.json. Build resources contain the component manifest; oversized runtime/model archives are release-associated downloads, split when needed. npm run measure:community:installer -- win-x64-cpu (or win-x64-gpu) produces matched Windows baseline/component installer measurements and enforces the 200000000-byte addition limit. scripts/verify-community-release.py validates components and all three platform manifests before release upload.
+Packaged builds download a pinned component on first use and reuse it offline after verification; size, preparation, progress and cancellation are available in the UI. System Python, CUDA Toolkit and Hugging Face login are not required for speaker inference. Native overlapping intervals remain acoustic evidence; ambiguous text retains Unknown. The sherpa and Community runtimes, workers and build dependencies have been removed. Their saved results remain readable without reanalysis or deleting user data.
 
-See [Community-1 acceptance](docs/testing/community-1-acceptance.md) for observed application checks, artifact sizes and unresolved clean-install, platform, listening and redistribution gates.
+## Preparing speaker release assets
+
+Each `prebuild:assets:*` command runs `python scripts/prepare-nemotron.py <win-x64-cpu|win-x64-gpu|mac-arm64>`. The lock is `scripts/nemotron-assets.json`. Python 3.12 and its standard library are sufficient for acquisition; no gated credentials, pip packages or Python runtime are shipped. Windows preparation enables UTF-8 paths in the executable manifest (Windows 10 1903 or later) and records the modification. macOS preparation preserves executable permissions and copies the upstream dylib aliases as regular files. Runtime libraries stay isolated from Whisper.
+
+Build resources contain manifests and notices; runtime/model ZIPs are release-associated downloads (about 110 MB CPU, 124 MB Vulkan, 117 MB Metal). `npm run measure:speaker:installer -- win-x64-gpu` (or `win-x64-cpu`) produces matched Windows baseline/component installer measurements and enforces the 200000000-byte addition limit. `scripts/verify-speaker-release.py` validates all three platform manifests and every archive member before upload. The Nemotron components PR workflow prepares each platform and runs `scripts/smoke-nemotron.py` against the extracted archive on its target OS. The smoke check uses only three seconds of generated audio on CPU and, when available, GPU; it is not a performance benchmark.
+
+The hosted macOS workflow explicitly uses `--cpu-only`: the pinned upstream runtime crashes in the VM's paravirtualized Metal driver during inference. CPU and Metal were also checked on a physical Apple M1 with macOS 15.7.3; the user's Metal benchmark processed 2,983.168 seconds of audio in 15.634 seconds. See the acceptance report for scope and results. First-time Metal capability detection can take about a minute while the OS compiles shaders.
+
+See [Nemotron acceptance](docs/testing/nemotron-acceptance.md), [ADR 0008](docs/adr/0008-nemotron-vulkan-speaker-analysis.md), and the historical [Community-1 acceptance](docs/testing/community-1-acceptance.md) for evidence and release checks.
 
 ## TypeScript toolchain
 
