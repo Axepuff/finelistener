@@ -107,6 +107,7 @@ jobs:
         with:
           cuda: '12.4.0'
           method: network
+          sub-packages: '["nvcc", "cudart", "thrust", "cublas", "cublas_dev", "visual_studio_integration"]'
 
       - name: Install Vulkan SDK
         uses: humbletim/install-vulkan-sdk@v1.2
@@ -122,6 +123,10 @@ jobs:
 
       - name: Build whisper.cpp (CUDA+Vulkan), miniaudio, and prepare models
         shell: bash
+        env:
+          # CUDA 12.4 supports MSVC 192x/193x; the runner's default 194x compiler is newer.
+          CMAKE_GENERATOR: Visual Studio 17 2022
+          CMAKE_GENERATOR_TOOLSET: v142
         run: npm run prebuild:assets:win-gpu
 
       - name: Build and package
