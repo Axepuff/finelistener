@@ -1,5 +1,12 @@
 {
-  "version": "nemotron-3-nemo030-q8-r2",
+  "version": "nemotron-3-nemo030-q8-r3",
+  "vulkanLoader": {
+    "name": "vulkan-runtime-1.4.363.0.zip",
+    "url": "https://sdk.lunarg.com/sdk/download/1.4.363.0/windows/VulkanRT-X64-1.4.363.0-Components.zip",
+    "bytes": 18211191,
+    "sha256": "a25a927aa8b9f0371048f1861cf88ac3b9bc9b1fb332c42d897c8ab32695769a",
+    "prefix": "VulkanRT-X64-1.4.363.0-Components/"
+  },
   "model": {
     "name": "Nemotron-3-Diarization.q8_0.gguf",
     "revision": "52a432672732425e4c19765b9fec9b5810e6f4ba",

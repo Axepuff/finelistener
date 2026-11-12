@@ -34,7 +34,12 @@ def main():
         env = {key: os.environ[key] for key in ('SystemRoot', 'WINDIR', 'USERPROFILE', 'LOCALAPPDATA', 'HOME') if key in os.environ}
         env.update(TEMP=temporary, TMP=temporary, OMP_NUM_THREADS='2', OMP_THREAD_LIMIT='2',
                    OPENBLAS_NUM_THREADS='2', MKL_NUM_THREADS='2', GGML_VK_DISABLE_GRAPH_OPTIMIZE='1',
-                   PATH=str(runtime / 'bin') + os.pathsep + (str(Path(env['SystemRoot']) / 'System32') if sys.platform == 'win32' else '/usr/bin:/bin'))
+                   PATH=(os.pathsep.join([str(runtime / 'bin'), str(Path(env['SystemRoot']) / 'System32'),
+                                         env['SystemRoot'], str(runtime / 'vulkan-loader')])
+                         if sys.platform == 'win32' else '/usr/bin:/bin'))
+        if sys.platform == 'win32' and args.variant == 'win-x64-gpu':
+            print(json.dumps({'variant': args.variant, 'systemVulkanLoaderAvailable':
+                              (Path(env['SystemRoot']) / 'System32/vulkan-1.dll').is_file()}), flush=True)
         binary = str(runtime / manifest['executable'])
         # Metal compiles its embedded shaders on the first launch, including during doctor.
         doctor = subprocess.run([binary, '--json', 'doctor'], cwd=work, env=env,

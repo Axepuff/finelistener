@@ -102,6 +102,15 @@ def main():
     (stage / 'model').mkdir()
     shutil.copyfile(model, stage / 'model' / lock['model']['name'])
     (stage / 'notices').mkdir()
+    if args.variant == 'win-x64-gpu':
+        loader_entry = lock['vulkanLoader']
+        with zipfile.ZipFile(acquire(loader_entry, args.cache)) as loader:
+            for source, destination in [('x64/vulkan-1.dll', 'vulkan-loader/vulkan-1.dll'),
+                                        ('VulkanRT-License.txt', 'notices/VulkanRT-License.txt')]:
+                target = stage / destination
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with loader.open(loader_entry['prefix'] + source) as source_file, target.open('wb') as target_file:
+                    shutil.copyfileobj(source_file, target_file)
     for name, entry in lock['notices'].items():
         source = ROOT / 'resources/nemotron/notices' / name
         checked(source, entry)

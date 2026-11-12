@@ -7,7 +7,7 @@ import type { SpeakerAnalysisProgress } from './SpeakerDiarizationService';
 import { runSpeakerProcess, SpeakerAnalysisError } from './speakerProcess';
 
 export const NEMOTRON_COMPONENT = {
-    version: 'nemotron-3-nemo030-q8-r2',
+    version: 'nemotron-3-nemo030-q8-r3',
     modelRevision: '52a432672732425e4c19765b9fec9b5810e6f4ba',
     modelSha256: '08456d9e22cd9a323c0364d98375f3746d6e68507ebb705cd46438c534c7a3a1',
     model: 'model/Nemotron-3-Diarization.q8_0.gguf',
@@ -43,7 +43,9 @@ const environment = (root: string): NodeJS.ProcessEnv => {
         ...(process.platform === 'win32' ? { SystemRoot: systemRoot, WINDIR: systemRoot,
             USERPROFILE: process.env.USERPROFILE, LOCALAPPDATA: process.env.LOCALAPPDATA } : { HOME: os.homedir() }),
         TEMP: os.tmpdir(), TMP: os.tmpdir(),
-        PATH: process.platform === 'win32' ? [path.join(root, 'bin'), path.join(systemRoot, 'System32'), systemRoot].join(path.delimiter) : '/usr/bin:/bin',
+        // Prefer the driver's system Vulkan loader; the pinned fallback also lets CPU start without a GPU driver.
+        PATH: process.platform === 'win32' ? [path.join(root, 'bin'), path.join(systemRoot, 'System32'), systemRoot,
+            path.join(root, 'vulkan-loader')].join(path.delimiter) : '/usr/bin:/bin',
         OMP_NUM_THREADS: '2', OMP_THREAD_LIMIT: '2', OPENBLAS_NUM_THREADS: '2', MKL_NUM_THREADS: '2',
         GGML_VK_DISABLE_GRAPH_OPTIMIZE: '1',
     };
