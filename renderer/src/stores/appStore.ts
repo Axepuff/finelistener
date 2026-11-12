@@ -723,17 +723,18 @@ export class AppStore {
         return commandSuccess(undefined);
     }
 
-    async revealSessionsFolder(): Promise<CommandResult> {
+    async revealSessionFolder(sessionId: string): Promise<CommandResult> {
         if (!this.adapter) return commandFailure('Sessions are not available.');
 
         try {
-            await this.adapter.revealSessionsFolder();
+            const opened = await this.adapter.revealSessionFolder(sessionId);
+            if (!opened) return commandFailure('Failed to open the session folder.');
 
             return commandSuccess(undefined);
         } catch (error: unknown) {
-            console.error('Failed to reveal sessions folder', error);
+            console.error('Failed to reveal session folder', error);
 
-            return commandFailure('Failed to open the sessions folder.');
+            return commandFailure('Failed to open the session folder.');
         }
     }
 

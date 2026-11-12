@@ -70,7 +70,7 @@ export const createFakeRendererAdapter = (
         renameSpeaker: unavailable,
         assignSpeaker: unavailable,
         mergeSpeakers: unavailable,
-        revealSessionsFolder: () => Promise.resolve(true),
+        revealSessionFolder: () => Promise.resolve(true),
         transcribe: () => Promise.resolve(''),
         transcribeSession: unavailable,
         stopTranscription: () => Promise.resolve(false),

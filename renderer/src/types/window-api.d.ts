@@ -35,7 +35,7 @@ declare global {
                 renameSpeaker: (sessionId: string, speakerId: string, name: string) => Promise<SessionDetails>;
                 assignSpeaker: (sessionId: string, span: SessionRawSpan | SessionSpeakerAssignment, speakerId: string | null) => Promise<SessionDetails>;
                 mergeSpeakers: (sessionId: string, sourceId: string | null, targetId: string | null) => Promise<SessionDetails>;
-                revealFolder: () => Promise<boolean>;
+                revealFolder: (sessionId: string) => Promise<boolean>;
             };
             transcribeStream: (audioPath: string, opts: TranscribeOpts) => Promise<string>;
             saveText: (content: string) => Promise<{ ok: boolean; path?: string; error?: string }>;

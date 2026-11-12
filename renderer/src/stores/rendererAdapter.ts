@@ -28,7 +28,7 @@ export interface RendererAdapter {
     renameSpeaker: (sessionId: string, speakerId: string, name: string) => Promise<SessionDetails>;
     assignSpeaker: (sessionId: string, span: SessionRawSpan | SessionSpeakerAssignment, speakerId: string | null) => Promise<SessionDetails>;
     mergeSpeakers: (sessionId: string, sourceId: string | null, targetId: string | null) => Promise<SessionDetails>;
-    revealSessionsFolder: () => Promise<boolean>;
+    revealSessionFolder: (sessionId: string) => Promise<boolean>;
     transcribe: (audioPath: string, options: TranscribeOpts) => Promise<string>;
     transcribeSession: (sessionId: string, options: SessionTranscribeOpts) => Promise<SessionDetails>;
     stopTranscription: () => Promise<boolean>;
@@ -88,7 +88,7 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
         renameSpeaker: (sessionId, speakerId, name) => api.sessions.renameSpeaker(sessionId, speakerId, name),
         assignSpeaker: (sessionId, span, speakerId) => api.sessions.assignSpeaker(sessionId, span, speakerId),
         mergeSpeakers: (sessionId, sourceId, targetId) => api.sessions.mergeSpeakers(sessionId, sourceId, targetId),
-        revealSessionsFolder: () => api.sessions.revealFolder(),
+        revealSessionFolder: (sessionId) => api.sessions.revealFolder(sessionId),
         transcribe: (audioPath, options) => api.transcribeStream(audioPath, options),
         transcribeSession: (sessionId, options) => api.transcribeSession(sessionId, options),
         stopTranscription: () => api.stopTranscription(),

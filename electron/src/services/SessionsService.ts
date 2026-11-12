@@ -155,12 +155,10 @@ export class SessionsService {
         return resolvedTarget;
     }
 
-    public async revealSessionsFolder(): Promise<boolean> {
-        const sessionsRoot = this.getSessionsRootDir();
-
-        await fs.mkdir(sessionsRoot, { recursive: true });
-
-        const result = await shell.openPath(sessionsRoot);
+    public async revealSessionFolder(sessionId: string): Promise<boolean> {
+        const sessionDir = this.resolveSessionDir(sessionId);
+        const result = await shell.openPath(sessionDir);
+        if (result) console.error('Failed to open session folder', result);
 
         return result === '';
     }

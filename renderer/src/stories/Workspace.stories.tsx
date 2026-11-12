@@ -170,3 +170,16 @@ export const NarrowSpeakers: Story = {
         await expect(page.getByRole('button', { name: 'Merge speakers' })).toBeEnabled();
     },
 };
+
+export const SessionFolder: Story = {
+    play: async ({ canvas, canvasElement, loaded }) => {
+        const { store } = loaded.workspace as StoryWorkspace;
+        store.clearWorkspace();
+        await userEvent.click(canvas.getByRole('button', { name: 'Session actions' }));
+        const page = within(canvasElement.ownerDocument.body);
+        await waitFor(() => expect(page.getByRole('menuitem', { name: 'Reveal session folder' })).toBeVisible());
+        await userEvent.click(page.getByRole('menuitem', { name: 'Reveal session folder' }));
+        await waitFor(() => expect(page.queryByRole('menuitem', { name: 'Reveal session folder' })).not.toBeInTheDocument());
+        await expect(store.workspace.activeSessionId).toBeNull();
+    },
+};
