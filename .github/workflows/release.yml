@@ -135,14 +135,28 @@ jobs:
 
       - run: npm ci
 
-      - name: Build whisper.cpp (CUDA+Vulkan), miniaudio, and prepare models
+      - name: Cache the pinned Whisper GPU build
+        id: whisper-gpu-cache
+        uses: actions/cache@v4
+        with:
+          path: build-assets/win-x64-gpu/whisper
+          key: whisper-gpu-v1-30c5194c-msvc142-cuda124-vulkan143281-${{ hashFiles('scripts/build-whisper.sh', 'scripts/patch-whisper-timestamps.cjs') }}
+
+      - name: Build whisper.cpp (CUDA+Vulkan)
+        if: steps.whisper-gpu-cache.outputs.cache-hit != 'true'
         shell: pwsh
         env:
           # CUDA 12.4 supports MSVC 192x/193x; the runner's default 194x compiler is newer.
           CMAKE_GENERATOR: Ninja
           CC: cl
           CXX: cl
-        run: npm run prebuild:assets:win-gpu
+          # Upstream templates repeat unused-variable and intentional infinity-conversion warnings for every GPU architecture.
+          CUDAFLAGS: --diag-suppress=177,221,550
+        run: bash scripts/build-whisper.sh win-x64-gpu
+
+      - name: Build miniaudio and prepare models and Nemotron
+        shell: bash
+        run: bash scripts/build-miniaudio.sh win-x64-gpu && bash scripts/prepare-models.sh && python scripts/prepare-nemotron.py win-x64-gpu
 
       - name: Build and package
         shell: bash

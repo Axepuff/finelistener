@@ -47,7 +47,7 @@ case "$VARIANT" in
             -DGGML_NATIVE=OFF \
             -DGGML_CUDA=ON \
             -DGGML_VULKAN=ON
-        cmake --build "$BUILD_DIR" --config Release -j "${NUMBER_OF_PROCESSORS:-4}"
+        cmake --build "$BUILD_DIR" --config Release --target whisper-server -j "${NUMBER_OF_PROCESSORS:-4}"
 
         cp "$BUILD_DIR/bin/Release/whisper-server.exe" "$OUTPUT_DIR/" 2>/dev/null \
             || cp "$BUILD_DIR/bin/whisper-server.exe" "$OUTPUT_DIR/"
