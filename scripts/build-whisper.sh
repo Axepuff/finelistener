@@ -44,6 +44,7 @@ case "$VARIANT" in
         echo "Building whisper.cpp for Windows x64 (CUDA + Vulkan)..."
         cmake -S "$WHISPER_SRC" -B "$BUILD_DIR" \
             -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=OFF \
             -DGGML_CUDA=ON \
             -DGGML_VULKAN=ON
         cmake --build "$BUILD_DIR" --config Release -j "${NUMBER_OF_PROCESSORS:-4}"
@@ -58,6 +59,7 @@ case "$VARIANT" in
         echo "Building whisper.cpp for Windows x64 (CPU only)..."
         cmake -S "$WHISPER_SRC" -B "$BUILD_DIR" \
             -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=OFF \
             -DGGML_CUDA=OFF \
             -DGGML_VULKAN=OFF
         cmake --build "$BUILD_DIR" --config Release -j "${NUMBER_OF_PROCESSORS:-4}"

@@ -107,13 +107,27 @@ jobs:
         with:
           cuda: '12.4.0'
           method: network
-          sub-packages: '["nvcc", "cudart", "thrust", "cublas", "cublas_dev", "visual_studio_integration"]'
+          sub-packages: '["nvcc", "cudart", "thrust", "cublas", "cublas_dev"]'
 
       - name: Install Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@v1.2
+        shell: pwsh
+        run: |
+          $sdkRoot = Join-Path $env:RUNNER_TEMP 'VulkanSDK'
+          $installer = Join-Path $env:RUNNER_TEMP 'vulkan-sdk.exe'
+          Invoke-WebRequest 'https://sdk.lunarg.com/sdk/download/1.4.328.1/windows/vulkan_sdk.exe' -OutFile $installer
+          & $installer --root $sdkRoot --accept-licenses --default-answer --confirm-command install copy_only=1
+          if ($LASTEXITCODE -ne 0) { throw 'Vulkan SDK installation failed' }
+          foreach ($file in @('Include/vulkan/vulkan.h', 'Lib/vulkan-1.lib', 'Bin/glslc.exe')) {
+            if (!(Test-Path (Join-Path $sdkRoot $file))) { throw "Missing Vulkan SDK file: $file" }
+          }
+          "VULKAN_SDK=$sdkRoot" >> $env:GITHUB_ENV
+          "$sdkRoot/Bin" >> $env:GITHUB_PATH
+
+      - name: Select the CUDA-compatible C++ compiler
+        uses: ilammy/msvc-dev-cmd@v1
         with:
-          version: 1.4.328.1
-          cache: true
+          arch: x64
+          toolset: '14.29'
 
       - uses: actions/setup-python@v5
         with:
@@ -122,11 +136,12 @@ jobs:
       - run: npm ci
 
       - name: Build whisper.cpp (CUDA+Vulkan), miniaudio, and prepare models
-        shell: bash
+        shell: pwsh
         env:
           # CUDA 12.4 supports MSVC 192x/193x; the runner's default 194x compiler is newer.
-          CMAKE_GENERATOR: Visual Studio 17 2022
-          CMAKE_GENERATOR_TOOLSET: v142
+          CMAKE_GENERATOR: Ninja
+          CC: cl
+          CXX: cl
         run: npm run prebuild:assets:win-gpu
 
       - name: Build and package
