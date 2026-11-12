@@ -14,6 +14,8 @@ Matched r3 Windows GPU Squirrel installers measured 345,259,520 bytes without an
 
 Typecheck, lint, build and all 247 unit tests passed after the r3 change. Renderer behavior is unchanged from the 17 passing Storybook tests below. The CPU and macOS runtime binaries and model are unchanged from r2, including the physical M1 checks. The sections below retain the earlier r2/r1 measurements with their original scope.
 
+The review follow-up bounds every capability probe to 10 seconds on Windows or 180 seconds on macOS, including probes before analysis, without applying that deadline to inference. Background status requests share an owned probe; shutdown and foreground speaker work cancel it and await cleanup, and IPC rejects new probes during shutdown. Six regression cases cover these contracts, including failures reproduced before the fix. Typecheck, lint, build and all 253 unit tests passed. Native component payloads and renderer UI are unchanged.
+
 ## CPU and Apple Silicon extension
 
 The current implementation uses Nemotron only. The component lock provides Windows CPU, Windows Vulkan (also CPU-capable), and Apple Silicon Metal (also CPU-capable) runtimes. Auto chooses an available GPU before inference, otherwise CPU; the persisted CPU option forces CPU on either GPU build. Explicit GPU failures preserve prior results and require an explicit retry. Community and sherpa code, workers, acquisition locks and release resources are removed; only old saved-session provenance remains readable.

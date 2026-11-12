@@ -51,12 +51,15 @@ const environment = (root: string): NodeJS.ProcessEnv => {
     };
 };
 
-export const inspectNemotron = async (root: string, variant: NemotronVariant, signal: AbortSignal): Promise<{ gpuAvailable: boolean }> => {
+export const inspectNemotron = async (root: string, variant: NemotronVariant, signal?: AbortSignal): Promise<{ gpuAvailable: boolean }> => {
     const runtime = NEMOTRON_RUNTIMES[variant];
+    // Initial Metal probes compile embedded shaders; bound detection independently of inference.
+    const timeout = AbortSignal.timeout(variant === 'mac-arm64' ? 180_000 : 10_000);
+    const probeSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
     try {
         // Doctor exits 1 when an accelerator is missing, even though CPU inference is available.
         const output = await runSpeakerProcess(path.join(root, runtime.executable),
-            ['--json', 'doctor'], signal, root, environment(root), 100_000, true, [0, 1]);
+            ['--json', 'doctor'], probeSignal, root, environment(root), 100_000, true, [0, 1]);
         const status = JSON.parse(output.stdout) as {
             version?: string; features?: { backend_vulkan?: boolean; backend_cuda?: boolean; backend_metal?: boolean };
             devices?: Array<{ name?: string; type?: string }>; driver_runtime_compatible?: boolean;
@@ -71,7 +74,7 @@ export const inspectNemotron = async (root: string, variant: NemotronVariant, si
         return { gpuAvailable: Boolean(runtime.gpuBackend && status.driver_runtime_compatible && gpu
             && (runtime.gpuBackend !== 'vulkan' || gpu.name === 'Vulkan0')) };
     } catch (error) {
-        signal.throwIfAborted();
+        signal?.throwIfAborted();
         throw new SpeakerAnalysisError('SPEAKER_ASSETS_UNAVAILABLE', { cause: error });
     }
 };

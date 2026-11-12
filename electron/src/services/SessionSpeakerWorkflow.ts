@@ -23,9 +23,15 @@ interface SpeakerOperation {
     committed: boolean;
 }
 
+interface SpeakerStatusCheck {
+    controller: AbortController;
+    result: Promise<SpeakerAssetStatus>;
+}
+
 export class SessionSpeakerWorkflow {
     private active: SpeakerOperation | null = null;
     private finished: Promise<void> = Promise.resolve();
+    private statusCheck: SpeakerStatusCheck | null = null;
 
     constructor(
         private readonly sessions: SessionsService,
@@ -38,7 +44,22 @@ export class SessionSpeakerWorkflow {
     }
 
     public getAssetStatus(): Promise<SpeakerAssetStatus> {
-        return this.runtime.getAssetStatus();
+        if (this.active) return Promise.reject(new Error('Another speaker operation is in progress'));
+        if (!this.statusCheck) {
+            const controller = new AbortController();
+            const result = this.runtime.getAssetStatus(controller.signal).finally(() => { this.statusCheck = null; });
+            this.statusCheck = { controller, result };
+        }
+        return this.statusCheck.result;
+    }
+
+    private async stopStatusCheck(): Promise<boolean> {
+        const check = this.statusCheck;
+        if (!check) return false;
+        check.controller.abort();
+        // The status request owns its error; stopping must still await native process cleanup.
+        await Promise.allSettled([check.result]);
+        return true;
     }
 
     private async runExclusive<T>(work: (signal: AbortSignal, markCommitted: () => void) => Promise<T>): Promise<T> {
@@ -48,6 +69,8 @@ export class SessionSpeakerWorkflow {
         let finish!: () => void;
         this.finished = new Promise<void>((resolve) => { finish = resolve; });
         try {
+            await this.stopStatusCheck();
+            operation.controller.signal.throwIfAborted();
             return await work(operation.controller.signal, () => { operation.committed = true; });
         } finally {
             this.active = null;
@@ -57,10 +80,11 @@ export class SessionSpeakerWorkflow {
 
     public async stopAndWait(): Promise<boolean> {
         const operation = this.active;
-        if (!operation) return false;
+        const stoppingStatus = this.stopStatusCheck();
+        if (!operation) return stoppingStatus;
         const finished = this.finished;
         if (!operation.committed) operation.controller.abort();
-        await finished;
+        await Promise.all([finished, stoppingStatus]);
         return !operation.committed;
     }
 

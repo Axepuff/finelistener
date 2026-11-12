@@ -8,6 +8,19 @@ vi.mock('../services/SpeakerDiarizationService', () => ({
     SpeakerDiarizationService: class {},
 }));
 
+it('does not launch a status probe after shutdown blocks new work', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    const ipc = { handle: (channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler);
+    } } as unknown as IpcMain;
+    const workflow = registerSpeakerController(ipc, () => null, {} as SessionsService, () => true);
+    const probe = vi.spyOn(workflow, 'getAssetStatus').mockResolvedValue({ ready: true, gpuBackend: 'metal' });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(handlers.get('sessions:get-speaker-assets')!()).rejects.toThrow('Speaker action failed.');
+    expect(probe).not.toHaveBeenCalled();
+});
+
 it.each([
     [new Error('C:\\private\\recording.wav is unavailable'), 'Speaker action failed.'],
     [new SpeakerAnalysisError('SPEAKER_GPU_UNAVAILABLE', { cause: new Error('C:\\private\\runtime: missing driver') }), 'SPEAKER_GPU_UNAVAILABLE'],

@@ -34,6 +34,84 @@ beforeEach(async () => {
 
 afterEach(async () => { await fs.rm(directory, { recursive: true, force: true }); });
 
+it.each([
+    ['win-x64-gpu', 10_000],
+    ['mac-arm64', 180_000],
+] as const)('bounds the %s doctor before CPU analysis and waits for it to close', async (variant, deadline) => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
+        const timeout = new AbortController();
+        setTimeout(() => timeout.abort(), milliseconds);
+        return timeout.signal;
+    });
+    let probeSignal: AbortSignal | undefined;
+    let closeProbe: () => void = () => undefined;
+    let notifyStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => { notifyStarted = resolve; });
+    vi.mocked(runSpeakerProcess).mockImplementationOnce((_binary, _args, signal) => {
+        probeSignal = signal;
+        notifyStarted();
+        return new Promise((_resolve, reject) => { closeProbe = () => reject(new Error('Doctor closed')); });
+    });
+    const settled = vi.fn();
+    const pending = analyzeNemotron(directory, variant, 'cpu', wav, controller.signal).then(settled, settled);
+    try {
+        await started;
+        await vi.advanceTimersByTimeAsync(deadline - 1);
+        expect(probeSignal?.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(probeSignal?.aborted).toBe(true);
+        expect(settled).not.toHaveBeenCalled();
+        closeProbe();
+        await pending;
+        expect(settled).toHaveBeenCalledWith(expect.objectContaining({ code: 'SPEAKER_ASSETS_UNAVAILABLE' }));
+        expect(runSpeakerProcess).toHaveBeenCalledOnce();
+        expect(controller.signal.aborted).toBe(false);
+    } finally {
+        controller.abort();
+        closeProbe();
+        await pending;
+        vi.useRealTimers();
+    }
+});
+
+it('does not apply the completed doctor deadline to inference', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
+        const timeout = new AbortController();
+        setTimeout(() => timeout.abort(), milliseconds);
+        return timeout.signal;
+    });
+    const nativeProcess = vi.mocked(runSpeakerProcess).getMockImplementation()!;
+    let finishInference: () => void = () => undefined;
+    const inference = new Promise<void>((resolve) => { finishInference = resolve; });
+    let notifyStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => { notifyStarted = resolve; });
+    let inferenceSignal: AbortSignal | undefined;
+    vi.mocked(runSpeakerProcess).mockImplementation(async (...args) => {
+        if (!args[1].includes('doctor')) {
+            inferenceSignal = args[2];
+            notifyStarted();
+            await inference;
+            inferenceSignal.throwIfAborted();
+        }
+        return nativeProcess(...args);
+    });
+    const pending = analyzeNemotron(directory, 'win-x64-gpu', 'cpu', wav, new AbortController().signal);
+    try {
+        await started;
+        await vi.advanceTimersByTimeAsync(180_000);
+        expect(inferenceSignal?.aborted).toBe(false);
+        finishInference();
+        await expect(pending).resolves.toMatchObject({ backend: 'cpu' });
+    } finally {
+        finishInference();
+        await Promise.allSettled([pending]);
+        vi.useRealTimers();
+    }
+});
+
 it('preserves overlapping native evidence, arbitrary IDs and pinned GPU provenance in one stateful run', async () => {
     const progress = vi.fn();
     const result = await analyzeNemotron(directory, 'win-x64-gpu', 'gpu', wav, new AbortController().signal, progress);

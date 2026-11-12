@@ -42,7 +42,10 @@ export function registerSpeakerController(
         }
     };
 
-    ipc.handle('sessions:get-speaker-assets', () => safe('asset status', () => workflow.getAssetStatus()));
+    ipc.handle('sessions:get-speaker-assets', () => safe('asset status', () => {
+        ensureAvailable();
+        return workflow.getAssetStatus();
+    }));
     ipc.handle('sessions:prepare-speaker-assets', () => safe('asset preparation', () => {
         ensureAvailable();
         return workflow.prepareAssets();

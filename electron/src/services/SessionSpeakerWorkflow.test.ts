@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import type { SessionDetails, SessionTranscriptV1 } from '../types/sessions';
+import type { SpeakerAssetStatus } from '../types/transcription';
 import type { SessionsService } from './SessionsService';
 import { SessionSpeakerWorkflow } from './SessionSpeakerWorkflow';
 import type { SpeakerAnalysisResult } from './SpeakerDiarizationService';
@@ -24,6 +25,77 @@ const sessionFor = (transcript: SessionTranscriptV1): SessionDetails => ({
     id: 'one', title: 'Test', createdAt: 0, updatedAt: 0, sourceKind: 'recorded',
     hasTranscript: true, audioOriginalPath: 'original.wav', audioWavPath: 'mix.wav',
     tracks: [{ source: 'microphone', filePath: 'mic.wav', startOffsetMs: 0 }], transcript,
+});
+
+it('cancels shared background status checks and waits for native cleanup', async () => {
+    let closeProbe: () => void = () => undefined;
+    const closed = new Promise<void>((resolve) => { closeProbe = resolve; });
+    let probeSignal: AbortSignal | undefined;
+    const ready: SpeakerAssetStatus = { ready: true, gpuBackend: 'metal' };
+    const runtime = {
+        getAssetStatus: vi.fn(async (signal?: AbortSignal) => {
+            probeSignal = signal;
+            await closed;
+            signal?.throwIfAborted();
+            return ready;
+        }),
+        prepareAssets: vi.fn(), analyze: vi.fn(),
+    };
+    const workflow = new SessionSpeakerWorkflow({} as SessionsService, runtime, vi.fn());
+    const pending = workflow.getAssetStatus();
+    const repeated = workflow.getAssetStatus();
+    const settled = vi.fn();
+    const stopping = workflow.stopAndWait().then(settled);
+    try {
+        expect(probeSignal?.aborted).toBe(true);
+        expect(runtime.getAssetStatus).toHaveBeenCalledOnce();
+        await Promise.resolve();
+        expect(settled).not.toHaveBeenCalled();
+        closeProbe();
+        await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+        await expect(repeated).rejects.toMatchObject({ name: 'AbortError' });
+        await stopping;
+        expect(settled).toHaveBeenCalledWith(true);
+        await expect(workflow.getAssetStatus()).resolves.toEqual(ready);
+        expect(runtime.getAssetStatus).toHaveBeenCalledTimes(2);
+    } finally {
+        closeProbe();
+        await Promise.allSettled([pending, repeated, stopping]);
+    }
+});
+
+it('closes a background probe before starting foreground preparation', async () => {
+    let closeProbe: () => void = () => undefined;
+    const closed = new Promise<void>((resolve) => { closeProbe = resolve; });
+    let probeSignal: AbortSignal | undefined;
+    const ready: SpeakerAssetStatus = { ready: true, gpuBackend: 'metal' };
+    const runtime = {
+        getAssetStatus: vi.fn((_signal?: AbortSignal) => Promise.resolve(ready)).mockImplementationOnce(async (signal) => {
+            probeSignal = signal;
+            await closed;
+            signal?.throwIfAborted();
+            return ready;
+        }),
+        prepareAssets: vi.fn(() => Promise.resolve()), analyze: vi.fn(),
+    };
+    const sessions = { getActiveSessionId: () => null } as unknown as SessionsService;
+    const workflow = new SessionSpeakerWorkflow(sessions, runtime, vi.fn());
+    const pending = workflow.getAssetStatus();
+    const preparing = workflow.prepareAssets();
+    try {
+        expect(probeSignal?.aborted).toBe(true);
+        expect(workflow.isBusy).toBe(true);
+        expect(runtime.prepareAssets).not.toHaveBeenCalled();
+        await expect(workflow.getAssetStatus()).rejects.toThrow('Another speaker operation');
+        closeProbe();
+        await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+        await expect(preparing).resolves.toEqual(ready);
+        expect(runtime.prepareAssets).toHaveBeenCalledOnce();
+        expect(workflow.isBusy).toBe(false);
+    } finally {
+        closeProbe();
+        await Promise.allSettled([pending, preparing]);
+    }
 });
 
 it('labels a microphone-only transcript without loading assets or invoking Nemotron', async () => {
