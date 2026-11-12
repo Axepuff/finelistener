@@ -244,7 +244,9 @@ module.exports = {
             NSAudioCaptureUsageDescription: 'This app records system audio for transcription.',
         },
         extraResource,
-        ignore: [...packagerIgnore, /[\\/]\.artifact-work(?:[\\/]|$)/, /[\\/]build-assets(?:[\\/]|$)/, /[\\/]outputs(?:[\\/]|$)/],
+        ignore: [...packagerIgnore, /[\\/]\.artifact-work(?:[\\/]|$)/, /[\\/]build-assets(?:[\\/]|$)/, /[\\/]outputs(?:[\\/]|$)/,
+            // SDK actions download build tools into the checkout; they are not application resources.
+            /[\\/]VULKAN_SDK(?:[\\/]|$)/, /[\\/]vulkan_sdk\.exe$/, /[\\/]cuda_installer-[^\\/]+(?:[\\/]|$)/],
     },
     rebuildConfig: {},
     makers,
