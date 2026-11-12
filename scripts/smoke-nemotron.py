@@ -68,8 +68,13 @@ def main():
             if result.returncode:
                 print(result.stderr.decode('utf-8', errors='replace'), flush=True)
                 if sys.platform == 'darwin':
-                    subprocess.run(['/usr/bin/lldb', '--batch', '-o', 'run', '-o', 'thread backtrace all', '--', *command[0]],
-                                   cwd=work, env=env, timeout=120, check=False)
+                    original = work / 'original'
+                    original.mkdir()
+                    subprocess.run(['/usr/bin/tar', '-xf', str(ROOT / 'build-assets/nemotron-downloads/nemo-metal.tar.gz'), '-C', str(original)], check=True)
+                    upstream = original / 'nemo-speech-0.3.0-macos-aarch64-metal/bin/nemo-speech'
+                    baseline = subprocess.run([str(upstream), '--verbose', *command[0][1:]], cwd=work, env=env, capture_output=True, timeout=180)
+                    print('[DEBUG-native-ci] Unmodified upstream runtime: ' + str(baseline.returncode), flush=True)
+                    print(baseline.stderr.decode('utf-8', errors='replace'), flush=True)
                 result.check_returncode()
             result = json.loads(output.read_text(encoding='utf-8'))
             if not isinstance(result.get('segments'), list) or any(not (0 <= segment['start'] < segment['end'] <= 3.01) for segment in result['segments']):
