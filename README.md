@@ -15,6 +15,8 @@ Windows preparation bundles the Visual C++/OpenMP libraries beside native helper
 
 The minimal CUDA installation in CI omits `EULA.txt`, so the workflow downloads the matching official CUDA 12.4 license with a pinned SHA-256 before compiling and passes it to runtime preparation. Local full-toolkit builds use their installed `EULA.txt` by default.
 
+The macOS release job uses an Apple Silicon macOS 26 runner with `MACOSX_DEPLOYMENT_TARGET=15.0`. Before upload, it verifies the packaged ad-hoc signature and the minimum OS recorded in every bundled Whisper executable/library. The beta's supported minimum remains macOS 15.
+
 ## Audio and speaker labels
 
 Sessions default to Optimized audio. Original/Optimized is remembered per session and applies to playback and subsequent recognition/analysis; original recordings and existing transcripts are preserved. Transcribe saves Whisper recognition before local speaker analysis. Speaker labels default on, with a remembered opt-out. Microphone-only sessions use a fixed identity without downloading or running a speaker model.

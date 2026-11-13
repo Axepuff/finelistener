@@ -34,7 +34,9 @@ jobs:
 
   build-mac:
     needs: lint-and-typecheck
-    runs-on: macos-15  # Apple Silicon (arm64)
+    runs-on: macos-26  # Apple Silicon (arm64)
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '15.0'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,6 +65,18 @@ jobs:
 
       - name: Build and package
         run: npm run make:mac
+
+      - name: Verify macOS signature and Whisper deployment targets
+        run: |
+          app='out/Finelistener-darwin-arm64/Finelistener.app'
+          codesign --verify --deep --strict "$app"
+          for binary in "$app/Contents/Resources/whisper/whisper-server" "$app/Contents/Resources/whisper/"*.dylib; do
+            min_os=$(xcrun vtool -show-build "$binary" | awk '$1 == "minos" {print $2}')
+            if [[ "$min_os" != '15.0' ]]; then
+              echo "Unexpected macOS deployment target in $binary: $min_os" >&2
+              exit 1
+            fi
+          done
 
       - name: Verify Nemotron release component
         run: python scripts/verify-speaker-release.py build-assets/mac-arm64/nemotron/component.json
