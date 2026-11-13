@@ -180,9 +180,15 @@ jobs:
         shell: bash
         run: bash scripts/build-miniaudio.sh win-x64-gpu && bash scripts/prepare-models.sh
 
+      - name: Bundle Windows runtime dependencies
+        run: python scripts/prepare-windows-runtime.py win-x64-gpu
+
       - name: Build and package
         shell: bash
         run: npm run make:win-gpu
+
+      - name: Check packaged Whisper without developer PATH
+        run: python scripts/smoke-whisper.py out/Finelistener-win32-x64/resources/whisper out/Finelistener-win32-x64/resources/models/ggml-base.bin --require-no-nvidia-driver
 
       - name: Upload Nemotron component
         uses: actions/upload-artifact@v4
@@ -234,6 +240,9 @@ jobs:
       - name: Build and package
         shell: bash
         run: npm run make:win-cpu
+
+      - name: Check packaged Whisper without developer PATH
+        run: python scripts/smoke-whisper.py out/Finelistener-win32-x64/resources/whisper out/Finelistener-win32-x64/resources/models/ggml-base.bin
 
       - name: Verify Nemotron release component
         run: python scripts/verify-speaker-release.py build-assets/win-x64-cpu/nemotron/component.json

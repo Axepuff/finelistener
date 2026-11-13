@@ -45,13 +45,14 @@ case "$VARIANT" in
         cmake -S "$WHISPER_SRC" -B "$BUILD_DIR" \
             -DCMAKE_BUILD_TYPE=Release \
             -DGGML_NATIVE=OFF \
+            -DGGML_BACKEND_DL=ON \
             -DGGML_CUDA=ON \
             -DGGML_VULKAN=ON
         cmake --build "$BUILD_DIR" --config Release --target whisper-server -j "${NUMBER_OF_PROCESSORS:-4}"
 
         cp "$BUILD_DIR/bin/Release/whisper-server.exe" "$OUTPUT_DIR/" 2>/dev/null \
             || cp "$BUILD_DIR/bin/whisper-server.exe" "$OUTPUT_DIR/"
-        # Copy all DLLs (whisper, ggml, CUDA runtime, Vulkan)
+        # GPU backends are optional modules; driver availability must not prevent CPU startup.
         find "$BUILD_DIR" -name '*.dll' -exec cp {} "$OUTPUT_DIR/" \; 2>/dev/null || true
         ;;
 
@@ -75,6 +76,8 @@ case "$VARIANT" in
         exit 1
         ;;
 esac
+
+cp "$WHISPER_SRC/LICENSE" "$OUTPUT_DIR/whisper-LICENSE.txt"
 
 echo "Whisper build artifacts staged to $OUTPUT_DIR"
 ls -lh "$OUTPUT_DIR"

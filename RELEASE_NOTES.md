@@ -1,4 +1,4 @@
-# FineListener 1.4.0-beta.1
+# FineListener 1.4.0-beta.2
 
 First public beta of FineListener: local audio recording, transcription and speaker labeling for Windows and Apple Silicon.
 
@@ -6,13 +6,13 @@ First public beta of FineListener: local audio recording, transcription and spea
 
 | Platform | Installer | ZIP archive |
 | --- | --- | --- |
-| Windows x64 CPU | [Download installer](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.1/FineListener-1.4.0-beta.1-win-x64-cpu-setup.exe) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.1/FineListener-1.4.0-beta.1-win-x64-cpu.zip) |
-| Windows x64 GPU | [Download installer](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.1/FineListener-1.4.0-beta.1-win-x64-gpu-setup.exe) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.1/FineListener-1.4.0-beta.1-win-x64-gpu.zip) |
-| macOS Apple Silicon | [Download DMG](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.1/FineListener-1.4.0-beta.1-mac-arm64.dmg) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.1/FineListener-1.4.0-beta.1-mac-arm64.zip) |
+| Windows x64 CPU | [Download installer](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.2/FineListener-1.4.0-beta.2-win-x64-cpu-setup.exe) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.2/FineListener-1.4.0-beta.2-win-x64-cpu.zip) |
+| Windows x64 GPU | [Download installer](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.2/FineListener-1.4.0-beta.2-win-x64-gpu-setup.exe) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.2/FineListener-1.4.0-beta.2-win-x64-gpu.zip) |
+| macOS Apple Silicon | [Download DMG](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.2/FineListener-1.4.0-beta.2-mac-arm64.dmg) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.2/FineListener-1.4.0-beta.2-mac-arm64.zip) |
 
 Choose Windows CPU if you are unsure which Windows build to use. The Mac beta targets macOS 15 or later on M1 or newer; Intel Macs are not supported by this release. Windows requires Windows 10 version 1903 or later.
 
-[Installation and first-launch instructions](https://github.com/Axepuff/finelistener/blob/v1.4.0-beta.1/INSTALL.md) · [SHA-256 checksums](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.1/SHA256SUMS.txt)
+[Installation and first-launch instructions](https://github.com/Axepuff/finelistener/blob/v1.4.0-beta.2/INSTALL.md) · [SHA-256 checksums](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.2/SHA256SUMS.txt)
 
 ## Included
 

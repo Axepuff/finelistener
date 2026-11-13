@@ -1,14 +1,14 @@
 # Install FineListener beta
 
-Download builds only from [FineListener Releases](https://github.com/Axepuff/finelistener/releases). The first public beta is **1.4.0-beta.1**.
+Download builds only from [FineListener Releases](https://github.com/Axepuff/finelistener/releases). The first public beta is **1.4.0-beta.2**.
 
 ## Choose a download
 
 | Computer | Recommended download |
 | --- | --- |
-| Windows x64, no compatible GPU or unsure | `FineListener-1.4.0-beta.1-win-x64-cpu-setup.exe` |
-| Windows x64 with a compatible GPU and current graphics drivers | `FineListener-1.4.0-beta.1-win-x64-gpu-setup.exe` |
-| Mac with Apple Silicon (M1 or later) | `FineListener-1.4.0-beta.1-mac-arm64.dmg` |
+| Windows x64, no compatible GPU or unsure | `FineListener-1.4.0-beta.2-win-x64-cpu-setup.exe` |
+| Windows x64 with a compatible GPU and current graphics drivers | `FineListener-1.4.0-beta.2-win-x64-gpu-setup.exe` |
+| Mac with Apple Silicon (M1 or later) | `FineListener-1.4.0-beta.2-mac-arm64.dmg` |
 
 Windows requires Windows 10 version 1903 or later. The Mac beta targets macOS 15 or later on Apple Silicon; no Intel Mac, Windows ARM or Linux build is provided. ZIP archives are also available for manual extraction.
 
@@ -51,13 +51,13 @@ Compare the result with the matching filename in `SHA256SUMS.txt` from the relea
 Windows PowerShell:
 
 ```powershell
-Get-FileHash .\FineListener-1.4.0-beta.1-win-x64-cpu-setup.exe -Algorithm SHA256
+Get-FileHash .\FineListener-1.4.0-beta.2-win-x64-cpu-setup.exe -Algorithm SHA256
 ```
 
 macOS Terminal:
 
 ```bash
-shasum -a 256 ~/Downloads/FineListener-1.4.0-beta.1-mac-arm64.dmg
+shasum -a 256 ~/Downloads/FineListener-1.4.0-beta.2-mac-arm64.dmg
 ```
 
 ## Updates and feedback
