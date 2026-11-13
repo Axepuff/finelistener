@@ -87,9 +87,12 @@ it.each([
     { name: 'majority across separate turns', spans: [[0, 3, 'a'], [3, 5, 'b'], [5, 8, 'a']], expected: 'g:a' },
     { name: 'equal coverage', spans: [[0, 4, 'a'], [4, 8, 'b']], expected: null },
     { name: 'insufficient speech coverage', spans: [[0, 3, 'a']], expected: null },
-    { name: 'short overlapping interruption', spans: [[0, 8, 'a'], [3.1, 3.2, 'b']], expected: null },
+    { name: 'short overlapping interruption', spans: [[0, 8, 'a'], [3.1, 3.2, 'b']], expected: 'g:a' },
+    { name: 'later majority after overlap', spans: [[0, 3, 'a'], [2, 8, 'b']], expected: 'g:b' },
+    { name: 'exactly half exclusive coverage', spans: [[0, 8, 'a'], [4, 8, 'b']], expected: null },
+    { name: 'fully overlapping speakers', spans: [[0, 8, 'a'], [0, 8, 'b']], expected: null },
     { name: 'silent acoustic result', spans: [], expected: null },
-])('assigns words by duration at touching interval boundaries: $name', ({ spans, expected }) => {
+])('requires a strict majority of unambiguous word duration: $name', ({ spans, expected }) => {
     const transcript = materializeRecognitionTranscript({ version: 1, segments: [{
         startSec: 0, endSec: 8, text: 'Hello', words: [
             { startSec: 0, endSec: 8, text: 'Hello', startChar: 0, endChar: 5 },

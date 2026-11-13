@@ -61,3 +61,40 @@ Compare hand-labelled turns at the beginning, middle, and end before changing
 models or introducing windowed clustering. Do not treat fewer unknown labels as
 proof of better speaker assignment. Windows CPU and GPU native builds passed;
 macOS native execution was not available on this host.
+
+## Overlap assignment regression, 2026-11-12
+
+Replaying a saved Nemotron transcript around 08:44.64 reproduced Unknown words
+without running either model. The mapper rejected an entire word whenever any
+part of it had two active identities, even when one identity alone covered 97%
+of the word. This was an assignment-policy problem; the user confirmed frequent
+simultaneous speech in the passage. It does not establish that every saved word
+timestamp is accurate.
+
+`exclusive-majority-v2` excludes overlapping time from speaker votes while
+requiring strictly more than half of the full word duration for an assignment.
+Fully overlapping words, ties and insufficient coverage remain unresolved.
+The acoustic intervals and manual corrections are preserved. Historical
+`conservative-overlap-v1` provenance stays readable; a recomputed Nemotron
+projection records v2. Saved sessions are not automatically recomputed on open.
+
+On the frozen passage, unknown words fell from 35 to 28 (15 to 11 fragments).
+On the full frozen transcript, they fell from 812 to 690 (502 to 439 fragments).
+All 7,848 previously assigned timed words retained their identity. These are
+assignment counts, not accuracy measurements or a listening verdict. No private
+audio or transcript is committed. Replay, coverage details, the original-mode
+excerpt and an offline listening comparison are kept in the ignored directory
+`.artifact-work/unknown-marta-20261112`; the source session is unchanged.
+
+The owner-boundary regression cases in `sessionTranscript.test.ts` failed on the
+old implementation and passed after the change. During the original diagnostic,
+typecheck, all 246 unit tests and the build passed. Lint passed with
+`--ignore-pattern '.worktrees/**'` because an unrelated nested checkout's
+type-aware config prevented the normal command from starting. The comparison
+page passed headless Edge checks for loading, word seeking, automatic playback
+stop and filtering; audible accuracy still requires listening.
+
+On 2026-11-13, the isolated PR branch based on current main passed typecheck,
+unmodified lint, all 259 unit tests and the build. Both positive regression
+cases were verified failing on that base before the fix. Replaying the same
+frozen recording with the PR code preserved the assignment counts above.

@@ -178,7 +178,7 @@ it('analyzes only the selected system range and applies offsets once to labels a
         'Microphone speaker', 'Speaker 1',
     ]);
     expect(result.transcript?.speakers?.provenance).toMatchObject({ engine: 'nemotron-3', backend: 'cpu', device: 'cpu',
-        assignmentPolicy: 'conservative-overlap-v1', range: { start: 4, end: 8 },
+        assignmentPolicy: 'exclusive-majority-v2', range: { start: 4, end: 8 },
         acousticIntervals: [{ startSec: 5, endSec: 6 }] });
     expect(result.transcript?.speakers?.provenance).not.toHaveProperty('exclusiveIntervals');
     expect(result.transcript?.speakers?.provenance).not.toHaveProperty('speakerCount');

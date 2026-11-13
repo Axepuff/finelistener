@@ -81,7 +81,7 @@ export interface NemotronSpeakerProvenance extends SpeakerProvenanceBase {
     preset: 'v3-offline';
     modelSha256: string;
     runtimeSha256: string;
-    assignmentPolicy: 'conservative-overlap-v1';
+    assignmentPolicy: 'conservative-overlap-v1' | 'exclusive-majority-v2';
     acousticIntervals: SessionSpeakerInterval[];
 }
 
