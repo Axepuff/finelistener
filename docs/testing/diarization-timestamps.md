@@ -95,6 +95,10 @@ page passed headless Edge checks for loading, word seeking, automatic playback
 stop and filtering; audible accuracy still requires listening.
 
 On 2026-11-13, the isolated PR branch based on current main passed typecheck,
-unmodified lint, all 259 unit tests and the build. Both positive regression
+unmodified lint, all 262 unit tests and the build. Both positive regression
 cases were verified failing on that base before the fix. Replaying the same
 frozen recording with the PR code preserved the assignment counts above.
+Review also reproduced exact-half coverage rounding upward at fractional
+timestamps. A tolerance scaled to timestamp magnitude and boundary count now
+keeps those ties unresolved; both fractional regressions failed before the
+correction and passed afterward, while coverage above half still assigns a speaker.

@@ -147,7 +147,10 @@ const assignedSpeaker = (startSec: number, endSec: number, intervals: SessionSpe
         const id = [...active][0];
         if (id) coverage.set(id, (coverage.get(id) ?? 0) + boundaries[index + 1] - boundaries[index]);
     }
-    const majority = [...coverage].filter(([, duration]) => duration > (endSec - startSec) / 2);
+    // Decimal boundaries can round exact half coverage upward, especially late in a recording.
+    const roundingTolerance = Number.EPSILON * Math.max(1, Math.abs(startSec), Math.abs(endSec)) * boundaries.length;
+    const majority = [...coverage].filter(([, duration]) =>
+        duration - (endSec - startSec) / 2 > roundingTolerance);
     return majority.length === 1 ? majority[0][0] : null;
 };
 
