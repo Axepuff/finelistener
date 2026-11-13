@@ -3,7 +3,7 @@ App that converts audio to txt
 
 ## Download
 
-Get the [1.4.0-beta.2 release](https://github.com/Axepuff/finelistener/releases/tag/v1.4.0-beta.2) for Windows x64 (CPU or GPU) and macOS Apple Silicon. See [installation instructions](INSTALL.md) for choosing a build, first-launch permissions, signature warnings and checksums.
+Get the [1.4.0-beta.3 release](https://github.com/Axepuff/finelistener/releases/tag/v1.4.0-beta.3) for Windows x64 (CPU or GPU) and macOS Apple Silicon. See [installation instructions](INSTALL.md) for choosing a build, first-launch permissions, signature warnings and checksums.
 
 ## Publishing a release
 
@@ -12,6 +12,8 @@ Update the version in `package.json` and `package-lock.json`, and prepare `RELEA
 Tag runs upload the complete asset set to a **draft** GitHub Release. Versions containing a prerelease suffix are marked as prereleases. Inspect the draft and checks before publishing it, then verify anonymous installer and component downloads. A manual workflow run validates the same builds and staged assets without creating a release. The `release-assets` workflow artifact contains the exact files intended for publication.
 
 Windows preparation bundles the Visual C++/OpenMP libraries beside native helpers and CUDA runtime libraries beside Whisper in the GPU build. Whisper loads GPU backends as optional modules so a missing graphics driver does not block CPU startup. Before uploading Windows artifacts, CI loads the packaged transcription model with a system-only `PATH`; the GPU package is checked on a runner without an NVIDIA driver.
+
+The minimal CUDA installation in CI omits `EULA.txt`, so the workflow downloads the matching official CUDA 12.4 license with a pinned SHA-256 before compiling and passes it to runtime preparation. Local full-toolkit builds use their installed `EULA.txt` by default.
 
 ## Audio and speaker labels
 

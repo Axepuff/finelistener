@@ -115,6 +115,15 @@ jobs:
           method: network
           sub-packages: '["nvcc", "cudart", "thrust", "cublas", "cublas_dev"]'
 
+      - name: Fetch the pinned CUDA license
+        run: |
+          $license = Join-Path $env:RUNNER_TEMP 'CUDA-EULA.pdf'
+          Invoke-WebRequest 'https://docs.nvidia.com/cuda/archive/12.4.0/pdf/EULA.pdf' -OutFile $license
+          if ((Get-FileHash $license -Algorithm SHA256).Hash -ne '6ADA441AE5A45A4A3D51ADE8850FA2229FC6DD95DE0C9DA6E2CDD7A46701B844') {
+            throw 'CUDA license integrity check failed'
+          }
+          "CUDA_LICENSE=$license" >> $env:GITHUB_ENV
+
       - name: Install Vulkan SDK
         shell: pwsh
         run: |
@@ -181,7 +190,7 @@ jobs:
         run: bash scripts/build-miniaudio.sh win-x64-gpu && bash scripts/prepare-models.sh
 
       - name: Bundle Windows runtime dependencies
-        run: python scripts/prepare-windows-runtime.py win-x64-gpu
+        run: python scripts/prepare-windows-runtime.py win-x64-gpu --cuda-license "$env:CUDA_LICENSE"
 
       - name: Build and package
         shell: bash
