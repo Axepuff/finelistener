@@ -5,13 +5,13 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag (e.g. v1.4.0)'
-        required: false
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   lint-and-typecheck:
@@ -22,9 +22,15 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      - name: Check release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: node -e "if (process.env.GITHUB_REF_NAME !== 'v' + require('./package.json').version) throw new Error('Release tag differs from the application version')"
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm run test -- --run
+      - name: Test release asset staging
+        run: python3 -m unittest discover -s scripts -p test_stage_release.py
 
   build-mac:
     needs: lint-and-typecheck
@@ -255,7 +261,8 @@ jobs:
   release:
     needs: [build-mac, build-win-gpu, build-win-cpu]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -264,11 +271,26 @@ jobs:
           path: artifacts
 
       - name: Verify speaker release components
-        run: python3 scripts/verify-speaker-release.py --all artifacts --release-tag "$GITHUB_REF_NAME"
+        run: python3 scripts/verify-speaker-release.py --all artifacts
 
-      - name: Create GitHub Release
+      - name: Stage downloads and checksums
+        run: python3 scripts/stage-release.py artifacts release-assets
+
+      - name: Upload staged release
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: release-assets/*
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: Create draft GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*
+          name: FineListener ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
+          draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: release-assets/*
           fail_on_unmatched_files: true
-          generate_release_notes: true

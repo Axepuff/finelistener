@@ -1,6 +1,16 @@
 # finelistener
 App that converts audio to txt
 
+## Download
+
+Get the [1.4.0-beta.1 release](https://github.com/Axepuff/finelistener/releases/tag/v1.4.0-beta.1) for Windows x64 (CPU or GPU) and macOS Apple Silicon. See [installation instructions](INSTALL.md) for choosing a build, first-launch permissions, signature warnings and checksums.
+
+## Publishing a release
+
+Update the version in `package.json` and `package-lock.json`, and prepare `RELEASE_NOTES.md` and `INSTALL.md` for that version. Push the matching `v<version>` tag from the checked release commit. The Release workflow checks the tag, runs typecheck, lint and tests, builds all three variants, verifies speaker components and stages distinct installer/ZIP names plus `SHA256SUMS.txt`. Updater-only Squirrel files are not published.
+
+Tag runs upload the complete asset set to a **draft** GitHub Release. Versions containing a prerelease suffix are marked as prereleases. Inspect the draft and checks before publishing it, then verify anonymous installer and component downloads. A manual workflow run validates the same builds and staged assets without creating a release. The `release-assets` workflow artifact contains the exact files intended for publication.
+
 ## Audio and speaker labels
 
 Sessions default to Optimized audio. Original/Optimized is remembered per session and applies to playback and subsequent recognition/analysis; original recordings and existing transcripts are preserved. Transcribe saves Whisper recognition before local speaker analysis. Speaker labels default on, with a remembered opt-out. Microphone-only sessions use a fixed identity without downloading or running a speaker model.

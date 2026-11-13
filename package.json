@@ -1,6 +1,6 @@
 {
   "name": "finelistener",
-  "version": "1.3.0",
+  "version": "1.4.0-beta.1",
   "description": "Electron app that converts audio to txt",
   "main": "dist/electron/main.js",
   "scripts": {

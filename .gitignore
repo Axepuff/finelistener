@@ -35,3 +35,4 @@ outputs/
 __pycache__/
 
 storybook-static/
+release-assets/
