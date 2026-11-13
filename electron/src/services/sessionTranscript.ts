@@ -142,11 +142,15 @@ const assignedSpeaker = (startSec: number, endSec: number, intervals: SessionSpe
         const middle = (boundaries[index] + boundaries[index + 1]) / 2;
         const active = new Set(intervals.filter((item) => item.startSec <= middle && item.endSec >= middle)
             .map((item) => item.speakerId));
-        if (active.size > 1) return null;
+        // Ambiguous time casts no vote; a speaker must still own most of the full word alone.
+        if (active.size > 1) continue;
         const id = [...active][0];
         if (id) coverage.set(id, (coverage.get(id) ?? 0) + boundaries[index + 1] - boundaries[index]);
     }
-    const majority = [...coverage].filter(([, duration]) => duration > (endSec - startSec) / 2);
+    // Decimal boundaries can round exact half coverage upward, especially late in a recording.
+    const roundingTolerance = Number.EPSILON * Math.max(1, Math.abs(startSec), Math.abs(endSec)) * boundaries.length;
+    const majority = [...coverage].filter(([, duration]) =>
+        duration - (endSec - startSec) / 2 > roundingTolerance);
     return majority.length === 1 ? majority[0][0] : null;
 };
 
@@ -170,6 +174,9 @@ export const deriveSpeakerTranscript = (transcript: SessionTranscriptV1): Sessio
     if (!metadata || metadata.recognitionRevision !== materialized.recognitionRevision || metadata.status !== 'completed') {
         return { ...materialized, segments: baseline.segments,
             presentation: baseline.presentation ?? materialized.presentation };
+    }
+    if (metadata.provenance?.engine === 'nemotron-3') {
+        metadata.provenance.assignmentPolicy = 'exclusive-majority-v2';
     }
     const rawById = new Map(rawSegments(materialized).map((segment) => [segment.id, segment]));
     const microphoneId = `${metadata.generation}:microphone`;

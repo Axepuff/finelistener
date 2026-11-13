@@ -172,7 +172,7 @@ export class SessionSpeakerWorkflow {
                         version: 1, engine: result.engine, modelRevision: result.modelRevision,
                         runtimeRevision: result.runtimeRevision, audioMode, backend: result.backend, ...settings,
                         device: result.device, preset: result.preset, modelSha256: result.modelSha256,
-                        runtimeSha256: result.runtimeSha256, assignmentPolicy: 'conservative-overlap-v1',
+                        runtimeSha256: result.runtimeSha256, assignmentPolicy: 'exclusive-majority-v2',
                         acousticIntervals: mapIntervals(result.intervals),
                     };
                     for (const interval of result.intervals) {

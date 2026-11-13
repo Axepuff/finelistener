@@ -87,12 +87,21 @@ it.each([
     { name: 'majority across separate turns', spans: [[0, 3, 'a'], [3, 5, 'b'], [5, 8, 'a']], expected: 'g:a' },
     { name: 'equal coverage', spans: [[0, 4, 'a'], [4, 8, 'b']], expected: null },
     { name: 'insufficient speech coverage', spans: [[0, 3, 'a']], expected: null },
-    { name: 'short overlapping interruption', spans: [[0, 8, 'a'], [3.1, 3.2, 'b']], expected: null },
+    { name: 'short overlapping interruption', spans: [[0, 8, 'a'], [3.1, 3.2, 'b']], expected: 'g:a' },
+    { name: 'later majority after overlap', spans: [[0, 3, 'a'], [2, 8, 'b']], expected: 'g:b' },
+    { name: 'exactly half exclusive coverage', spans: [[0, 8, 'a'], [4, 8, 'b']], expected: null },
+    { name: 'half coverage at fractional timestamps', startSec: 0.1, endSec: 0.7,
+        spans: [[0.1, 0.7, 'a'], [0.4, 0.7, 'b']], expected: null },
+    { name: 'half coverage later in the recording', startSec: 524.3, endSec: 524.9,
+        spans: [[524.3, 524.9, 'a'], [524.6, 524.9, 'b']], expected: null },
+    { name: 'fractional coverage above half', startSec: 0.1, endSec: 0.7,
+        spans: [[0.1, 0.7, 'a'], [0.40001, 0.7, 'b']], expected: 'g:a' },
+    { name: 'fully overlapping speakers', spans: [[0, 8, 'a'], [0, 8, 'b']], expected: null },
     { name: 'silent acoustic result', spans: [], expected: null },
-])('assigns words by duration at touching interval boundaries: $name', ({ spans, expected }) => {
+])('requires a strict majority of unambiguous word duration: $name', ({ spans, expected, startSec = 0, endSec = 8 }) => {
     const transcript = materializeRecognitionTranscript({ version: 1, segments: [{
-        startSec: 0, endSec: 8, text: 'Hello', words: [
-            { startSec: 0, endSec: 8, text: 'Hello', startChar: 0, endChar: 5 },
+        startSec, endSec, text: 'Hello', words: [
+            { startSec, endSec, text: 'Hello', startChar: 0, endChar: 5 },
         ],
     }] });
     const speakers = createSpeakerMetadata(transcript, spans.map(([start, end, speaker]) => ({
@@ -100,7 +109,7 @@ it.each([
     })), {}, 'g');
 
     expect(deriveSpeakerTranscript({ ...transcript, speakers }).segments).toMatchObject([
-        { text: 'Hello', startSec: 0, endSec: 8, speakerId: expected },
+        { text: 'Hello', startSec, endSec, speakerId: expected },
     ]);
 });
 
