@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('variant', choices=['win-x64-cpu', 'win-x64-gpu'])
+    parser.add_argument('--cuda-license', type=Path, help='License for the installed CUDA version when the toolkit omits EULA.txt')
     args = parser.parse_args()
     base = ROOT / 'build-assets' / args.variant
     whisper = base / 'whisper'
@@ -46,7 +47,8 @@ def main():
         cuda = Path(os.environ['CUDA_PATH'])
         for name in ['cudart64_12.dll', 'cublas64_12.dll', 'cublasLt64_12.dll']:
             shutil.copyfile(cuda / 'bin' / name, whisper / name)
-        shutil.copyfile(cuda / 'EULA.txt', whisper / 'CUDA-EULA.txt')
+        license_file = args.cuda_license or cuda / 'EULA.txt'
+        shutil.copyfile(license_file, whisper / f'CUDA-EULA{license_file.suffix}')
     print(f'Prepared application-local runtimes for {args.variant}')
 
 
