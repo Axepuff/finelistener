@@ -1,5 +1,5 @@
 import type {
-    SessionRecognitionWord, SessionSpeakerInterval, SessionSpeakerMetadataV1, SessionTranscriptSegmentV1, SessionTranscriptV1,
+    SessionRecognitionWord, SessionSpeakerCorrection, SessionSpeakerInterval, SessionSpeakerMetadataV1, SessionTranscriptSegmentV1, SessionTranscriptV1,
 } from 'electron/src/types/sessions';
 import { assignedSpeaker, completeWordTimings, fallbackSpeaker } from '../../../electron/src/utils/speakerAssignment';
 import { projectTranscript } from './transcriptFormat';
@@ -129,8 +129,13 @@ export const projectSpeakerReading = (transcript: DeepReadonly<SessionTranscript
     const rawById = new Map(rawSegments.map((s) => [s.id, s]));
     const timedWords = new Map<DeepReadonly<SessionTranscriptSegmentV1>, Map<number, SessionRecognitionWord>>();
     const known = new Set(transcript.speakers?.speakers.map((s) => s.id));
-    const corrections = Map.groupBy(transcript.speakers?.corrections ?? [], (item) => item.segmentId);
     const metadata = transcript.speakers;
+    const corrections = new Map<string, SessionSpeakerCorrection[]>();
+    for (const correction of metadata?.corrections ?? []) {
+        const group = corrections.get(correction.segmentId);
+        if (group) group.push(correction);
+        else corrections.set(correction.segmentId, [correction]);
+    }
     const activeMetadata = metadata?.status === 'completed'
         && (!transcript.recognitionRevision || metadata.recognitionRevision === transcript.recognitionRevision) ? metadata : undefined;
     const primaryInOverlap = indexVoiceActivity(activeMetadata);
