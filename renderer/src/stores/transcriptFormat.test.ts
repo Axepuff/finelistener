@@ -75,6 +75,14 @@ it('copies the reading layout with escaped speaker labels, speech and punctuatio
     expect(html.replace(/<[^>]*>/g, '')).toBe('&lt;Hello&gt; &amp; bye!');
 });
 
+it('distinguishes additional speakers in Reading when the turn card palette repeats', () => {
+    const input = transcript();
+    input.speakers!.speakers = Array.from({ length: 14 }, (_, index) => ({ id: String(index), name: `Guest ${index}` }));
+    const labels = Array.from(speakerLabelsFor(input).values());
+    expect(new Set(labels.map((label) => label.accent)).size).toBe(14);
+    expect(new Set(labels.map((label) => label.clipboardBackground)).size).toBe(14);
+});
+
 it('keeps recognition segments separate in Timecodes even when their speaker is the same', () => {
     const input = transcript();
     expect(projectTranscript(input, 'timecodes').map((row) => row.text)).toEqual(['Hello,', 'мир!', 'Next.']);

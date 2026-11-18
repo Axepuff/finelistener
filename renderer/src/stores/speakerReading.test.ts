@@ -49,6 +49,14 @@ it('uses actual simultaneous acoustic activity for estimated colors and respects
     expect(JSON.stringify(input)).toBe(before);
 });
 
+it('compares the total activity of each voice when it stops and restarts within an overlapping word', () => {
+    const input = sample([{ text: 'yes', startSec: 0, endSec: 1, words: [word('yes', 0, 0, 1)] }], [
+        { speakerId: 'a', startSec: 0, endSec: 0.4 }, { speakerId: 'b', startSec: 0.2, endSec: 0.75 },
+        { speakerId: 'a', startSec: 0.6, endSec: 1 },
+    ]);
+    expect(projectSpeakerReading(input)[0].words[0]).toMatchObject({ speakerId: 'a', overlap: true, estimated: true });
+});
+
 it('restricts voice activity to its recording track and respects merges of acoustic identities', () => {
     const first = { id: 'sys', source: 'system' as const, text: 'yes', startSec: 10, endSec: 12, words: [word('yes', 0, 10, 12)] };
     const second = { ...first, id: 'mic', source: 'microphone' as const };
@@ -62,6 +70,15 @@ it('restricts voice activity to its recording track and respects merges of acous
     expect(para.words.map((w) => [w.speakerId, w.overlap, w.estimated])).toEqual([['b', true, true], [null, false, false]]);
     input.speakers!.merges[0].toId = 'b';
     expect(projectSpeakerReading(input)[0].words[0]).toMatchObject({ speakerId: null, overlap: false });
+});
+
+it('keeps an overlapping word unresolved when its primary voice was merged into Unknown', () => {
+    const input = sample([{ text: 'yes', speakerId: null, startSec: 0, endSec: 1, words: [word('yes', 0, 0, 1)] }], [
+        { speakerId: 'removed', startSec: 0, endSec: 1 }, { speakerId: 'a', startSec: 0.7, endSec: 0.95 },
+        { speakerId: 'b', startSec: 0.75, endSec: 1 },
+    ]);
+    input.speakers!.merges = [{ fromId: 'removed', toId: null }];
+    expect(projectSpeakerReading(input)[0].words[0]).toMatchObject({ speakerId: null, overlap: true, estimated: false });
 });
 
 it('breaks long reading passages at sentence boundaries while keeping offsets and legacy untimed words intact', () => {

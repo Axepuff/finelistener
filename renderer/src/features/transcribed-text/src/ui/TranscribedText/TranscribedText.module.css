@@ -70,6 +70,8 @@
 
 button.readingWord { cursor: pointer; }
 button.readingWord:hover { text-decoration: underline; }
+span.readingWord { text-decoration: underline dotted; }
+button.readingWord[aria-current="true"],
 button.readingWord:focus-visible {
     outline: 2px solid var(--mantine-primary-color-filled);
     outline-offset: 2px;

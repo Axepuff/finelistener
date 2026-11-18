@@ -27,6 +27,7 @@ export const Player: FC = observer(() => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const adapterRef = useRef<PlayerAdapter | null>(null);
     const currentAudioPath = workspace.audioSourcePath ?? undefined;
+    const activeSession = workspace.activeSession;
     const segmentSelection = workspace.segmentSelection;
 
     useEffect(() => {
@@ -52,7 +53,7 @@ export const Player: FC = observer(() => {
         workspace.clearSegment();
         workspace.setPlaybackPosition(0);
 
-        if (!currentAudioPath) {
+        if (!activeSession || !currentAudioPath) {
             workspace.setPlayerLoading(false);
             void player.loadSource(undefined);
 
@@ -61,7 +62,7 @@ export const Player: FC = observer(() => {
 
         workspace.setPlayerLoading(true);
         void player.loadSource(currentAudioPath);
-    }, [currentAudioPath, workspace]);
+    }, [activeSession, currentAudioPath, workspace]);
 
     useEffect(() => reaction(
         () => workspace.hasAudioSource && !workspace.isPlayerLoading ? workspace.playbackRequest : null,

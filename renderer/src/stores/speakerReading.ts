@@ -31,8 +31,11 @@ const indexVoiceActivity = (metadata: DeepReadonly<SessionSpeakerMetadataV1> | u
     const bySpeaker = new Map<string, SessionSpeakerInterval[]>();
     for (const interval of [...intervals].sort((a, b) => a.startSec - b.startSec)) {
         const { startSec, endSec } = interval;
-        const speakerId = merges.has(interval.speakerId) ? merges.get(interval.speakerId) : interval.speakerId;
-        if (!speakerId || !known.has(speakerId) || !Number.isFinite(startSec) || !Number.isFinite(endSec) || endSec <= startSec) continue;
+        const mergedInto = merges.get(interval.speakerId);
+        // A voice merged into Unknown still contributed acoustic evidence. Keep its
+        // original ID for ranking so a shorter, known voice cannot replace it.
+        const speakerId = mergedInto ?? interval.speakerId;
+        if ((mergedInto !== null && !known.has(speakerId)) || !Number.isFinite(startSec) || !Number.isFinite(endSec) || endSec <= startSec) continue;
         const voice = bySpeaker.get(speakerId) ?? [];
         const previous = voice.at(-1);
         if (previous && startSec <= previous.endSec) previous.endSec = Math.max(previous.endSec, endSec);
@@ -53,9 +56,7 @@ const indexVoiceActivity = (metadata: DeepReadonly<SessionSpeakerMetadataV1> | u
         }
         let overlap = false;
         let previousEnd = start;
-        let best: SessionSpeakerInterval | undefined;
-        let bestCoverage = 0;
-        let bestLength = 0;
+        const totals = new Map<string, { coverage: number; longestPassage: number }>();
         for (let i = first; i < ordered.length && ordered[i].startSec < end; i++) {
             const interval = ordered[i];
             if (interval.endSec <= start) continue;
@@ -63,15 +64,14 @@ const indexVoiceActivity = (metadata: DeepReadonly<SessionSpeakerMetadataV1> | u
             const right = Math.min(end, interval.endSec);
             overlap ||= left < previousEnd;
             previousEnd = Math.max(previousEnd, right);
-            const covered = Math.round((right - left) * 1e6);
-            const length = Math.round((interval.endSec - interval.startSec) * 1e6);
-            if (!best || covered > bestCoverage || (covered === bestCoverage && length > bestLength)) {
-                best = interval;
-                bestCoverage = covered;
-                bestLength = length;
-            }
+            const total = totals.get(interval.speakerId) ?? { coverage: 0, longestPassage: 0 };
+            total.coverage += Math.round(right * 1e6) - Math.round(left * 1e6);
+            total.longestPassage = Math.max(total.longestPassage, Math.round((interval.endSec - interval.startSec) * 1e6));
+            totals.set(interval.speakerId, total);
         }
-        return overlap ? best?.speakerId ?? null : null;
+        if (!overlap) return null;
+        // A stable sort keeps the first voice in timeline order when both measures tie.
+        return [...totals].sort(([, a], [, b]) => b.coverage - a.coverage || b.longestPassage - a.longestPassage)[0][0];
     };
 };
 
@@ -131,7 +131,8 @@ export const projectSpeakerReading = (transcript: DeepReadonly<SessionTranscript
                 && time.startSec >= raw.startSec - 0.05 && (raw.endSec === null || time.endSec <= raw.endSec + 0.05);
             const primary = timed && !(transcript.sourceRun && segment.source === 'microphone') ?
                 primaryInOverlap(time.startSec, time.endSec) : null;
-            const estimated = !assigned && primary !== null && !edits?.some((edit) => edit.startChar < last && edit.endChar > first);
+            const estimated = !assigned && primary !== null && known.has(primary)
+                && !edits?.some((edit) => edit.startChar < last && edit.endChar > first);
             const startChar = memberStart + match.index;
             words.push({ startChar, endChar: startChar + match[0].length, startSec: timed ? time.startSec : null,
                 speakerId: estimated ? primary : assigned, overlap: primary !== null, estimated });

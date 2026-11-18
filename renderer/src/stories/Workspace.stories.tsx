@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, spyOn, userEvent, waitFor, within } from 'storybook/test';
 import { Home } from '../Home';
 import { TranscribedText } from '../features/transcribed-text';
 import { createStoryWorkspace, type WorkspaceScenario, type StoryWorkspace } from './storyWorkspace';
@@ -108,6 +108,7 @@ export const Speakers: Story = {
         await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
         await waitFor(() => expect(canvas.getByText('Current position: 00:04.00')).toBeVisible());
         await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
+        await expect(canvas.getAllByTitle('Alice · No word timestamp')[0]).toBeVisible();
         await userEvent.click(canvas.getByRole('radio', { name: 'Turns' }));
         const alice = canvas.getByRole('button', { name: "Seek to Alice's turn" });
         const bob = canvas.getByRole('button', { name: "Seek to Bob's turn" });
@@ -131,7 +132,7 @@ export const Speakers: Story = {
 
 export const SpeakerReading: Story = {
     parameters: { scenario: 'nemotron-reading' },
-    play: async ({ canvas, loaded }) => {
+    play: async ({ canvas, canvasElement, loaded }) => {
         const { store } = loaded.workspace as StoryWorkspace;
         await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
         await expect(canvas.queryByRole('radio', { name: 'Reading' })).not.toBeInTheDocument();
@@ -144,10 +145,27 @@ export const SpeakerReading: Story = {
         await expect(canvas.getByRole('status')).toHaveTextContent('1 of 1');
         await expect(word.querySelector('mark')).toHaveTextContent('Friday');
         await userEvent.click(canvas.getByRole('button', { name: 'Clear search' }));
-        await userEvent.click(word);
-        await waitFor(() => expect(store.workspace.playbackPosition).toBeGreaterThanOrEqual(5.69));
-        await expect(store.workspace.playbackPosition).toBeLessThan(8);
-        if (store.workspace.isPlaying) await userEvent.click(canvas.getByRole('button', { name: 'Pause audio' }));
+        const audio = Array.from(canvasElement.querySelectorAll('*'), element => element.shadowRoot?.querySelector('audio')).find(Boolean);
+        if (!audio) throw new Error('The waveform has no audio element.');
+        // A synthetic click reaches the real media element even when the browser denies autoplay.
+        const play = spyOn(audio, 'play');
+        try {
+            await userEvent.click(word);
+            await expect(play).toHaveBeenCalled();
+            audio.currentTime = 8;
+            await userEvent.click(word);
+            await expect(audio.currentTime).toBeGreaterThanOrEqual(5.69);
+            await expect(audio.currentTime).toBeLessThan(6.3);
+            await userEvent.click(canvas.getByRole('textbox', { name: 'Search transcript' }));
+            await expect(word).toHaveAttribute('aria-current', 'true');
+            const result = await store.openSession('storybook-session');
+            await expect(result.ok).toBe(true);
+            await waitFor(() => expect(audio.paused).toBe(true));
+            await waitFor(() => expect(audio.currentTime).toBe(0));
+        } finally {
+            audio.pause();
+            play.mockRestore();
+        }
     },
 };
 

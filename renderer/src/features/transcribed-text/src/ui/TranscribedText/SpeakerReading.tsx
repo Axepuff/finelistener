@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { formatSecondsReadable } from 'renderer/src/shared/lib';
-import type { SpeakerReadingParagraph } from 'renderer/src/stores/speakerReading';
+import type { SpeakerReadingParagraph, SpeakerReadingWord } from 'renderer/src/stores/speakerReading';
 import { speakerWordLabel, type SpeakerLabels } from 'renderer/src/stores/speakerReadingFormat';
 import styles from './TranscribedText.module.css';
 
@@ -10,7 +10,7 @@ interface Props {
     highlightSegment: (text: string, paragraphIndex: number) => (start: number, end: number) => React.ReactNode;
 }
 
-const speakerFill = (color = 'gray') => `color-mix(in srgb, var(--mantine-color-${color}-5) 32%, var(--mantine-color-body))`;
+const speakerFill = (accent = 'var(--mantine-color-gray-5)') => `color-mix(in srgb, ${accent} 32%, var(--mantine-color-body))`;
 
 const focusWord = (event: React.FocusEvent<HTMLParagraphElement>) => {
     const target = event.target;
@@ -31,6 +31,7 @@ const navigateWords = (event: React.KeyboardEvent<HTMLParagraphElement>) => {
 };
 
 export const SpeakerReading: React.FC<Props> = ({ paragraphs, labels, highlightSegment }) => {
+    const [activeWord, setActiveWord] = useState<SpeakerReadingWord | null>(null);
     const displayed = new Set<string | null>();
     for (const paragraph of paragraphs) {
         for (const word of paragraph.words) displayed.add(word.speakerId);
@@ -40,7 +41,7 @@ export const SpeakerReading: React.FC<Props> = ({ paragraphs, labels, highlightS
         <div className={styles.reading}>
             <ul className={styles.speakerLegend} aria-label="Speaker colors">
                 {Array.from(labels).filter(([id]) => displayed.has(id)).map(([id, speaker]) => (
-                    <li key={id}><span style={{ backgroundColor: speakerFill(speaker.color) }} />{speaker.name}</li>
+                    <li key={id}><span style={{ backgroundColor: speakerFill(speaker.accent) }} />{speaker.name}</li>
                 ))}
                 {displayed.has(null) ? <li><span style={{ backgroundColor: speakerFill() }} />Unknown speaker</li> : null}
             </ul>
@@ -55,7 +56,7 @@ export const SpeakerReading: React.FC<Props> = ({ paragraphs, labels, highlightS
                             const content = slice(word.startChar, word.endChar);
                             cursor = word.endChar;
                             const label = speakerWordLabel(word, labels);
-                            const style = { backgroundColor: speakerFill(labels.get(word.speakerId ?? '')?.color) };
+                            const style = { backgroundColor: speakerFill(labels.get(word.speakerId ?? '')?.accent) };
                             return (
                                 <React.Fragment key={word.startChar}>
                                     {gap}
@@ -63,10 +64,12 @@ export const SpeakerReading: React.FC<Props> = ({ paragraphs, labels, highlightS
                                         <button
                                             type="button" className={styles.readingWord} style={style}
                                             data-regions={word.startSec} tabIndex={wordIndex === firstTimed ? 0 : -1}
+                                            onClick={() => setActiveWord(word)}
+                                            aria-current={word === activeWord ? 'true' : undefined}
                                             aria-label={`${paragraph.text.slice(word.startChar, word.endChar)} · ${label}`}
                                             title={`${label} · Play from ${formatSecondsReadable(word.startSec)}`}
                                         >{content}</button>
-                                    ) : <span className={styles.readingWord} style={style} title={label}>{content}</span>}
+                                    ) : <span className={styles.readingWord} style={style} title={`${label} · No word timestamp`}>{content}</span>}
                                 </React.Fragment>
                             );
                         })}

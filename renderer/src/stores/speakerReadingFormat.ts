@@ -5,18 +5,28 @@ import type { SpeakerReadingParagraph, SpeakerReadingWord } from './speakerReadi
 import type { DeepReadonly } from './types';
 
 const speakerColors = ['blue', 'teal', 'grape', 'orange', 'pink', 'indigo', 'cyan', 'lime'];
+const readingColors = [...speakerColors, 'red', 'violet', 'green', 'yellow'];
 
 export interface SpeakerLabel {
     name: string;
     color: string;
+    accent: string;
+    clipboardBackground: string;
 }
 
 export type SpeakerLabels = ReadonlyMap<string, SpeakerLabel>;
 
 export const speakerLabelsFor = (transcript: DeepReadonly<SessionTranscriptV1> | null): SpeakerLabels =>
-    new Map(transcript?.speakers?.speakers.map((speaker, index) => [
-        speaker.id, { name: speaker.name, color: speakerColors[index % speakerColors.length] },
-    ]));
+    new Map(transcript?.speakers?.speakers.map((speaker, index) => {
+        const shades = DEFAULT_THEME.colors[readingColors[index]];
+        // Larger legacy sessions keep distinct Reading colors beyond the named palette.
+        const hue = (index * 137.508) % 360;
+        return [speaker.id, {
+            name: speaker.name, color: speakerColors[index % speakerColors.length],
+            accent: shades?.[5] ?? `hsl(${hue}, 68%, 53%)`,
+            clipboardBackground: shades?.[1] ?? `hsl(${hue}, 68%, 88%)`,
+        }];
+    }));
 
 export const speakerWordLabel = (word: SpeakerReadingWord, labels: SpeakerLabels): string => {
     const parts = [labels.get(word.speakerId ?? '')?.name ?? 'Unknown speaker'];
@@ -30,8 +40,7 @@ export const speakerReadingToHtml = (paragraphs: readonly SpeakerReadingParagrap
         const parts: string[] = [];
         let cursor = 0;
         for (const word of words) {
-            const color = labels.get(word.speakerId ?? '')?.color ?? 'gray';
-            const background = DEFAULT_THEME.colors[color][1];
+            const background = labels.get(word.speakerId ?? '')?.clipboardBackground ?? DEFAULT_THEME.colors.gray[1];
             const title = escapeHtml(speakerWordLabel(word, labels));
             const content = escapeHtml(text.slice(word.startChar, word.endChar));
             parts.push(escapeHtml(text.slice(cursor, word.startChar)),
