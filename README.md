@@ -3,7 +3,7 @@ App that converts audio to txt
 
 ## Download
 
-Get the [1.4.0-beta.3 release](https://github.com/Axepuff/finelistener/releases/tag/v1.4.0-beta.3) for Windows x64 (CPU or GPU) and macOS Apple Silicon. See [installation instructions](INSTALL.md) for choosing a build, first-launch permissions, signature warnings and checksums.
+Download FineListener for Windows x64 (CPU or GPU) or macOS Apple Silicon from [GitHub Releases](https://github.com/Axepuff/finelistener/releases). See the [installation guide](INSTALL.md) for choosing a build, first-launch permissions, signature warnings and checksums.
 
 ## Publishing a release
 
