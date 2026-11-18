@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import type { SessionSpeakerInterval, SessionTranscriptSegmentV1, SessionTranscriptV1 } from 'electron/src/types/sessions';
+import { deriveSpeakerTranscript } from '../../../electron/src/services/sessionTranscript';
 import { projectSpeakerReading } from './speakerReading';
 
 const word = (text: string, startChar: number, startSec: number, endSec: number) =>
@@ -79,6 +80,25 @@ it('keeps an overlapping word unresolved when its primary voice was merged into 
     ]);
     input.speakers!.merges = [{ fromId: 'removed', toId: null }];
     expect(projectSpeakerReading(input)[0].words[0]).toMatchObject({ speakerId: null, overlap: true, estimated: false });
+});
+
+it.each([true, false])('respects the original Community-1 assignment after a merge to Unknown (complete word times: %s)', (complete) => {
+    const first = word('one', 0, 0, 1);
+    const words = complete ? [first, word('two', 4, 1, 2)] : [first];
+    const exclusiveIntervals = complete ? [{ speakerId: 'a', startSec: 0, endSec: 1.2 }, { speakerId: 'b', startSec: 1.2, endSec: 1.4 }] :
+        [{ speakerId: 'a', startSec: 0.2, endSec: 0.4 }];
+    const input = sample([{ id: 'raw', text: 'one two', startSec: 0, endSec: 2, words }], exclusiveIntervals);
+    input.speakers!.provenance = { version: 1, engine: 'pyannote-community-1', backend: 'cpu',
+        modelRevision: 'm', runtimeRevision: 'r', audioMode: 'original', exclusiveIntervals,
+        regularIntervals: [{ speakerId: 'a', startSec: 0, endSec: 1.5 }, { speakerId: 'b', startSec: 0, endSec: 2 }] };
+    expect(deriveSpeakerTranscript(input).segments[0].speakerId).toBe('a');
+    input.speakers!.speakers = [{ id: 'b', name: 'B' }];
+    input.speakers!.merges = [{ fromId: 'a', toId: null }];
+    const saved = deriveSpeakerTranscript(input);
+    expect(saved.segments[0].speakerId).toBeNull();
+    const [paragraph] = projectSpeakerReading(saved);
+    expect(paragraph.words[0]).toMatchObject({ speakerId: null, overlap: true, estimated: false });
+    if (complete) expect(paragraph.words[1]).toMatchObject({ speakerId: 'b', overlap: true, estimated: true });
 });
 
 it('breaks long reading passages at sentence boundaries while keeping offsets and legacy untimed words intact', () => {

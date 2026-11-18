@@ -1,6 +1,7 @@
 import type {
     SessionRecognitionWord, SessionSpeakerInterval, SessionSpeakerMetadataV1, SessionTranscriptSegmentV1, SessionTranscriptV1,
 } from 'electron/src/types/sessions';
+import { assignedSpeaker, completeWordTimings, fallbackSpeaker } from '../../../electron/src/utils/speakerAssignment';
 import { projectTranscript } from './transcriptFormat';
 import type { DeepReadonly } from './types';
 
@@ -20,6 +21,30 @@ export interface SpeakerReadingParagraph {
 }
 
 const sentenceSegmenter = new Intl.Segmenter(undefined, { granularity: 'sentence' });
+
+// Community-1 used exclusive intervals for word ownership and regular intervals
+// for acoustic overlap. Recover the original assignment before suggesting a color.
+const indexRemovedAssignments = (metadata: DeepReadonly<SessionSpeakerMetadataV1> | undefined) => {
+    const removed = new Set(metadata?.merges?.filter((merge) => merge.toId === null).map((merge) => merge.fromId));
+    if (!metadata || !removed.size) return () => false;
+    const cache = new Map<DeepReadonly<SessionTranscriptSegmentV1>, (word: SessionRecognitionWord) => string | null>();
+    return (raw: DeepReadonly<SessionTranscriptSegmentV1>, word: SessionRecognitionWord): boolean => {
+        let owner = cache.get(raw);
+        if (!owner) {
+            const intervals = metadata.intervals.filter((interval) => interval.endSec > raw.startSec - 0.05
+                && (raw.endSec === null || interval.startSec < raw.endSec + 0.05));
+            if (completeWordTimings(raw)) {
+                owner = (w) => assignedSpeaker(w.startSec, w.endSec, intervals);
+            } else {
+                const segmentOwner = fallbackSpeaker(raw, intervals);
+                owner = () => segmentOwner;
+            }
+            cache.set(raw, owner);
+        }
+        const id = owner(word);
+        return id !== null && removed.has(id);
+    };
+};
 
 // A long voice interval may begin well before a word. Index the furthest end seen
 // so words from interleaved recording tracks can be looked up in any time order.
@@ -106,8 +131,10 @@ export const projectSpeakerReading = (transcript: DeepReadonly<SessionTranscript
     const known = new Set(transcript.speakers?.speakers.map((s) => s.id));
     const corrections = Map.groupBy(transcript.speakers?.corrections ?? [], (item) => item.segmentId);
     const metadata = transcript.speakers;
-    const primaryInOverlap = indexVoiceActivity(metadata?.status === 'completed'
-        && (!transcript.recognitionRevision || metadata.recognitionRevision === transcript.recognitionRevision) ? metadata : undefined);
+    const activeMetadata = metadata?.status === 'completed'
+        && (!transcript.recognitionRevision || metadata.recognitionRevision === transcript.recognitionRevision) ? metadata : undefined;
+    const primaryInOverlap = indexVoiceActivity(activeMetadata);
+    const wasMergedIntoUnknown = indexRemovedAssignments(activeMetadata);
     const words: SpeakerReadingWord[] = [];
     for (const { segment, startChar: memberStart } of plain.members) {
         const span = segment.rawSpan;
@@ -131,8 +158,8 @@ export const projectSpeakerReading = (transcript: DeepReadonly<SessionTranscript
                 && time.startSec >= raw.startSec - 0.05 && (raw.endSec === null || time.endSec <= raw.endSec + 0.05);
             const primary = timed && !(transcript.sourceRun && segment.source === 'microphone') ?
                 primaryInOverlap(time.startSec, time.endSec) : null;
-            const estimated = !assigned && primary !== null && known.has(primary)
-                && !edits?.some((edit) => edit.startChar < last && edit.endChar > first);
+            const estimated = !assigned && time !== undefined && primary !== null && known.has(primary)
+                && !edits?.some((edit) => edit.startChar < last && edit.endChar > first) && !wasMergedIntoUnknown(raw, time);
             const startChar = memberStart + match.index;
             words.push({ startChar, endChar: startChar + match[0].length, startSec: timed ? time.startSec : null,
                 speakerId: estimated ? primary : assigned, overlap: primary !== null, estimated });
