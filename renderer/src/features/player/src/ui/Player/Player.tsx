@@ -1,6 +1,7 @@
 import { ActionIcon, Box, Button, Group, Loader, Paper, SegmentedControl, Text } from '@mantine/core';
 import { IconPlayerPause, IconPlayerPlay } from '@tabler/icons-react';
 import { WaveSurferAdapter } from '@~/player/src/ui/Player/WavesurfAdapter';
+import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useRef, type FC } from 'react';
 import { useAppStore } from 'renderer/src/AppContext';
@@ -62,15 +63,19 @@ export const Player: FC = observer(() => {
         void player.loadSource(currentAudioPath);
     }, [currentAudioPath, workspace]);
 
-    useEffect(() => {
-        const player = adapterRef.current;
-        if (!player) return;
-
-        if (!Number.isFinite(workspace.requestedPlaybackTime)) return;
-
-        player.seekTo(workspace.requestedPlaybackTime);
-        workspace.setPlaybackPosition(workspace.requestedPlaybackTime);
-    }, [workspace, workspace.requestedPlaybackTime]);
+    useEffect(() => reaction(
+        () => workspace.hasAudioSource && !workspace.isPlayerLoading ? workspace.playbackRequest : null,
+        (request) => {
+            const player = adapterRef.current;
+            if (!player || !request) return;
+            workspace.clearPlaybackRequest();
+            player.seekTo(request.time);
+            if (request.action === 'play' && !player.isPlaying) {
+                void player.playPause().catch((error: unknown) => console.error('Failed to play transcript audio', error));
+            }
+        },
+        { fireImmediately: true },
+    ), [workspace]);
 
     const onPlayPause = async () => {
         await adapterRef.current?.playPause();

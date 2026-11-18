@@ -4,6 +4,11 @@ import type { AudioMode, DeepReadonly, Segment, SegmentSelection } from './types
 
 type WorkspaceSession = Omit<SessionDetails, 'transcript' | 'hasTranscript'>;
 
+interface PlaybackRequest {
+    readonly time: number;
+    readonly action: 'seek' | 'play';
+}
+
 const toWorkspaceSession = (session: DeepReadonly<WorkspaceSession>): WorkspaceSession => ({
     id: session.id,
     title: session.title,
@@ -32,7 +37,7 @@ export class WorkspaceStore {
 
     private playbackPositionValue = 0;
 
-    private requestedPlaybackTimeValue = 0;
+    private playbackRequestValue: PlaybackRequest | null = null;
 
     get audioMode(): AudioMode {
         return this.audioModeValue;
@@ -50,8 +55,8 @@ export class WorkspaceStore {
         return this.playbackPositionValue;
     }
 
-    get requestedPlaybackTime(): number {
-        return this.requestedPlaybackTimeValue;
+    get playbackRequest(): PlaybackRequest | null {
+        return this.playbackRequestValue;
     }
 
     constructor() {
@@ -152,8 +157,12 @@ export class WorkspaceStore {
         this.playbackPositionValue = Number.isFinite(position) ? Math.max(0, position) : 0;
     }
 
-    requestPlaybackTime(time: number): void {
-        this.requestedPlaybackTimeValue = Number.isFinite(time) ? Math.max(0, time) : 0;
+    requestPlaybackTime(time: number, action: PlaybackRequest['action'] = 'seek'): void {
+        this.playbackRequestValue = { time: Number.isFinite(time) ? Math.max(0, time) : 0, action };
+    }
+
+    clearPlaybackRequest(): void {
+        this.playbackRequestValue = null;
     }
 
     clearWorkspace(): void {
@@ -168,6 +177,6 @@ export class WorkspaceStore {
         this.isPlayingValue = false;
         this.isPlayerLoadingValue = false;
         this.playbackPositionValue = 0;
-        this.requestedPlaybackTimeValue = 0;
+        this.clearPlaybackRequest();
     }
 }

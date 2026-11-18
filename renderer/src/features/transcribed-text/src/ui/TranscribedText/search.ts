@@ -8,7 +8,7 @@ export interface TranscriptMatch {
     ranges: TranscriptMatchRange[];
 }
 
-export const findTranscriptMatches = (segments: ReadonlyArray<{ text: string }>, query: string): TranscriptMatch[] => {
+export const findTranscriptMatches = (segments: ReadonlyArray<{ text: string }>, query: string, separator = ' '): TranscriptMatch[] => {
     const searchText = query.trim();
     if (!searchText) return [];
 
@@ -16,10 +16,10 @@ export const findTranscriptMatches = (segments: ReadonlyArray<{ text: string }>,
     let offset = 0;
     const segmentSpans = segments.map((segment, segmentIndex) => {
         const span = { segmentIndex, start: offset, end: offset + segment.text.length };
-        offset = span.end + 1;
+        offset = span.end + separator.length;
         return span;
     });
-    const transcriptText = segments.map((segment) => segment.text).join(' ');
+    const transcriptText = segments.map((segment) => segment.text).join(separator);
 
     return Array.from(transcriptText.matchAll(pattern), (match) => {
         const matchEnd = match.index + match[0].length;

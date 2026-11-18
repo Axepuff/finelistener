@@ -19,6 +19,62 @@
     white-space: normal;
 }
 
+.reading {
+    max-width: 82ch;
+    margin-inline: auto;
+    text-align: start;
+}
+
+.speakerLegend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin: 0 0 14px;
+    padding: 0;
+    list-style: none;
+    font-size: var(--mantine-font-size-sm);
+}
+
+.speakerLegend li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    overflow-wrap: anywhere;
+}
+
+.speakerLegend li > span {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+    border-radius: 3px;
+}
+
+.readingParagraph {
+    margin: 0 0 1em;
+    line-height: 1.85;
+    overflow-wrap: anywhere;
+}
+
+.readingWord {
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    color: inherit;
+    font: inherit;
+    white-space: normal;
+    line-height: normal;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+    user-select: text;
+}
+
+button.readingWord { cursor: pointer; }
+button.readingWord:hover { text-decoration: underline; }
+button.readingWord:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 2px;
+}
+
 .speakerTranscript {
     display: grid;
     grid-template-columns: fit-content(9rem) minmax(0, 1fr);

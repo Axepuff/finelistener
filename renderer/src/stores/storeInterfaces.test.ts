@@ -15,7 +15,7 @@ it('exposes workspace state as read-only properties and nested data', () => {
         | 'isPlaying'
         | 'isPlayerLoading'
         | 'playbackPosition'
-        | 'requestedPlaybackTime'
+        | 'playbackRequest'
     >;
 
     expectTypeOf<PlaybackState>().toEqualTypeOf<Readonly<PlaybackState>>();

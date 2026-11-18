@@ -48,7 +48,7 @@ describe('WorkspaceStore', () => {
             store.setPlaying(true);
             store.setPlayerLoading(true);
             store.setPlaybackPosition(2);
-            store.requestPlaybackTime(2);
+            store.requestPlaybackTime(2, 'play');
 
             if (command === 'replace') store.replaceWorkspace({ ...session, id: 'session-2' });
             if (command === 'clear') store.clearWorkspace();
@@ -59,7 +59,7 @@ describe('WorkspaceStore', () => {
             expect(store.isPlaying).toBe(false);
             expect(store.isPlayerLoading).toBe(false);
             expect(store.playbackPosition).toBe(0);
-            expect(store.requestedPlaybackTime).toBe(0);
+            expect(store.playbackRequest).toBeNull();
             if (command === 'clear') {
                 expect(store.activeSession).toBeNull();
                 expect(store.audioSourcePath).toBeNull();

@@ -21,7 +21,7 @@ The macOS release job uses an Apple Silicon macOS 26 runner with `MACOSX_DEPLOYM
 
 Sessions default to Optimized audio. Original/Optimized is remembered per session and applies to playback and subsequent recognition/analysis; original recordings and existing transcripts are preserved. Transcribe saves Whisper recognition before local speaker analysis. Speaker labels default on, with a remembered opt-out. Microphone-only sessions use a fixed identity without downloading or running a speaker model.
 
-Plain Text contains speech only. Timecodes groups adjacent same-speaker/source fragments across gaps up to five seconds; expand a turn to edit original fragments. Search, copy and TXT export use the selected view. A failed or stopped analysis retains saved text and can be retried separately.
+Plain Text contains speech only. Timecodes shows the time and recording source of each passage. In **Speakers**, the default **Reading** layout uses solid speaker colors and keeps Whisper's words and punctuation. Select a timed word to listen from there. During overlapping speech, the word description indicates when its color is estimated from voice activity. Choose **Turns** to see the grouped speaker cards and correct an assignment. Search, copy and TXT export follow the selected layout. A failed or stopped analysis retains saved text and can be retried separately.
 
 All builds use **Nemotron 3 Diarization Q8 with NeMo-Speech.cpp 0.3.0**. Speaker count is automatic.
 

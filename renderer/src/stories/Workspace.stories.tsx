@@ -108,6 +108,7 @@ export const Speakers: Story = {
         await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
         await waitFor(() => expect(canvas.getByText('Current position: 00:04.00')).toBeVisible());
         await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
+        await userEvent.click(canvas.getByRole('radio', { name: 'Turns' }));
         const alice = canvas.getByRole('button', { name: "Seek to Alice's turn" });
         const bob = canvas.getByRole('button', { name: "Seek to Bob's turn" });
         await expect(alice).toBeVisible();
@@ -125,6 +126,28 @@ export const Speakers: Story = {
         await userEvent.click(canvas.getByRole('button', { name: 'The transcript should stay easy to read while we listen and compare details.' }));
         await waitFor(() => expect(canvas.getByText('Current position: 00:04.00')).toBeVisible());
         await userEvent.click(canvas.getByText('Show original fragments'));
+    },
+};
+
+export const SpeakerReading: Story = {
+    parameters: { scenario: 'nemotron-reading' },
+    play: async ({ canvas, loaded }) => {
+        const { store } = loaded.workspace as StoryWorkspace;
+        await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
+        await expect(canvas.queryByRole('radio', { name: 'Reading' })).not.toBeInTheDocument();
+        await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
+        await expect(canvas.getByRole('radio', { name: 'Reading' })).toBeChecked();
+        await expect(canvas.getByRole('list', { name: 'Speaker colors' })).toHaveTextContent('AliceBob');
+        const word = canvas.getByRole('button', { name: 'Friday · Bob · Overlapping voices · Estimated from voice activity' });
+        await expect(word).toBeVisible();
+        await userEvent.type(canvas.getByRole('textbox', { name: 'Search transcript' }), 'afternoon? Friday');
+        await expect(canvas.getByRole('status')).toHaveTextContent('1 of 1');
+        await expect(word.querySelector('mark')).toHaveTextContent('Friday');
+        await userEvent.click(canvas.getByRole('button', { name: 'Clear search' }));
+        await userEvent.click(word);
+        await waitFor(() => expect(store.workspace.playbackPosition).toBeGreaterThanOrEqual(5.69));
+        await expect(store.workspace.playbackPosition).toBeLessThan(8);
+        if (store.workspace.isPlaying) await userEvent.click(canvas.getByRole('button', { name: 'Pause audio' }));
     },
 };
 
