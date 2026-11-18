@@ -1,24 +1,24 @@
-# FineListener 1.4.0-beta.3
+# FineListener 1.5.0-beta.1
 
-First public beta of FineListener: local audio recording, transcription and speaker labeling for Windows and Apple Silicon.
+The **Speakers** tab now opens in **Reading**. Speaker colors show who is talking within each paragraph, including short replies. The text keeps the original words and punctuation from Whisper. Select a word with a timestamp to play from it, or switch to **Turns** to review and correct speaker assignments.
 
 ## Downloads
 
 | Platform | Installer | ZIP archive |
 | --- | --- | --- |
-| Windows x64 CPU | [Download installer](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.3/FineListener-1.4.0-beta.3-win-x64-cpu-setup.exe) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.3/FineListener-1.4.0-beta.3-win-x64-cpu.zip) |
-| Windows x64 GPU | [Download installer](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.3/FineListener-1.4.0-beta.3-win-x64-gpu-setup.exe) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.3/FineListener-1.4.0-beta.3-win-x64-gpu.zip) |
-| macOS Apple Silicon | [Download DMG](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.3/FineListener-1.4.0-beta.3-mac-arm64.dmg) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.3/FineListener-1.4.0-beta.3-mac-arm64.zip) |
+| Windows x64 CPU | [Download installer](https://github.com/Axepuff/finelistener/releases/download/v1.5.0-beta.1/FineListener-1.5.0-beta.1-win-x64-cpu-setup.exe) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.5.0-beta.1/FineListener-1.5.0-beta.1-win-x64-cpu.zip) |
+| Windows x64 GPU | [Download installer](https://github.com/Axepuff/finelistener/releases/download/v1.5.0-beta.1/FineListener-1.5.0-beta.1-win-x64-gpu-setup.exe) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.5.0-beta.1/FineListener-1.5.0-beta.1-win-x64-gpu.zip) |
+| macOS Apple Silicon | [Download DMG](https://github.com/Axepuff/finelistener/releases/download/v1.5.0-beta.1/FineListener-1.5.0-beta.1-mac-arm64.dmg) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.5.0-beta.1/FineListener-1.5.0-beta.1-mac-arm64.zip) |
 
 Choose Windows CPU if you are unsure which Windows build to use. The Mac beta targets macOS 15 or later on M1 or newer; Intel Macs are not supported by this release. Windows requires Windows 10 version 1903 or later.
 
-[Installation and first-launch instructions](https://github.com/Axepuff/finelistener/blob/v1.4.0-beta.3/INSTALL.md) · [SHA-256 checksums](https://github.com/Axepuff/finelistener/releases/download/v1.4.0-beta.3/SHA256SUMS.txt)
+[Installation and first-launch instructions](https://github.com/Axepuff/finelistener/blob/v1.5.0-beta.1/INSTALL.md) · [SHA-256 checksums](https://github.com/Axepuff/finelistener/releases/download/v1.5.0-beta.1/SHA256SUMS.txt)
 
 ## Included
 
 - Record microphone and system audio or import an existing recording.
 - Transcribe locally with Whisper and label speakers with Nemotron 3. Audio processing stays on your computer.
-- Read plain text, timecodes and speaker views; correct speaker assignments and export text.
+- During overlapping speech, Reading uses the saved speaker assignment when available. If the color is estimated from voice activity, the tooltip on the word identifies the estimate.
 - Save sessions and reopen their recordings and transcripts, including revealing a session's folder.
 - Choose CPU or supported GPU acceleration for speaker analysis. Ambiguous overlapping speech can remain **Unknown speaker**.
 

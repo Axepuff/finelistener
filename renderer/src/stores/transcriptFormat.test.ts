@@ -2,6 +2,8 @@ import { expect, it } from 'vitest';
 import type { SessionTranscriptV1 } from 'electron/src/types/sessions';
 import { projectTranscript, transcriptToHtml, transcriptToPlainText, transcriptToText } from './transcriptFormat';
 import { findTranscriptMatches } from '../features/transcribed-text/src/ui/TranscribedText/search';
+import { projectSpeakerReading } from './speakerReading';
+import { speakerLabelsFor, speakerReadingToHtml } from './speakerReadingFormat';
 
 const transcript = (): SessionTranscriptV1 => ({
     version: 1, recognitionRevision: 'r',
@@ -61,6 +63,24 @@ it('preserves subword joins within the same raw segment and regroups after ident
     expect(transcriptToHtml(input)).toBe('<span data-regions="0.000">[00:00:00 - 00:00:02]</span> Hello!\n');
     input.segments[1].speakerId = 'a';
     expect(projectTranscript(input, 'speakers')[0].text).toBe('Hello!');
+});
+
+it('copies the reading layout with escaped speaker labels, speech and punctuation', () => {
+    const input = transcript();
+    input.speakers!.speakers[0].name = 'Sam "A&B"';
+    input.segments = [{ startSec: 0, endSec: null, text: '<Hello> & bye!', speakerId: 'a' }];
+    const html = speakerReadingToHtml(projectSpeakerReading(input), speakerLabelsFor(input));
+    expect(html).toContain('title="Sam &quot;A&amp;B&quot;"');
+    expect(html).toContain('background-color:');
+    expect(html.replace(/<[^>]*>/g, '')).toBe('&lt;Hello&gt; &amp; bye!');
+});
+
+it('distinguishes additional speakers in Reading when the turn card palette repeats', () => {
+    const input = transcript();
+    input.speakers!.speakers = Array.from({ length: 14 }, (_, index) => ({ id: String(index), name: `Guest ${index}` }));
+    const labels = Array.from(speakerLabelsFor(input).values());
+    expect(new Set(labels.map((label) => label.accent)).size).toBe(14);
+    expect(new Set(labels.map((label) => label.clipboardBackground)).size).toBe(14);
 });
 
 it('keeps recognition segments separate in Timecodes even when their speaker is the same', () => {

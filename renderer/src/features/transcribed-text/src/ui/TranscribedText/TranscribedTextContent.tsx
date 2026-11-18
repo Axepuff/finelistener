@@ -5,6 +5,9 @@ import React, { useEffect, useRef, type MouseEvent } from 'react';
 import type { TranscriptMatch, TranscriptMatchRange } from './search';
 import styles from './TranscribedText.module.css';
 import type { DeepReadonly } from 'renderer/src/stores/types';
+import type { SpeakerReadingParagraph } from 'renderer/src/stores/speakerReading';
+import type { SpeakerLabels } from 'renderer/src/stores/speakerReadingFormat';
+import { SpeakerReading } from './SpeakerReading';
 
 interface TranscribedSegment {
     id: string;
@@ -19,6 +22,7 @@ interface TranscribedSegment {
 }
 
 interface Props {
+    reading?: { paragraphs: SpeakerReadingParagraph[]; labels: SpeakerLabels };
     showRegions: boolean;
     plainSegments: TranscribedSegment[];
     matches: TranscriptMatch[];
@@ -30,6 +34,7 @@ interface Props {
 }
 
 export const TranscribedTextContent: React.FC<Props> = ({
+    reading,
     showRegions,
     plainSegments,
     matches,
@@ -56,31 +61,33 @@ export const TranscribedTextContent: React.FC<Props> = ({
         contentRef.current?.querySelector('mark[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
     }, [activeMatchIndex, searchQuery, showRegions, transcriptText]);
 
-    const renderSegmentText = (text: string, segmentIndex: number) => {
-        const segmentMatches = matchesBySegment.get(segmentIndex);
-        if (!segmentMatches) return text;
-
-        const parts: React.ReactNode[] = [];
-        let cursor = 0;
-
-        segmentMatches.forEach(({ range, index }) => {
-            parts.push(text.slice(cursor, range.start));
-            parts.push(
-                <mark key={`${index}-${range.start}`} className={styles.searchMatch} data-active={index === activeMatchIndex}>
-                    {text.slice(range.start, range.end)}
-                </mark>,
-            );
-            cursor = range.end;
-        });
-        parts.push(text.slice(cursor));
-
-        return parts;
+    const highlightSegment = (text: string, segmentIndex: number) => {
+        const ranges = matchesBySegment.get(segmentIndex) ?? [];
+        let nextMatch = 0;
+        // Reading renders consecutive word and punctuation slices. A match can span both.
+        return (start = 0, end = text.length): React.ReactNode => {
+            while (nextMatch < ranges.length && ranges[nextMatch].range.end <= start) nextMatch++;
+            if (nextMatch === ranges.length || ranges[nextMatch].range.start >= end || start === end) return text.slice(start, end);
+            const parts: React.ReactNode[] = [];
+            let cursor = start;
+            for (let i = nextMatch; i < ranges.length && ranges[i].range.start < end; i++) {
+                const { range, index } = ranges[i];
+                const left = Math.max(start, range.start);
+                const right = Math.min(end, range.end);
+                parts.push(text.slice(cursor, left), (
+                    <mark key={range.start} className={styles.searchMatch} data-active={index === activeMatchIndex}>{text.slice(left, right)}</mark>
+                ));
+                cursor = right;
+            }
+            parts.push(text.slice(cursor, end));
+            return parts;
+        };
     };
 
     return (
         <Paper style={{ padding: hasSpeakers ? '4px 0' : 18, overflowY: 'auto', width: '100%', minHeight: 0, flex: 1 }}>
-            <Box ref={contentRef} component="div" className={regionTextClassName} onClick={onRegionClick}>
-                {plainSegments.map((segment, index) => (
+            <Box ref={contentRef} component="div" className={reading ? undefined : regionTextClassName} onClick={onRegionClick}>
+                {reading ? <SpeakerReading {...reading} highlightSegment={highlightSegment} /> : plainSegments.map((segment, index) => (
                     <React.Fragment key={segment.id}>
                         {segment.speaker ? (
                             <div className={styles.speakerTurn}>
@@ -109,7 +116,7 @@ export const TranscribedTextContent: React.FC<Props> = ({
                                 </div>
                                 <div className={styles.speakerSpeech} style={{ backgroundColor: `color-mix(in srgb, var(--mantine-color-${segment.speaker.color}-0) 55%, var(--mantine-color-body))` }}>
                                     <div>
-                                        {renderSegmentText(segment.text, index)}
+                                        {highlightSegment(segment.text, index)()}
                                     </div>
                                     {segment.children && segment.children.length > 1 ? (
                                         <details className={styles.originalFragments}>
@@ -136,12 +143,12 @@ export const TranscribedTextContent: React.FC<Props> = ({
                                 <span data-regions={segment.startSeconds?.toString()}>{segment.timecode}</span>
                                 {segment.text ? ' ' : ''}
                                 {segment.text ? segment.prefix : ''}
-                                {renderSegmentText(segment.text, index)}
+                                {highlightSegment(segment.text, index)()}
                                 {'\n'}
                             </>
                         ) : (
                             <span data-regions={segment.startSeconds?.toString()}>
-                                {renderSegmentText(segment.text, index)}
+                                {highlightSegment(segment.text, index)()}
                             </span>
                         )}
                     </React.Fragment>

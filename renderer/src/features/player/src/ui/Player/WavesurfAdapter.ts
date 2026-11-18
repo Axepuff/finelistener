@@ -19,6 +19,7 @@ export class WaveSurferAdapter extends PlayerAdapter {
     private readonly wavesurfer: WaveSurfer;
     private readonly regions: RegionsPlugin;
     private loadingController: AbortController | null = null;
+    private hasLoadedSource = false;
     private readonly onPlayingChange: (isPlaying: boolean) => void;
     private readonly onTimeUpdate: (time: number) => void;
     private readonly onReadyChange: (isPlaying: boolean) => void;
@@ -27,9 +28,6 @@ export class WaveSurferAdapter extends PlayerAdapter {
     };
     private readonly handlePause = (): void => {
         this.onPlayingChange(false);
-    };
-    private readonly handleReady = (): void => {
-        this.onReadyChange(false);
     };
     private readonly handleTimeUpdate = (currentTime: number): void => {
         this.onTimeUpdate(currentTime);
@@ -64,7 +62,6 @@ export class WaveSurferAdapter extends PlayerAdapter {
         this.wavesurfer.on('play', this.handlePlay);
         this.wavesurfer.on('pause', this.handlePause);
         this.wavesurfer.on('finish', this.handlePause);
-        this.wavesurfer.on('ready', this.handleReady);
         this.wavesurfer.on('timeupdate', this.handleTimeUpdate);
         this.wavesurfer.on('interaction', this.handleTimeUpdate);
         this.wavesurfer.on('seeking', this.handleTimeUpdate);
@@ -84,6 +81,8 @@ export class WaveSurferAdapter extends PlayerAdapter {
         this.loadingController?.abort();
         const controller = new AbortController();
         this.loadingController = controller;
+        this.hasLoadedSource = false;
+        this.wavesurfer.pause();
         this.clearRegions();
         this.onPlayingChange(false);
         this.onTimeUpdate(0);
@@ -101,18 +100,21 @@ export class WaveSurferAdapter extends PlayerAdapter {
             const buffer = await response.arrayBuffer();
             if (controller.signal.aborted) return;
             await this.wavesurfer.loadBlob(new Blob([buffer], { type: 'audio/wav' }));
+            if (!controller.signal.aborted) this.hasLoadedSource = true;
         } catch (error: unknown) {
             if (controller.signal.aborted) return;
             console.error('Failed to load playback audio', error);
-            this.onReadyChange(false);
+        } finally {
+            if (!controller.signal.aborted) this.onReadyChange(false);
         }
     }
 
     async playPause(): Promise<void> {
-        await this.wavesurfer.playPause();
+        if (this.hasLoadedSource) await this.wavesurfer.playPause();
     }
 
     seekTo(time: number): void {
+        if (!this.hasLoadedSource) return;
         this.wavesurfer.setTime(time);
         this.onTimeUpdate(time);
     }
@@ -173,7 +175,6 @@ export class WaveSurferAdapter extends PlayerAdapter {
         this.wavesurfer.un('play', this.handlePlay);
         this.wavesurfer.un('pause', this.handlePause);
         this.wavesurfer.un('finish', this.handlePause);
-        this.wavesurfer.un('ready', this.handleReady);
         this.wavesurfer.un('timeupdate', this.handleTimeUpdate);
         this.wavesurfer.un('interaction', this.handleTimeUpdate);
         this.wavesurfer.un('seeking', this.handleTimeUpdate);

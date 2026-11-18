@@ -6,7 +6,7 @@ import { createFakeRendererAdapter } from '../stores/testing/fakeRendererAdapter
 import { STORY_AUDIO_PATH } from './storyAudio';
 
 export type WorkspaceScenario = 'empty' | 'ready' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error'
-    | 'nemotron' | 'nemotron-downloading' | 'nemotron-analyzing' | 'nemotron-error';
+    | 'nemotron' | 'nemotron-reading' | 'nemotron-downloading' | 'nemotron-analyzing' | 'nemotron-error';
 
 export interface StoryWorkspace {
     store: AppStore;
@@ -67,6 +67,34 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         modelSha256: 'demo', runtimeSha256: 'demo', audioMode: 'optimized', backend: 'vulkan',
         device: 'vulkan:0', preset: 'v3-offline', assignmentPolicy: 'conservative-overlap-v1', acousticIntervals: [],
     };
+    if (scenario === 'nemotron-reading' && session.transcript?.speakers?.provenance?.engine === 'nemotron-3') {
+        session.transcript.segments = [
+            { startSec: 0, endSec: 3, text: 'Could we move rehearsal', speakerId: 'alice' },
+            { startSec: 3, endSec: 3.6, text: 'yes,', speakerId: 'bob' },
+            { startSec: 3.6, endSec: 5.7, text: 'to Friday afternoon?', speakerId: 'alice' },
+            { startSec: 5.7, endSec: 6.4, text: 'Friday', speakerId: null },
+            { startSec: 6.4, endSec: 9.8, text: 'works for me.', speakerId: 'bob' },
+            { startSec: 10, endSec: 12, text: 'Perfect.', speakerId: 'alice' },
+        ].map((segment, index) => {
+            const tokens = Array.from(segment.text.matchAll(/\w+/g));
+            const step = (segment.endSec - segment.startSec) / tokens.length;
+            return {
+                ...segment,
+                rawSpan: { segmentId: `dialogue-${index}`, startChar: 0, endChar: segment.text.length },
+                words: tokens.map((token, i) => ({
+                    text: token[0], startChar: token.index, endChar: token.index + token[0].length,
+                    startSec: segment.startSec + i * step, endSec: segment.startSec + (i + 1) * step,
+                })),
+            };
+        });
+        session.transcript.speakers.provenance.acousticIntervals = [
+            { speakerId: 'alice', startSec: 0, endSec: 3.4 },
+            { speakerId: 'bob', startSec: 3, endSec: 3.6 },
+            { speakerId: 'alice', startSec: 3.6, endSec: 6.4 },
+            { speakerId: 'bob', startSec: 5.7, endSec: 9.8 },
+            { speakerId: 'alice', startSec: 10, endSec: 12 },
+        ];
+    }
     const isRecorder = scenario.startsWith('recording');
     let sessions: SessionListItem[] = scenario === 'empty' || isRecorder ? [] : [session];
     let recordingState: RecordingState = scenario === 'recording' ? 'recording' : 'idle';

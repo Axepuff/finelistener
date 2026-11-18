@@ -4,10 +4,11 @@ import React, { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useAppStore } from 'renderer/src/AppContext';
 import styles from './TranscribedText.module.css';
-import { transcriptToHtml, type TranscriptView } from 'renderer/src/stores/transcriptFormat';
+import type { TranscriptView } from 'renderer/src/stores/transcriptFormat';
 
 interface Props {
     currentTextValue: string;
+    getClipboardHtml: () => string;
     view: TranscriptView;
     onViewChange: (view: TranscriptView) => void;
     searchQuery: string;
@@ -21,6 +22,7 @@ interface Props {
 
 export const TranscribedTextControls: React.FC<Props> = observer(({
     currentTextValue,
+    getClipboardHtml,
     view,
     onViewChange,
     searchQuery,
@@ -51,7 +53,7 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
         try {
             await navigator.clipboard.write([new ClipboardItem({
                 'text/plain': new Blob([currentTextValue], { type: 'text/plain' }),
-                'text/html': new Blob([transcriptToHtml(store.transcription.visibleTranscript, view)], { type: 'text/html' }),
+                'text/html': new Blob([getClipboardHtml()], { type: 'text/html' }),
             })]);
             setCopyNotificationKey((value) => value + 1);
             setIsCopyNotificationOpen(true);
