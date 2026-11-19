@@ -1,4 +1,4 @@
-import type { RecordingSource, SessionTranscriptSegmentV1, SessionTranscriptV1 } from 'electron/src/types/sessions';
+import type { RecordingSource, SessionSummary, SessionTranscriptSegmentV1, SessionTranscriptV1 } from 'electron/src/types/sessions';
 import type { TranscribeOpts, TranscriptionProgressEvent, TranscriptionTextEvent } from 'electron/src/types/transcription';
 import type { WhisperModelName } from 'electron/src/types/whisper';
 import { makeAutoObservable, runInAction } from 'mobx';
@@ -358,6 +358,10 @@ export class TranscriptionStore {
             }
             finishStop();
         }
+    }
+
+    setSummary(summary: SessionSummary): void {
+        if (this.savedTranscriptValue) this.savedTranscriptValue = { ...this.savedTranscriptValue, summary };
     }
 
     replaceSavedTranscript(transcript: DeepReadonly<SessionTranscriptV1> | null): void {

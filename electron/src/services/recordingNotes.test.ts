@@ -1,0 +1,134 @@
+import { expect, it, vi } from 'vitest';
+import type { ReviewedSummaryChunk } from '../types/sessions';
+import { generateRecordingNotes, summaryContext, type SummaryInference } from './recordingNotes';
+
+// Treat each code point as one token so the small fixtures can exercise the context boundary.
+const countTokens = (text: string) => Promise.resolve(Array.from(text).length);
+const bodyOf = (prompt: string) => prompt.split('<|im_start|>user\n')[1].split('\n<|im_end|>')[0];
+
+it('keeps adjacent fragments of a speaker’s unfinished sentence together near a full chunk', async () => {
+    const rows = [
+        { startSec: 0, endSec: 100, speaker: 'Alice', text: 'Complete topic. '.repeat(104).trimEnd() },
+        { startSec: 100, endSec: 106, speaker: 'Bob', text: 'My example '.repeat(11).trimEnd() },
+        { startSec: 106, endSec: 114, speaker: 'Bob', text: 'continues here '.repeat(11) + 'and finishes.' },
+    ];
+    const passages: string[] = [];
+    const complete = (prompt: string) => {
+        const source = bodyOf(prompt).split('NEW LINES\n')[1];
+        if (source) passages.push(source);
+        return Promise.resolve('A topic.');
+    };
+    await generateRecordingNotes(rows, { countTokens, complete }, () => undefined, () => Promise.resolve());
+    expect(passages).toHaveLength(2);
+    expect(passages[0]).not.toContain('Bob:');
+    expect(passages[1]).toContain(rows[1].text);
+    expect(passages[1]).toContain(rows[2].text);
+});
+
+it('reviews original timed turns, hands off only the reviewed account, and joins those exact paragraphs', async () => {
+    const rows = [
+        { startSec: 0, endSec: 6, speaker: 'Kai', text: 'The first count is provisional. ' + 'Opening discussion. '.repeat(65) },
+        { startSec: 9, endSec: 18, speaker: 'Lea', text: 'Correction: nine accepted. ' + 'Closing discussion. '.repeat(65) },
+    ];
+    const sourceParts: string[] = [];
+    const detailed = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const complete: SummaryInference['complete'] = async (prompt, maxTokens) => {
+        expect(await countTokens(prompt) + maxTokens).toBeLessThanOrEqual(summaryContext);
+        const body = bodyOf(prompt);
+        if (body.includes('NEW LINES\n')) {
+            const [history, source] = body.split('NEW LINES\n');
+            if (sourceParts.length) expect(history).toContain('The count is provisional.');
+            else expect(history).toBe('');
+            sourceParts.push(source);
+            return 'Unsupported draft claim.';
+        }
+        if (body.includes('ORIGINAL LINES\n')) {
+            const [draft, original] = body.split('ORIGINAL LINES\n');
+            expect(draft).toContain('Unsupported draft claim.');
+            expect(original).toBe(sourceParts.at(-1));
+            return sourceParts.length === 1 ? 'The count is provisional.' : 'Nine were accepted.';
+        }
+        expect(detailed).toHaveBeenCalledOnce();
+        return 'Nine were accepted.';
+    };
+    const result = await generateRecordingNotes(rows, { countTokens, complete }, () => undefined, detailed);
+    expect(sourceParts).toEqual(['[0.00–6.00] Kai: ' + rows[0].text, '[9.00–18.00] Lea: ' + rows[1].text]);
+    expect(result).toEqual({ detailed: 'The count is provisional.\n\nNine were accepted.', brief: 'Nine were accepted.' });
+    expect(detailed).toHaveBeenCalledWith([
+        { startSec: 0, endSec: 6, text: 'The count is provisional.' },
+        { startSec: 9, endSec: 18, text: 'Nine were accepted.' },
+    ]);
+});
+
+it('splits an unusually long undiarized utterance without losing or repeating its text on an empty completion', async () => {
+    const text = '🌱'.repeat(5000) + 'Final outcome.';
+    let empty = true;
+    const reviewed: string[] = [];
+    const complete: SummaryInference['complete'] = (prompt) => {
+        const body = bodyOf(prompt);
+        if (body.includes('NEW LINES\n') && empty) {
+            empty = false;
+            return Promise.resolve(null);
+        }
+        if (body.includes('ORIGINAL LINES\n')) {
+            const lines = body.split('ORIGINAL LINES\n')[1];
+            reviewed.push(lines.replace(/\[1\.00–8\.00\] /gu, '').replaceAll('\n', ''));
+            expect(lines.isWellFormed()).toBe(true);
+        }
+        return Promise.resolve('Garden work.');
+    };
+    await generateRecordingNotes([{ startSec: 1, endSec: 8, text }], { countTokens, complete }, () => undefined, () => Promise.resolve());
+    expect(reviewed.length).toBeGreaterThan(1);
+    expect(reviewed.join('')).toBe(text);
+});
+
+it('reuses completed detailed paragraphs after brief failure and reduces long notes with bounded inputs', async () => {
+    const saved: ReviewedSummaryChunk[] = [];
+    const rows = [{ startSec: 0, endSec: 5, text: 'The report is due Friday. Delivery remains unconfirmed.' }];
+    await expect(generateRecordingNotes(rows, {
+        countTokens,
+        complete: (prompt) => Promise.resolve(bodyOf(prompt).includes('LINES\n') ? rows[0].text : null),
+    }, () => undefined, (paragraphs) => { saved.push(...paragraphs); return Promise.resolve(); })).rejects.toThrow(/incomplete brief/u);
+    expect(saved).toEqual(rows);
+
+    const notes = [...Array.from({ length: 21 }, (_, i) => ({ startSec: i, endSec: i + 1, text: 'Agenda item. '.repeat(35) })), ...saved];
+    let reductions = 0;
+    const result = await generateRecordingNotes(rows, {
+        countTokens,
+        complete: async (prompt, limit) => {
+            expect(await countTokens(prompt) + limit).toBeLessThanOrEqual(summaryContext);
+            expect(bodyOf(prompt)).not.toContain('NEW LINES\n');
+            reductions++;
+            return bodyOf(prompt).includes('Friday') ? 'The report is due Friday.' : 'Agenda items.';
+        },
+    }, () => undefined, () => { throw new Error('Already saved'); }, notes);
+    expect(reductions).toBeGreaterThan(2);
+    expect(result.brief).toBe('The report is due Friday.');
+    expect(result.detailed).toBe(notes.map((note) => note.text).join('\n\n'));
+});
+
+it('retries an overlong brief, checks the replacement and rejects a repeated long answer', async () => {
+    const note = { startSec: 0, endSec: 8, text: 'Twelve boxes were estimated for the pilot shipment. After counting them the final shipment contains nine. The report will be delivered Friday. A second shipment was discussed and never scheduled.' };
+    const replacement = 'The shipment contains nine boxes. The report is due Friday, and another shipment is unconfirmed.';
+    const checked = 'The shipment contains nine boxes. The report is due Friday. Another shipment remains unscheduled.';
+    const run = (answers: string[]) => generateRecordingNotes([note], {
+        countTokens,
+        complete: (prompt) => {
+            if (bodyOf(prompt).includes(replacement)) {
+                expect(bodyOf(prompt)).toContain(note.text);
+                return Promise.resolve(checked);
+            }
+            return Promise.resolve(answers.shift() ?? note.text);
+        },
+    }, () => undefined, () => Promise.resolve(), [note]);
+    await expect(run([note.text, note.text, replacement])).resolves.toEqual({ brief: checked, detailed: note.text });
+    await expect(run([])).rejects.toThrow(/condense/u);
+});
+
+it('keeps a single short reviewed sentence verbatim, including its negation', async () => {
+    const note = { startSec: 0, endSec: 5, text: 'Поставку не согласовали.' };
+    const complete = vi.fn(() => Promise.resolve('Поставку согласовали.'));
+    await expect(generateRecordingNotes([note], { countTokens, complete }, () => {}, () => Promise.resolve(), [note]))
+        .resolves.toEqual({ brief: note.text, detailed: note.text });
+    expect(complete).not.toHaveBeenCalled();
+});

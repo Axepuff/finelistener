@@ -1,11 +1,14 @@
 import type { RecordingLevel, RecordingProgress, RecordingState } from 'electron/src/services/RecordingService';
-import type { SessionDetails, SessionListItem, SessionTranscriptV1 } from 'electron/src/types/sessions';
+import type { SessionDetails, SessionListItem, SessionSummary, SessionTranscriptV1, SummaryGenerationResult } from 'electron/src/types/sessions';
+import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
 import { UI_PREFERENCE_DEFAULTS, type UiPreferenceKey, type UiPreferenceValueMap } from '../../../electron/src/types/uiPreferences';
 import { AppStore } from '../stores/appStore';
 import { createFakeRendererAdapter } from '../stores/testing/fakeRendererAdapter';
 import { STORY_AUDIO_PATH } from './storyAudio';
 
 export type WorkspaceScenario = 'empty' | 'ready' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error'
+    | 'summary-ready' | 'summary-install' | 'summary-downloading' | 'summary-download-error' | 'summary-generating'
+    | 'summary-cancel' | 'summary-error' | 'summary-saved' | 'summary-partial'
     | 'nemotron' | 'nemotron-reading' | 'nemotron-downloading' | 'nemotron-analyzing' | 'nemotron-error';
 
 export interface StoryWorkspace {
@@ -41,7 +44,7 @@ const transcriptSource = transcript.segments.map((segment) => (
 
 export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise<StoryWorkspace> => {
     const isNemotron = scenario.startsWith('nemotron');
-    const hasTranscript = scenario === 'transcript' || scenario === 'long-transcript' || scenario === 'speakers' || isNemotron;
+    const hasTranscript = scenario === 'transcript' || scenario === 'long-transcript' || scenario === 'speakers' || isNemotron || scenario.startsWith('summary-');
     let session: SessionDetails = {
         id: 'storybook-session',
         title: 'Design discussion.wav',
@@ -95,6 +98,40 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
             { speakerId: 'alice', startSec: 10, endSec: 12 },
         ];
     }
+    const demoSummary: SessionSummary = {
+        detailed: 'The team reviewed how listeners find a passage after a recording. Opening a saved session should restore its transcript and the audio it belongs to.\n\nListeners can search for a word to locate a passage. In the timecoded view, selecting a time takes playback to that point so the listener can hear what was said in context.',
+        brief: 'The team reviewed how listeners reopen a recording, search its transcript and jump to the passage they want to hear.',
+        model: 'Qwen3-4B-Instruct', inputHash: 'demo',
+    };
+    if (scenario === 'summary-saved' && session.transcript) {
+        session.transcript.segments.push(
+            { startSec: 12, endSec: 38, text: 'In a long interview I often come back to the same word. Show the surrounding lines so I can tell which match I want. I can check by playing the answer from there.' },
+            { startSec: 38, endSec: 67, text: 'I tried that with the delivery date. The first mention was a question. I had to keep listening until the other speaker confirmed Friday. Seeing who spoke would help.' },
+            { startSec: 67, endSec: 95, text: 'Let us try two versions, one that shows the speaker beside each match and one that shows just the time. We can compare them next week before picking one.' },
+        );
+        session.transcript.summary = {
+            ...demoSummary,
+            brief: 'The team compared ways to find a particular answer in a saved interview. Next week they will test whether showing the speaker alongside each search result makes that easier.',
+            detailed: [
+                demoSummary.detailed,
+                'In a long interview, the same word can lead to several different answers. The team wanted each match to show enough of the surrounding conversation to decide which passage to play.',
+                'One listener searched for a delivery date. The first mention was a question. It took a later reply to establish that delivery was due on Friday, and the listener wanted to see who had confirmed it.',
+                'The team will try two versions the following week. One will show the speaker beside each match and the other will show only the time. They will compare the two before deciding which to keep.',
+            ].join('\n\n'),
+        };
+    }
+    if (scenario === 'summary-partial' && session.transcript) session.transcript.summary = { ...demoSummary, brief: '' };
+    let modelStatus: SummaryModelStatus = {
+        model: 'Qwen3-4B-Instruct', totalBytes: 2_497_281_120, downloadedBytes: 0, state: 'ready',
+    };
+    if (scenario === 'summary-install' || scenario === 'summary-saved') modelStatus.state = 'missing';
+    if (scenario === 'summary-downloading') modelStatus = { ...modelStatus, state: 'downloading', downloadedBytes: 874_048_392 };
+    if (scenario === 'summary-download-error') modelStatus = { ...modelStatus, state: 'error', error: 'download' };
+    let modelListener: ((status: SummaryModelStatus) => void) | undefined;
+    const setModelStatus = (state: SummaryModelStatus['state'], downloadedBytes: number) => {
+        modelStatus = { model: modelStatus.model, totalBytes: modelStatus.totalBytes, state, downloadedBytes };
+        modelListener?.(modelStatus);
+    };
     const isRecorder = scenario.startsWith('recording');
     let sessions: SessionListItem[] = scenario === 'empty' || isRecorder ? [] : [session];
     let recordingState: RecordingState = scenario === 'recording' ? 'recording' : 'idle';
@@ -102,6 +139,8 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
     let levelListener: ((level: RecordingLevel) => void) | null = null;
     let progressListener: ((progress: RecordingProgress) => void) | null = null;
     let finishTranscription: ((value: string) => void) | null = null;
+    let summaryAttempt = 0;
+    let cancelSummary: (() => void) | undefined;
     const preferences: UiPreferenceValueMap = { ...UI_PREFERENCE_DEFAULTS, speakerLabelsEnabled: false, homeSidebarWidth: 300, recordingSystemDevice: 'demo-system', recordingMicrophoneDevice: 'demo-microphone' };
     const emitRecording = () => {
         stateListener?.(recordingState);
@@ -117,6 +156,30 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
             ready: scenario !== 'nemotron-downloading', gpuAvailable: scenario !== 'nemotron-error', downloadBytes: 123_671_929 }) } : {}),
         listSessions: () => Promise.resolve(sessions),
         getSession: () => Promise.resolve(session),
+        getSummaryModelStatus: () => Promise.resolve(modelStatus),
+        onSummaryModelChanged: (callback) => { modelListener = callback; return () => { modelListener = undefined; }; },
+        downloadSummaryModel: async () => {
+            setModelStatus('downloading', Math.floor(modelStatus.totalBytes / 2));
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            setModelStatus('ready', modelStatus.totalBytes);
+            return modelStatus;
+        },
+        generateSummary: () => {
+            summaryAttempt += 1;
+            if (scenario === 'summary-error' && summaryAttempt === 1) return Promise.resolve({ ok: false as const, reason: 'failed' as const });
+            if ((scenario === 'summary-cancel' || scenario === 'summary-generating') && summaryAttempt === 1) {
+                return new Promise<SummaryGenerationResult>((resolve) => {
+                    cancelSummary = () => resolve({ ok: false, reason: 'cancelled' });
+                });
+            }
+            if (session.transcript) session = { ...session, transcript: { ...session.transcript, summary: demoSummary } };
+            return Promise.resolve({ ok: true as const, summary: demoSummary });
+        },
+        stopSummary: () => {
+            cancelSummary?.();
+            cancelSummary = undefined;
+            return Promise.resolve(true);
+        },
         importAudio: () => {
             sessions = [session];
             return Promise.resolve(session);

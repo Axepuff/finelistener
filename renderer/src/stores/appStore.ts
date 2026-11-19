@@ -14,6 +14,7 @@ import { ActivityLogStore } from './activityLogStore';
 import { ForegroundOperationStore } from './foregroundOperationStore';
 import type { RendererAdapter } from './rendererAdapter';
 import { SessionsStore } from './sessionsStore';
+import { SummaryStore } from './summaryStore';
 import { SpeakerAnalysisStore, speakerErrorMessage } from './speakerAnalysisStore';
 import { TranscriptionStore, type StartTranscriptionOptions, type TranscriptionRunRequest } from './transcriptionStore';
 import {
@@ -41,6 +42,8 @@ export class AppStore {
     readonly transcription: TranscriptionStore;
 
     readonly speakers: SpeakerAnalysisStore;
+
+    readonly summary: SummaryStore;
 
     readonly transcriptionControl = new TranscriptionControlStore();
 
@@ -70,6 +73,7 @@ export class AppStore {
         this.sessions = new SessionsStore(adapter);
         this.transcription = new TranscriptionStore(adapter);
         this.speakers = new SpeakerAnalysisStore(adapter);
+        this.summary = new SummaryStore(adapter, this.operations);
         this.whisperModels = new WhisperModelStore(adapter);
         this.recording = new SystemAudioRecorderStore({
             adapter,
@@ -87,6 +91,7 @@ export class AppStore {
             sessions: false,
             transcription: false,
             speakers: false,
+            summary: false,
             transcriptionControl: false,
             transcriptionRequestId: false,
             pendingTranscriptionReplacementConsent: false,
@@ -132,6 +137,7 @@ export class AppStore {
         this.sessions.initialize();
         this.transcription.initialize();
         this.speakers.initialize();
+        this.summary.initialize();
         this.whisperModels.initialize();
 
         if (this.adapter) {
@@ -160,6 +166,7 @@ export class AppStore {
         this.unsubscribeFunctions = [];
         this.transcription.dispose();
         this.speakers.dispose();
+        this.summary.dispose();
         this.whisperModels.dispose();
         this.recording.dispose();
         this.recordingRecovery.dispose();
@@ -718,9 +725,27 @@ export class AppStore {
             console.error('Failed to clear the active session', error);
         });
         this.workspace.clearWorkspace();
+        this.summary.clearError();
         this.transcription.clear();
 
         return commandSuccess(undefined);
+    }
+
+    get canSummarize(): boolean {
+        return Boolean(this.adapter && this.workspace.activeSessionId && !this.transcription.isIncomplete
+            && !this.transcription.draftTranscript && this.transcription.savedTranscript?.segments.some((segment) => segment.text.trim()));
+    }
+
+    async generateSummary(): Promise<void> {
+        const sessionId = this.workspace.activeSessionId;
+        let transcript = this.transcription.savedTranscript;
+        if (this.disposed || !sessionId || !transcript || !this.canSummarize || this.summary.modelStatus?.state !== 'ready') return;
+        await this.summary.generate(sessionId, (summary) => {
+            if (!this.disposed && this.workspace.activeSessionId === sessionId && this.transcription.savedTranscript === transcript) {
+                this.transcription.setSummary(summary);
+                transcript = this.transcription.savedTranscript;
+            }
+        });
     }
 
     async revealSessionFolder(sessionId: string): Promise<CommandResult> {
@@ -808,6 +833,7 @@ export class AppStore {
     }
 
     private acceptSession(session: SessionDetails): void {
+        this.summary.clearError();
         void this.adapter?.setActiveSession(session.id).catch((error: unknown) => {
             console.error('Failed to update the active session', error);
         });

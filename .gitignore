@@ -29,6 +29,8 @@ docs/testing/*
 !docs/testing/diarization-timestamps.md
 !docs/testing/community-1-acceptance.md
 !docs/testing/nemotron-acceptance.md
+!docs/testing/recording-summary-acceptance.md
+!docs/testing/recording-summary-warehouse-ru.txt
 outputs/
 .artifact-work/
 

@@ -7,13 +7,17 @@ import type {
 import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResult } from 'electron/src/types/recordingArchive';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
-import type { SessionDetails, SessionListItem, SessionRawSpan, SessionSpeakerAssignment } from 'electron/src/types/sessions';
+import type { SessionDetails, SessionListItem, SessionRawSpan, SessionSpeakerAssignment, SummaryGenerationResult, SummaryProgressEvent } from 'electron/src/types/sessions';
+import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
 import type { AnalyzeSpeakersOptions, SpeakerAnalysisProgressEvent, SpeakerAssetStatus, TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
 
 export interface RendererAdapter {
     readonly runtimePlatform: 'darwin' | 'win32' | 'linux';
+    getSummaryModelStatus: () => Promise<SummaryModelStatus>;
+    downloadSummaryModel: () => Promise<SummaryModelStatus>;
+    onSummaryModelChanged: (cb: (status: SummaryModelStatus) => void) => () => void;
     listSessions: () => Promise<SessionListItem[]>;
     getSession: (sessionId: string) => Promise<SessionDetails>;
     setActiveSession: (sessionId: string | null) => Promise<boolean>;
@@ -21,6 +25,8 @@ export interface RendererAdapter {
     importAudio: () => Promise<SessionDetails | null>;
     optimizeAudio: (sessionId: string, mode?: 'original' | 'optimized') => Promise<SessionDetails>;
     setTranscriptDuplicateFilter: (sessionId: string, enabled: boolean) => Promise<SessionDetails>;
+    generateSummary: (sessionId: string) => Promise<SummaryGenerationResult>;
+    stopSummary: () => Promise<boolean>;
     analyzeSpeakers: (sessionId: string, options: AnalyzeSpeakersOptions) => Promise<SessionDetails>;
     stopSpeakerAnalysis: () => Promise<boolean>;
     getSpeakerAssets: () => Promise<SpeakerAssetStatus>;
@@ -61,6 +67,7 @@ export interface RendererAdapter {
     onTranscribeProgress: (callback: (event: TranscriptionProgressEvent) => void) => () => void;
     onTranscribeLog: (callback: (line: string) => void) => () => void;
     onSpeakerAnalysisProgress: (callback: (event: SpeakerAnalysisProgressEvent) => void) => () => void;
+    onSummaryProgress: (callback: (event: SummaryProgressEvent) => void) => () => void;
     onRecordingState: (callback: (state: RecordingState) => void) => () => void;
     onRecordingProgress: (callback: (progress: RecordingProgress) => void) => () => void;
     onRecordingLevel: (callback: (level: RecordingLevel) => void) => () => void;
@@ -74,6 +81,9 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
 
     return {
         runtimePlatform: api.runtime.platform,
+        getSummaryModelStatus: () => api.getSummaryModelStatus(),
+        downloadSummaryModel: () => api.downloadSummaryModel(),
+        onSummaryModelChanged: (cb) => api.onSummaryModelChanged(cb),
         listSessions: () => api.sessions.list(),
         getSession: (sessionId) => api.sessions.get(sessionId),
         setActiveSession: (sessionId) => api.sessions.setActive(sessionId),
@@ -81,6 +91,8 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
         importAudio: () => api.sessions.importAudio(),
         optimizeAudio: (sessionId, mode) => api.sessions.optimizeAudio(sessionId, mode),
         setTranscriptDuplicateFilter: (sessionId, enabled) => api.sessions.setTranscriptDuplicateFilter(sessionId, enabled),
+        generateSummary: (sessionId) => api.sessions.generateSummary(sessionId),
+        stopSummary: () => api.sessions.stopSummary(),
         analyzeSpeakers: (sessionId, options) => api.sessions.analyzeSpeakers(sessionId, options),
         stopSpeakerAnalysis: () => api.sessions.stopSpeakerAnalysis(),
         getSpeakerAssets: () => api.sessions.getSpeakerAssets(),
@@ -114,6 +126,7 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
         onTranscribeProgress: (callback) => api.onTranscribeProgressValue(callback),
         onTranscribeLog: (callback) => api.onTranscribeLog(callback),
         onSpeakerAnalysisProgress: (callback) => api.onSpeakerAnalysisProgress(callback),
+        onSummaryProgress: (callback) => api.onSummaryProgress(callback),
         onRecordingState: (callback) => api.onRecordingState(callback),
         onRecordingProgress: (callback) => api.onRecordingProgress(callback),
         onRecordingLevel: (callback) => api.onRecordingLevel(callback),

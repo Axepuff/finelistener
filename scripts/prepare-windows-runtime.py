@@ -1,4 +1,4 @@
-"""Bundle application-local Windows runtimes before packaging native audio helpers."""
+"""Bundle application-local Windows runtimes before packaging native helpers."""
 import argparse
 import os
 from pathlib import Path
@@ -17,8 +17,10 @@ def main():
     base = ROOT / 'build-assets' / args.variant
     whisper = base / 'whisper'
     loopback = base / 'miniaudio-loopback'
-    if not (whisper / 'whisper-server.exe').is_file() or not (loopback / 'miniaudio-loopback.exe').is_file():
-        raise ValueError('Build Whisper and miniaudio before preparing their Windows runtimes')
+    summary = base / 'summary'
+    if not all(exe.is_file() for exe in [whisper / 'whisper-server.exe', loopback / 'miniaudio-loopback.exe',
+                                         summary / 'llama-completion.exe']):
+        raise ValueError('Prepare Whisper, miniaudio and the summary runtime before bundling their Windows libraries')
 
     vswhere = Path(os.environ['ProgramFiles(x86)']) / 'Microsoft Visual Studio/Installer/vswhere.exe'
     installation = subprocess.check_output([str(vswhere), '-latest', '-products', '*', '-requires',
@@ -29,14 +31,17 @@ def main():
         raise ValueError('The Visual C++ x64 redistributable directory is missing')
     crt = max(candidates, key=lambda p: tuple(int(value) for value in re.findall(r'\d+', p.parent.parent.name)))
     libraries = list(crt.glob('*.dll'))
-    if not {'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'} <= {p.name.lower() for p in libraries}:
+    required_crt = {'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'}
+    if not required_crt <= {p.name.lower() for p in libraries}:
         raise ValueError('The Visual C++ x64 redistributable is incomplete')
     openmp = crt.parent / crt.name.replace('.CRT', '.OpenMP') / 'vcomp140.dll'
     if not openmp.is_file():
         raise ValueError('The Visual C++ OpenMP redistributable is missing')
     libraries.append(openmp)
-    for destination in [whisper, loopback]:
+    for destination in [whisper, loopback, summary]:
         for library in libraries:
+            if destination == summary and library.name.lower() not in required_crt:
+                continue
             shutil.copyfile(library, destination / library.name)
         (destination / 'Microsoft-runtime-NOTICE.txt').write_text(
             'Microsoft Visual C++ runtime libraries, distributed unmodified alongside this application.\n'

@@ -87,6 +87,7 @@ it('persists source originals and reopens a real FFmpeg mix with aligned duratio
     expect(reopenedPartial.transcript?.sourceRun?.settings).toEqual({
         language: 'en', segment: { start: 0, end: 1 }, optimized: true,
     });
+    await expect(service.readSummaryInput(session.id)).rejects.toThrow('A complete transcript with speech is required.');
 });
 
 it('opens legacy sessions without assigning invented source labels', async () => {
@@ -144,16 +145,63 @@ it('persists reversible duplicate-filter presentations without changing source r
     ]);
     expect(filtered.transcript?.sourceRun).toMatchObject(sourceRun);
 
-    const restored = await new SessionsService().setTranscriptDuplicateFilter(session.id, false);
+    const input = await service.readSummaryInput(session.id);
+    expect(input.rows.map((row) => row.text)).toEqual([duplicated, 'local reply.']);
+    const summary = { inputHash: input.inputHash, brief: 'Brief note', detailed: 'Detailed note', model: 'local' };
+    await service.saveSummary(session.id, summary, new AbortController().signal);
+    const reopened = new SessionsService();
+    expect((await reopened.getSession(session.id)).transcript?.summary).toEqual(summary);
+
+    const restored = await reopened.setTranscriptDuplicateFilter(session.id, false);
     expect(restored.transcript?.segments.map((item) => item.text)).toEqual([
         duplicated,
         `${duplicated}, local reply.`,
     ]);
+    expect(restored.transcript?.summary).toBeUndefined();
+    await expect(service.saveSummary(session.id, summary, new AbortController().signal))
+        .rejects.toThrow('The transcript changed during summarization.');
     const manifest = JSON.parse(await fs.readFile(
         path.join(environment.root, 'sessions', session.id, 'session.json'),
         'utf8',
     )) as { transcription?: unknown };
     expect(manifest.transcription).toEqual({ language: 'en', model: 'base' });
+});
+
+it('summarizes saved speech in speaker and time order without accessing the audio', async () => {
+    const sessionDir = path.join(environment.root, 'sessions', 'speech');
+    await fs.mkdir(sessionDir, { recursive: true });
+    await fs.writeFile(path.join(sessionDir, 'session.json'), JSON.stringify({
+        version: 1, id: 'speech', audio: { originalPath: 'missing.wav' },
+    }));
+    const service = new SessionsService();
+    await service.saveTranscript('speech', { version: 1, segments: [{ startSec: 0, endSec: 1, text: '  ' }] });
+    await expect(service.readSummaryInput('speech')).rejects.toThrow('A complete transcript with speech is required.');
+
+    await service.saveTranscript('speech', {
+        version: 1,
+        recognitionRevision: 'r',
+        segments: [
+            { startSec: 4, endSec: 5, text: 'Final thought.' },
+            { startSec: 1, endSec: 2, text: '  We agreed', speakerId: 'a' },
+            { startSec: 2, endSec: 3, text: 'on   Friday. ', speakerId: 'a' },
+        ],
+        speakers: { version: 1, recognitionRevision: 'r', generation: 'g', settings: {},
+            speakers: [{ id: 'a', name: 'Alice' }], intervals: [], corrections: [], status: 'completed' },
+    });
+    const input = await service.readSummaryInput('speech');
+    expect(input.rows).toEqual([
+        { startSec: 1, endSec: 2, speaker: 'Alice', text: 'We agreed' },
+        { startSec: 2, endSec: 3, speaker: 'Alice', text: 'on Friday.' },
+        { startSec: 4, endSec: 5, speaker: 'Unknown speaker', text: 'Final thought.' },
+    ]);
+    const summary = { inputHash: input.inputHash, brief: 'Agreed.', detailed: 'Friday agreed.', model: 'local' };
+    await service.saveSummary('speech', summary, new AbortController().signal);
+    await expect(service.saveSummary('speech', { ...summary, brief: 'Late result.' }, AbortSignal.abort()))
+        .rejects.toMatchObject({ name: 'AbortError' });
+    const persisted = JSON.parse(await fs.readFile(path.join(sessionDir, 'transcript', 'transcript.v1.json'), 'utf8')) as {
+        summary: typeof summary;
+    };
+    expect(persisted.summary).toEqual(summary);
 });
 
 it.each([undefined, null, { wavPath: 42 }, { wavPath: 'cache.wav' }])('opens a valid session alongside a malformed audio manifest: %j', async (audio) => {

@@ -1,0 +1,170 @@
+import type { SessionSummary, SummaryGenerationFailure } from 'electron/src/types/sessions';
+import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
+import { makeAutoObservable, runInAction } from 'mobx';
+import type { ForegroundOperationStore } from './foregroundOperationStore';
+import type { RendererAdapter } from './rendererAdapter';
+
+const generationMessages: Record<SummaryGenerationFailure, string | null> = {
+    cancelled: null,
+    busy: 'Another operation is in progress.',
+    'model-missing': 'Download the summary model to generate a summary.',
+    'runtime-unavailable': 'The local summary service is unavailable.',
+    'no-transcript': 'A complete transcript is required.',
+    'transcript-changed': 'The transcript changed. Generate the summary again.',
+    failed: 'Could not generate the summary. Try again.',
+};
+
+export class SummaryStore {
+    private progressValue = '';
+    private errorValue: string | null = null;
+    private stopping = false;
+    private stoppedValue = false;
+    private modelValue: SummaryModelStatus | null = null;
+    private modelFailure: string | null = null;
+    private modelRequest = 0;
+    private downloadPending = false;
+    private unsubscribeModel: (() => void) | null = null;
+    private unsubscribe: (() => void) | null = null;
+
+    constructor(private readonly adapter: RendererAdapter | null, private readonly operations: ForegroundOperationStore) {
+        makeAutoObservable<this, 'adapter' | 'operations' | 'unsubscribe' | 'unsubscribeModel' | 'modelRequest'>(this, {
+            adapter: false, operations: false, unsubscribe: false, unsubscribeModel: false, modelRequest: false,
+        }, { autoBind: true });
+    }
+
+    get isRunning(): boolean { return this.operations.kind === 'summarizing'; }
+    get isStopping(): boolean { return this.stopping; }
+    get progress(): string { return this.progressValue; }
+    get error(): string | null { return this.errorValue; }
+    get stopped(): boolean { return this.stoppedValue; }
+    get modelStatus(): SummaryModelStatus | null { return this.modelValue; }
+    get modelError(): string | null {
+        if (this.modelFailure) return this.modelFailure;
+        if (this.modelValue?.state !== 'error') return null;
+        if (this.modelValue.error === 'disk-space') return 'There is not enough space to install the model.';
+        if (this.modelValue.error === 'storage') return 'Could not access the local model files.';
+        return 'Could not download the model. Check your connection and try again.';
+    }
+
+    initialize(): void {
+        if (!this.adapter || this.unsubscribeModel) return;
+        this.unsubscribeModel = this.adapter.onSummaryModelChanged((status) => {
+            runInAction(() => {
+                this.modelRequest += 1;
+                this.modelValue = status;
+                this.modelFailure = null;
+            });
+        });
+    }
+
+    async refreshModelStatus(): Promise<void> {
+        if (!this.adapter || !this.unsubscribeModel) return;
+        const request = ++this.modelRequest;
+        try {
+            const status = await this.adapter.getSummaryModelStatus();
+            if (request === this.modelRequest) runInAction(() => {
+                this.modelValue = status;
+                this.modelFailure = null;
+            });
+        } catch (error) {
+            console.error('Failed to read the summary model status', error);
+            if (request === this.modelRequest) runInAction(() => {
+                this.modelValue = null;
+                this.modelFailure = 'Could not check whether the model is installed.';
+            });
+        }
+    }
+
+    async downloadModel(): Promise<void> {
+        if (!this.adapter || !this.unsubscribeModel || this.downloadPending
+            || this.modelValue?.state === 'downloading' || this.modelValue?.state === 'ready') return;
+        const subscription = this.unsubscribeModel;
+        this.downloadPending = true;
+        this.modelFailure = null;
+        this.modelRequest += 1;
+        try {
+            const status = await this.adapter.downloadSummaryModel();
+            if (this.unsubscribeModel === subscription) runInAction(() => { this.modelValue = status; });
+        } catch (error) {
+            console.error('Failed to install the summary model', error);
+            if (this.unsubscribeModel === subscription) runInAction(() => {
+                this.modelFailure = 'Could not download the model. Try again.';
+            });
+        } finally {
+            if (this.unsubscribeModel === subscription) runInAction(() => { this.downloadPending = false; });
+        }
+    }
+
+    async generate(sessionId: string, onSaved: (summary: SessionSummary) => void): Promise<void> {
+        if (!this.adapter) return;
+        const operation = this.operations.begin('summarizing');
+        if (!operation) return;
+        this.errorValue = null;
+        this.stopping = false;
+        this.stoppedValue = false;
+        this.progressValue = 'Preparing summary…';
+        try {
+            this.unsubscribe = this.adapter.onSummaryProgress((event) => {
+                if (this.operations.owns(operation) && event.sessionId === sessionId) {
+                    runInAction(() => { this.progressValue = event.message; });
+                    if (event.saved) onSaved(event.saved);
+                }
+            });
+            const result = await this.adapter.generateSummary(sessionId);
+            if (!this.operations.owns(operation)) return;
+            if (result.ok) onSaved(result.summary);
+            else {
+                runInAction(() => {
+                    this.errorValue = generationMessages[result.reason];
+                    this.stoppedValue = result.reason === 'cancelled';
+                });
+                if (result.reason === 'model-missing') await this.refreshModelStatus();
+            }
+        } catch (error) {
+            console.error('Failed to request the recording summary', error);
+            if (this.operations.owns(operation)) runInAction(() => { this.errorValue = generationMessages.failed; });
+        } finally {
+            if (this.operations.owns(operation)) {
+                this.unsubscribe?.();
+                this.unsubscribe = null;
+                runInAction(() => {
+                    this.stopping = false;
+                    this.operations.finish(operation);
+                });
+            }
+        }
+    }
+
+    async stop(): Promise<void> {
+        const operation = this.operations.active;
+        if (operation?.kind !== 'summarizing' || !this.adapter || this.stopping) return;
+        this.stopping = true;
+        try {
+            await this.adapter.stopSummary();
+        } catch (error) {
+            console.error('Failed to stop summary generation', error);
+            if (this.operations.owns(operation)) runInAction(() => {
+                this.stopping = false;
+                this.errorValue = 'Could not stop summary generation. Try again.';
+            });
+        }
+    }
+
+    clearError(): void {
+        this.errorValue = null;
+        this.stoppedValue = false;
+    }
+
+    dispose(): void {
+        if (this.isRunning) void this.stop();
+        this.unsubscribe?.();
+        this.unsubscribe = null;
+        this.unsubscribeModel?.();
+        this.unsubscribeModel = null;
+        this.modelRequest += 1;
+        this.downloadPending = false;
+        this.modelValue = null;
+        this.modelFailure = null;
+        this.errorValue = null;
+    }
+}
