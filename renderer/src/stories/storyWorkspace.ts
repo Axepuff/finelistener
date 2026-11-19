@@ -101,7 +101,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
     const demoSummary: SessionSummary = {
         detailed: 'The team reviewed how listeners find a passage after a recording. Opening a saved session should restore its transcript and the audio it belongs to.\n\nListeners can search for a word to locate a passage. In the timecoded view, selecting a time takes playback to that point so the listener can hear what was said in context.',
         brief: 'The team reviewed how listeners reopen a recording, search its transcript and jump to the passage they want to hear.',
-        model: 'Qwen3-4B-Instruct', inputHash: 'demo',
+        model: 'Qwen3-4B-Instruct', inputHash: 'demo', generationVersion: 2,
     };
     if (scenario === 'summary-saved' && session.transcript) {
         session.transcript.segments.push(

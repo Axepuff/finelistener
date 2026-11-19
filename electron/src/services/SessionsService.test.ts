@@ -204,6 +204,28 @@ it('summarizes saved speech in speaker and time order without accessing the audi
     expect(persisted.summary).toEqual(summary);
 });
 
+it.each([
+    ['ru', 'en', 'ru'],
+    ['auto', 'en', undefined],
+    [undefined, 'fr', 'fr'],
+    [undefined, 'auto', undefined],
+    [undefined, ' ', undefined],
+    [undefined, undefined, undefined],
+])('reads the summary language hint for source %s and manifest %s', async (sourceLanguage, manifestLanguage, expected) => {
+    const sessionDir = path.join(environment.root, 'sessions', 'speech');
+    await fs.mkdir(sessionDir, { recursive: true });
+    await fs.writeFile(path.join(sessionDir, 'session.json'), JSON.stringify({ version: 1, id: 'speech' }));
+    const service = new SessionsService();
+    const segments = [{ startSec: 0, endSec: 1, text: 'Bonjour.' }];
+    const sourceRun: SessionSourceRun | undefined = sourceLanguage === undefined ? undefined : {
+        status: 'completed', settings: { language: sourceLanguage }, sources: [{ source: 'system', status: 'completed', segments }],
+    };
+    await service.saveTranscript('speech', { version: 1, segments, sourceRun }, { language: manifestLanguage });
+    const input = await service.readSummaryInput('speech');
+    if (expected) expect(input).toHaveProperty('languageHint', expected);
+    else expect(input).not.toHaveProperty('languageHint');
+});
+
 it.each([undefined, null, { wavPath: 42 }, { wavPath: 'cache.wav' }])('opens a valid session alongside a malformed audio manifest: %j', async (audio) => {
     const sessionDir = path.join(environment.root, 'sessions', 'valid');
     const brokenDir = path.join(environment.root, 'sessions', 'broken');

@@ -146,6 +146,7 @@ export interface SessionSummary {
     detailed: string;
     model: string;
     inputHash: string;
+    generationVersion?: number;
     reviewedChunks?: ReviewedSummaryChunk[];
 }
 

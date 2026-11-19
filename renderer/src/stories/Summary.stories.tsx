@@ -100,6 +100,22 @@ export const SavedWithoutModel: Story = {
     },
 };
 
+export const RegenerateSavedSummary: Story = {
+    parameters: { scenario: 'summary-saved' },
+    play: async (context) => {
+        const { canvas } = context;
+        await openSummary(context);
+        const originalBrief = 'Next week they will test';
+        await expect(await canvas.findByRole('tabpanel', { name: 'Brief overview' })).toHaveTextContent(originalBrief);
+        await userEvent.click(await canvas.findByRole('button', { name: 'Regenerate summary' }));
+        await userEvent.click(await canvas.findByRole('button', { name: 'Download model' }));
+        const regenerate = await canvas.findByRole('button', { name: 'Regenerate summary' });
+        await expect(canvas.getByRole('tabpanel', { name: 'Brief overview' })).toHaveTextContent(originalBrief);
+        await userEvent.click(regenerate);
+        await waitFor(() => expect(canvas.getByRole('tabpanel', { name: 'Brief overview' })).toHaveTextContent('reopen a recording'));
+    },
+};
+
 export const NarrowDetailed: Story = {
     parameters: { scenario: 'summary-saved' },
     render: () => <div style={{ width: 'min(100%, 340px)', height: 380 }}><TranscribedText /></div>,

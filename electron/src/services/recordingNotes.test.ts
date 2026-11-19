@@ -6,6 +6,30 @@ import { generateRecordingNotes, summaryContext, type SummaryInference } from '.
 const countTokens = (text: string) => Promise.resolve(Array.from(text).length);
 const bodyOf = (prompt: string) => prompt.split('<|im_start|>user\n')[1].split('\n<|im_end|>')[0];
 
+it.each([
+    { hint: 'en', source: 'Мы обсудили обновление в GitHub. Проверку завершили сегодня утром и договорились отправить готовый отчёт в пятницу.',
+        notes: 'Команда завершила проверку обновления сегодня утром и договорилась отправить готовый отчёт в пятницу.', brief: 'Отчёт отправят в пятницу.' },
+    { hint: 'auto', source: 'Nous avons terminé la vérification du rapport ce matin et décidé ensemble de l’envoyer vendredi.',
+        notes: 'La vérification du rapport est terminée. Les participants ont décidé de l’envoyer vendredi.', brief: 'Le rapport sera envoyé vendredi.' },
+])('keeps reviewed and brief summaries in the original language despite an English model response ($hint)', async ({ hint, source, notes, brief }) => {
+    const wrong = 'The report was checked this morning. The team agreed to send it on Friday.';
+    const rows = [{ startSec: 2, endSec: 20, speaker: 'English speaker label', text: source }];
+    const attempts = new Set<string>();
+    const complete = (prompt: string) => {
+        const body = bodyOf(prompt);
+        const stage = ['ORIGINAL LINES', 'NEW LINES', 'DRAFT BRIEF', ''].find((label) => body.includes(label))!;
+        if (!attempts.has(stage)) {
+            attempts.add(stage);
+            return Promise.resolve(stage.endsWith('LINES') ? wrong : 'The report is ready.');
+        }
+        return Promise.resolve(stage.endsWith('LINES') ? notes : brief);
+    };
+    const save = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const result = await generateRecordingNotes(rows, { countTokens, complete }, () => {}, save, undefined, hint);
+    expect(result).toEqual({ brief, detailed: notes });
+    expect(save).toHaveBeenCalledWith([{ startSec: 2, endSec: 20, text: notes }]);
+});
+
 it('keeps adjacent fragments of a speaker’s unfinished sentence together near a full chunk', async () => {
     const rows = [
         { startSec: 0, endSec: 100, speaker: 'Alice', text: 'Complete topic. '.repeat(104).trimEnd() },
@@ -131,4 +155,13 @@ it('keeps a single short reviewed sentence verbatim, including its negation', as
     await expect(generateRecordingNotes([note], { countTokens, complete }, () => {}, () => Promise.resolve(), [note]))
         .resolves.toEqual({ brief: note.text, detailed: note.text });
     expect(complete).not.toHaveBeenCalled();
+});
+
+it('replaces short English answers and accepts a short source-language phrase on review', async () => {
+    const speech = { startSec: 0, endSec: 2, text: 'Склад закрыт.' };
+    const answers = ['Nine boxes.', speech.text, '«The warehouse is closed.»', speech.text];
+    const complete = vi.fn(() => Promise.resolve(answers.shift() ?? null));
+    await expect(generateRecordingNotes([speech], { countTokens, complete }, () => {}, () => Promise.resolve(), undefined, 'ru'))
+        .resolves.toEqual({ detailed: speech.text, brief: speech.text });
+    expect(answers).toHaveLength(0);
 });

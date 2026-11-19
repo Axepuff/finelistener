@@ -523,11 +523,13 @@ export class SessionsService {
     }
 
     public async readSummaryInput(sessionId: string) {
-        const { transcript } = await this.readStoredTranscript(sessionId);
+        const { transcript, session } = await this.readStoredTranscript(sessionId);
         const input = getSummaryInput(transcript);
         if (!input) throw new Error('A complete transcript with speech is required.');
         const saved = transcript.summary?.inputHash === input.inputHash ? transcript.summary : undefined;
-        return { ...input, saved };
+        const setting = transcript.sourceRun?.settings.language ?? session.transcription?.language;
+        const languageHint = typeof setting === 'string' ? setting.trim() : '';
+        return { ...input, saved, ...(languageHint && languageHint.toLowerCase() !== 'auto' ? { languageHint } : {}) };
     }
 
     public async saveSummary(sessionId: string, summary: SessionSummary, signal: AbortSignal): Promise<SessionSummary> {
@@ -574,14 +576,16 @@ export class SessionsService {
         return this.getSession(sessionId);
     }
 
-    private async readStoredTranscript(sessionId: string): Promise<{ transcript: SessionTranscriptV1; transcriptPath: string }> {
+    private async readStoredTranscript(sessionId: string): Promise<{
+        session: SessionFileV1; transcript: SessionTranscriptV1; transcriptPath: string;
+    }> {
         const sessionDir = this.resolveSessionDir(sessionId);
         const session = await readJsonFile<SessionFileV1>(path.join(sessionDir, SESSION_FILE_NAME));
         if (!session?.transcript?.path) throw new Error('Session has no transcript');
         const transcriptPath = await this.resolveOwnedFile(sessionDir, session.transcript.path);
         const transcript = await readJsonFile<SessionTranscriptV1>(transcriptPath);
         if (transcript?.version !== 1) throw new Error('Invalid session transcript');
-        return { transcript, transcriptPath };
+        return { session, transcript, transcriptPath };
     }
 
     private async writeTranscript(

@@ -49,7 +49,10 @@ it('reports cancellation only when the summary did not commit and drains the act
 it('keeps reviewed notes after a failed brief and reuses them on retry', async () => {
     const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>();
     const ipc = { handle: (name: string, fn: (...args: unknown[]) => Promise<unknown>) => handlers.set(name, fn) } as unknown as IpcMain;
-    let saved: SessionSummary | undefined;
+    let saved: SessionSummary | undefined = {
+        inputHash: 'same revision', model: SUMMARY_MODEL, brief: '', detailed: 'Old English notes.',
+        reviewedChunks: [{ text: 'Old English notes.', startSec: 10, endSec: 12 }],
+    };
     const chunks = [{ text: 'A decision.', startSec: 10, endSec: 12 }];
     const sessions = {
         readSummaryInput: () => Promise.resolve({ rows: chunks, inputHash: 'same revision', saved }),
@@ -68,12 +71,26 @@ it('keeps reviewed notes after a failed brief and reuses them on retry', async (
     } finally {
         log.mockRestore();
     }
+    expect(vi.mocked(generateLocalSummary).mock.lastCall?.[5]).toBeUndefined();
     expect(saved).toMatchObject({ brief: '', detailed: 'A decision.', reviewedChunks: chunks });
     vi.mocked(generateLocalSummary).mockImplementationOnce((_r, _m, _s, _p, _onReviewed, cached) => {
         expect(cached).toEqual(chunks);
         return Promise.resolve({ brief: 'Decision', detailed: 'A decision.' });
     });
     await expect(generate(undefined, 'session')).resolves.toMatchObject({ ok: true, summary: { brief: 'Decision', reviewedChunks: chunks } });
+    const completed = saved;
+    vi.mocked(generateLocalSummary).mockImplementationOnce(async (_rows, _model, _signal, _progress, onReviewed) => {
+        await onReviewed([{ ...chunks[0], text: 'Replacement in progress.' }]);
+        throw new Error('Replacement brief failed');
+    });
+    const failedReplacement = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+        await expect(generate(undefined, 'session')).resolves.toEqual({ ok: false, reason: 'failed' });
+        expect(vi.mocked(generateLocalSummary).mock.lastCall?.[5]).toBeUndefined();
+        expect(saved).toBe(completed);
+    } finally {
+        failedReplacement.mockRestore();
+    }
 });
 
 it('publishes committed detailed notes when Stop arrives during their atomic save', async () => {
@@ -105,6 +122,6 @@ it('publishes committed detailed notes when Stop arrives during their atomic sav
     await expect(result).resolves.toEqual({ ok: false, reason: 'cancelled' });
     expect(send.mock.calls).toContainEqual(['sessions:summary-progress', {
         sessionId: 'session', message: 'Writing the brief summary…',
-        saved: { brief: '', detailed: 'Decision', reviewedChunks: [chunk], inputHash: 'hash', model: SUMMARY_MODEL },
+        saved: { brief: '', detailed: 'Decision', reviewedChunks: [chunk], inputHash: 'hash', model: SUMMARY_MODEL, generationVersion: 2 },
     }]);
 });

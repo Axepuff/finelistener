@@ -3,6 +3,8 @@ import { generateLocalSummary, SUMMARY_MODEL } from '../services/localSummary';
 import type { SessionsService } from '../services/SessionsService';
 import type { SessionSummary, SummaryGenerationResult, SummaryProgressEvent } from '../types/sessions';
 
+const generationVersion = 2;
+
 export function registerSummaryController(
     ipc: IpcMain,
     getMainWindow: () => BrowserWindow | null,
@@ -14,7 +16,7 @@ export function registerSummaryController(
 
     const generate = async (sessionId: string, signal: AbortSignal): Promise<SummaryGenerationResult> => {
         try {
-            const { rows, inputHash, saved } = await sessions.readSummaryInput(sessionId);
+            const { rows, inputHash, saved, languageHint } = await sessions.readSummaryInput(sessionId);
             signal.throwIfAborted();
             const modelPath = await requireInstalled(signal);
             signal.throwIfAborted();
@@ -24,19 +26,21 @@ export function registerSummaryController(
                     window.webContents.send('sessions:summary-progress', { sessionId, message, saved: checkpoint } satisfies SummaryProgressEvent);
                 }
             };
-            let reviewedChunks = saved?.model === SUMMARY_MODEL ? saved.reviewedChunks : undefined;
+            const provenance = { inputHash, model: SUMMARY_MODEL, generationVersion };
+            let reviewedChunks = saved?.generationVersion === generationVersion && saved.model === SUMMARY_MODEL && !saved.brief ?
+                saved.reviewedChunks : undefined;
             const summary = await generateLocalSummary(rows, modelPath, signal, publish, async (chunks) => {
                 reviewedChunks = chunks;
                 // Keep an existing complete result readable while a replacement brief is generated.
                 if (saved?.brief) return;
                 const checkpoint = await sessions.saveSummary(sessionId, {
                     reviewedChunks: chunks, detailed: chunks.map((item) => item.text).join('\n\n'),
-                    brief: '', inputHash, model: SUMMARY_MODEL,
+                    brief: '', ...provenance,
                 }, signal);
                 publish('Writing the brief summary…', checkpoint);
-            }, reviewedChunks);
+            }, reviewedChunks, languageHint);
             signal.throwIfAborted();
-            const completed = await sessions.saveSummary(sessionId, { ...summary, reviewedChunks, inputHash, model: SUMMARY_MODEL }, signal);
+            const completed = await sessions.saveSummary(sessionId, { ...summary, reviewedChunks, ...provenance }, signal);
             return { ok: true, summary: completed };
         } catch (error) {
             if (signal.aborted) return { ok: false, reason: 'cancelled' };

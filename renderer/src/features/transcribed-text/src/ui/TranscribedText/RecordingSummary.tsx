@@ -1,14 +1,16 @@
 import { Alert, Button, Group, Loader, Progress, Stack, Tabs, Text, Title } from '@mantine/core';
 import { IconDownload } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import type { SessionSummary } from 'electron/src/types/sessions';
 import { useAppStore } from 'renderer/src/AppContext';
 import styles from './TranscribedText.module.css';
 
-const SummaryActions: React.FC<{ hasDetailed: boolean }> = observer(({ hasDetailed }) => {
+const SummaryActions: React.FC<{ saved?: Pick<SessionSummary, 'brief' | 'detailed' | 'generationVersion'> }> = observer(({ saved }) => {
     const store = useAppStore();
     const { summary } = store;
     const model = summary.modelStatus;
+    const [showInstallation, setShowInstallation] = useState(false);
     useEffect(() => { void summary.refreshModelStatus(); }, [summary]);
 
     if (summary.isRunning) {
@@ -42,11 +44,15 @@ const SummaryActions: React.FC<{ hasDetailed: boolean }> = observer(({ hasDetail
         return <Stack gap="sm" align="flex-start">
             {summary.error && <Alert color="red" role="alert">{summary.error}</Alert>}
             {summary.stopped && <Text size="sm" role="status">Summary generation stopped.</Text>}
-            {!hasDetailed && <Text size="sm" c="dimmed">Generate a brief overview and detailed notes from the saved transcript on this computer.</Text>}
+            {!saved?.detailed && <Text size="sm" c="dimmed">Generate a brief overview and detailed notes from the saved transcript on this computer.</Text>}
             <Button disabled={!store.canSummarize || store.operations.isBusy} onClick={() => { void store.generateSummary(); }}>
-                {hasDetailed ? 'Generate brief summary' : 'Generate summary'}
+                {saved?.brief ? 'Regenerate summary' : saved?.detailed && saved.generationVersion ? 'Generate brief summary' : 'Generate summary'}
             </Button>
         </Stack>;
+    }
+
+    if (saved?.brief && !showInstallation) {
+        return <Group><Button variant="default" onClick={() => setShowInstallation(true)}>Regenerate summary</Button></Group>;
     }
 
     return <Stack gap="sm" align="flex-start">
@@ -68,7 +74,7 @@ export const RecordingSummary: React.FC = observer(() => {
     const saved = transcript?.summary;
     const hasSummary = Boolean(saved?.brief || saved?.detailed);
     const hasTranscript = transcript?.segments.some((segment) => segment.text.trim());
-    const needsGeneration = hasTranscript && !store.transcription.isIncomplete && !saved?.brief;
+    const hasCompleteTranscript = hasTranscript && !store.transcription.isIncomplete;
 
     return <section className={styles.summaryPanel} aria-label="Recording summary" tabIndex={0}>
         <div className={styles.summaryColumn}>
@@ -80,7 +86,7 @@ export const RecordingSummary: React.FC = observer(() => {
                 {saved.brief && <Tabs.Panel value="brief" pt="md"><Text className={styles.summaryText}>{saved.brief}</Text></Tabs.Panel>}
                 <Tabs.Panel value="detailed" pt="md"><Text className={styles.summaryText}>{saved.detailed}</Text></Tabs.Panel>
             </Tabs> : <Title order={2} size="h3">Recording summary</Title>}
-            {needsGeneration ? <SummaryActions hasDetailed={Boolean(saved?.detailed)} /> : !hasSummary && (
+            {hasCompleteTranscript ? <SummaryActions saved={saved} /> : !hasSummary && (
                 <Text size="sm" c="dimmed">{store.transcription.isIncomplete ?
                     'Complete the transcription before generating a summary.' :
                     'Transcribe this recording to generate a summary.'}</Text>

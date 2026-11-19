@@ -24,7 +24,7 @@ const runtimeBinary = (): string => {
 
 export const generateLocalSummary = async (
     rows: SummarySourceRow[], modelPath: string, signal: AbortSignal, progress: (message: string) => void,
-    onReviewed: (chunks: ReviewedSummaryChunk[]) => Promise<void>, cachedChunks?: ReviewedSummaryChunk[],
+    onReviewed: (chunks: ReviewedSummaryChunk[]) => Promise<void>, cachedChunks?: ReviewedSummaryChunk[], languageHint?: string,
 ): Promise<{ brief: string; detailed: string }> => {
     const binary = runtimeBinary();
     const tokenizer = path.join(path.dirname(binary), process.platform === 'win32' ? 'llama-tokenize.exe' : 'llama-tokenize');
@@ -62,7 +62,7 @@ export const generateLocalSummary = async (
         return end ? stdout.slice(0, end.index).trim() || null : null;
     };
     try {
-        return await generateRecordingNotes(rows, { countTokens, complete }, progress, onReviewed, cachedChunks);
+        return await generateRecordingNotes(rows, { countTokens, complete }, progress, onReviewed, cachedChunks, languageHint);
     } finally {
         await fs.rm(promptPath, { force: true });
     }
