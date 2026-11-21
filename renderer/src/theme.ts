@@ -46,6 +46,15 @@ const gray: MantineColorsTuple = [
     brandColors['brand-color-text'],
 ];
 
+type VariantProps = { variant?: string; color?: string };
+
+// Filled buttons in the primary color get `brand-primary-filled`; theme.css gives them the pressed color.
+const primaryFilledClassName = (props: VariantProps) => (
+    (props.variant ?? 'filled') === 'filled' && (props.color === undefined || props.color === 'brand') ?
+        'brand-primary-filled' :
+        undefined
+);
+
 /** Exposes every token as `--brand-*` and points Mantine's own variables at the tokens. */
 export const cssVariablesResolver: CSSVariablesResolver = () => {
     const brandVariables = Object.fromEntries(Object.entries(brandTokens).map(([name, value]) => [`--${name}`, value]));
@@ -54,6 +63,8 @@ export const cssVariablesResolver: CSSVariablesResolver = () => {
         '--mantine-color-text': 'var(--brand-color-text)',
         // `c="dimmed"` is used for small and secondary text, so it must meet 4.5:1.
         '--mantine-color-dimmed': 'var(--brand-color-text-secondary)',
+        // Placeholders are readable text too; tertiary stays for non-text graphics.
+        '--mantine-color-placeholder': 'var(--brand-color-text-secondary)',
         '--mantine-color-default-border': 'var(--brand-color-border)',
         '--mantine-color-default-hover': 'var(--brand-color-fill-tertiary)',
         '--mantine-color-anchor': 'var(--brand-color-link)',
@@ -131,11 +142,13 @@ export const mantineTheme = createMantineTheme({
             defaultProps: {
                 size: 'sm',
             },
+            classNames: (_theme, props) => ({ root: primaryFilledClassName(props) }),
         }),
         ActionIcon: ActionIcon.extend({
             defaultProps: {
                 size: 'sm',
             },
+            classNames: (_theme, props) => ({ root: primaryFilledClassName(props) }),
         }),
         Select: Select.extend({
             defaultProps: {

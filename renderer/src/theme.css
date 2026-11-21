@@ -32,3 +32,22 @@
     box-shadow: var(--brand-focus-ring);
 }
 
+
+/* Pressed state of primary filled buttons (class set in theme.ts). */
+.brand-primary-filled:active:not(:disabled):not([data-disabled]):not([data-loading]) {
+    background-color: var(--brand-color-primary-active);
+}
+
+/* Weights 400 and 600 only: Mantine defaults some labels and titles to 500 or 700. */
+.mantine-InputWrapper-label,
+.mantine-Alert-title,
+.mantine-Badge-root,
+.mantine-Combobox-groupLabel,
+.mantine-Menu-label,
+.mantine-Notification-title {
+    font-weight: var(--brand-font-weight-strong);
+}
+
+.mantine-SegmentedControl-label {
+    font-weight: var(--brand-font-weight);
+}
