@@ -1,52 +1,34 @@
-import { Button, Collapse, Paper, Stack, Switch, Text } from '@mantine/core';
+import { Button, Group, Stack, Text } from '@mantine/core';
 import { observer } from 'mobx-react-lite';
-import { FC, useState } from 'react';
+import { FC } from 'react';
 import { useAppStore } from 'renderer/src/AppContext';
 
 export const ProcessLog: FC = observer(() => {
     const { activityLog } = useAppStore();
-    const [showLog, setShowLog] = useState(false);
 
     return (
-        <Stack gap={8} p={8}>
-            <Switch
-                checked={showLog}
-                onChange={() => setShowLog((prev) => !prev)}
-                label="Show log"
-            />
-            <Collapse in={showLog}>
-                <Paper
-                    withBorder={true}
-                    style={{
-                        padding: 18,
-                        height: '300px',
-                        overflow: 'hidden',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 12,
-                    }}
-                >
-                    <Stack gap={12}>
-                        <Button onClick={() => activityLog.clear()}>
-                            {'Clear log'}
-                        </Button>
-                    </Stack>
-                    <Text
-                        size="sm"
-                        style={{
-                            whiteSpace: 'pre-wrap',
-                            overflowY: 'auto',
-                            fontFamily: 'var(--brand-font-family-code)',
-                            flex: 1,
-                            padding: 8,
-                            borderRadius: 6,
-                            border: 'var(--brand-line-width) solid var(--brand-color-border)',
-                        }}
-                    >
-                        {activityLog.content || 'Whisper log is empty.'}
-                    </Text>
-                </Paper>
-            </Collapse>
+        <Stack gap={8} p={12} h="100%" style={{ minHeight: 0 }}>
+            <Group justify="space-between" align="center" wrap="nowrap">
+                <Text size="sm" fw={600}>{'Log'}</Text>
+                <Button size="xs" variant="default" onClick={() => activityLog.clear()}>
+                    {'Clear log'}
+                </Button>
+            </Group>
+            <Text
+                size="sm"
+                style={{
+                    whiteSpace: 'pre-wrap',
+                    overflowY: 'auto',
+                    fontFamily: 'var(--brand-font-family-code)',
+                    flex: 1,
+                    minHeight: 0,
+                    padding: 8,
+                    borderRadius: 6,
+                    border: 'var(--brand-line-width) solid var(--brand-color-border)',
+                }}
+            >
+                {activityLog.content || 'Whisper log is empty.'}
+            </Text>
         </Stack>
     );
 });

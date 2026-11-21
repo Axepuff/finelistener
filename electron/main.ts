@@ -27,14 +27,22 @@ protocol.registerSchemesAsPrivileged([
     },
 ]);
 
+const MIN_WINDOW_WIDTH = 1024;
+const MIN_WINDOW_HEIGHT = 640;
+
 function createMainWindow(): void {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
     const winWidth = Math.floor(width * 0.9);
     const winHeight = Math.floor(height * 0.9);
 
     mainWindow = new BrowserWindow({
-        width: winWidth,
-        height: winHeight,
+        width: Math.max(winWidth, MIN_WINDOW_WIDTH),
+        height: Math.max(winHeight, MIN_WINDOW_HEIGHT),
+        // Narrower windows are not supported: the three workspace panels need 1000px in one row.
+        minWidth: MIN_WINDOW_WIDTH,
+        minHeight: MIN_WINDOW_HEIGHT,
+        // The renderer draws its own 48px title bar; macOS keeps only the window buttons.
+        ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 20, y: 18 } } : {}),
         show: true,
         autoHideMenuBar: true,
         webPreferences: {
