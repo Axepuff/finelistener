@@ -1,6 +1,7 @@
 import type { RecordingLevel, RecordingProgress, RecordingState } from 'electron/src/services/RecordingService';
 import type { SessionDetails, SessionListItem, SessionSummary, SessionTranscriptV1, SummaryGenerationResult } from 'electron/src/types/sessions';
 import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
+import { defaultRecordingSummaryOptions, recordingSummaryGenerationVersion } from '../../../electron/src/types/summaryOptions';
 import { UI_PREFERENCE_DEFAULTS, type UiPreferenceKey, type UiPreferenceValueMap } from '../../../electron/src/types/uiPreferences';
 import { AppStore } from '../stores/appStore';
 import { createFakeRendererAdapter } from '../stores/testing/fakeRendererAdapter';
@@ -111,6 +112,8 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         );
         session.transcript.summary = {
             ...demoSummary,
+            generationVersion: 3,
+            options: { prompt: 'Describe how the speakers compare ways to find a passage.', chunkCount: 12, overlapPercent: 25 },
             brief: 'The team compared ways to find a particular answer in a saved interview. Next week they will test whether showing the speaker alongside each search result makes that easier.',
             detailed: [
                 demoSummary.detailed,
@@ -120,7 +123,10 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
             ].join('\n\n'),
         };
     }
-    if (scenario === 'summary-partial' && session.transcript) session.transcript.summary = { ...demoSummary, brief: '' };
+    const reviewedChunks = demoSummary.detailed.split('\n\n').map((text, i) => ({ startSec: 6 * i, endSec: 6 * (i + 1), text }));
+    if (scenario === 'summary-partial' && session.transcript) session.transcript.summary = {
+        ...demoSummary, brief: '', generationVersion: recordingSummaryGenerationVersion, options: defaultRecordingSummaryOptions, reviewedChunks,
+    };
     let modelStatus: SummaryModelStatus = {
         model: 'Qwen3-4B-Instruct', totalBytes: 2_497_281_120, downloadedBytes: 0, state: 'ready',
     };
@@ -164,7 +170,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
             setModelStatus('ready', modelStatus.totalBytes);
             return modelStatus;
         },
-        generateSummary: () => {
+        generateSummary: (_sessionId, options = defaultRecordingSummaryOptions) => {
             summaryAttempt += 1;
             if (scenario === 'summary-error' && summaryAttempt === 1) return Promise.resolve({ ok: false as const, reason: 'failed' as const });
             if ((scenario === 'summary-cancel' || scenario === 'summary-generating') && summaryAttempt === 1) {
@@ -172,8 +178,9 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
                     cancelSummary = () => resolve({ ok: false, reason: 'cancelled' });
                 });
             }
-            if (session.transcript) session = { ...session, transcript: { ...session.transcript, summary: demoSummary } };
-            return Promise.resolve({ ok: true as const, summary: demoSummary });
+            const summary = { ...demoSummary, generationVersion: recordingSummaryGenerationVersion, options, reviewedChunks };
+            if (session.transcript) session = { ...session, transcript: { ...session.transcript, summary } };
+            return Promise.resolve({ ok: true as const, summary });
         },
         stopSummary: () => {
             cancelSummary?.();

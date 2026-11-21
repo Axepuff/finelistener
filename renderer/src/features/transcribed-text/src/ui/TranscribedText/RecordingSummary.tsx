@@ -1,12 +1,22 @@
-import { Alert, Button, Group, Loader, Progress, Stack, Tabs, Text, Title } from '@mantine/core';
+import { Alert, Button, Group, Loader, Progress, Stack, Tabs, Text, Textarea, Title } from '@mantine/core';
 import { IconDownload } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useEffect, useState } from 'react';
 import type { SessionSummary } from 'electron/src/types/sessions';
 import { useAppStore } from 'renderer/src/AppContext';
+import type { DeepReadonly } from 'renderer/src/stores/types';
+import {
+    defaultRecordingSummaryOptions, isRecordingSummaryOptions,
+    maxSummaryPromptLength, recordingSummaryGenerationVersion, sameRecordingSummaryOptions, type RecordingSummaryOptions,
+} from '../../../../../../../electron/src/types/summaryOptions';
 import styles from './TranscribedText.module.css';
 
-const SummaryActions: React.FC<{ saved?: Pick<SessionSummary, 'brief' | 'detailed' | 'generationVersion'> }> = observer(({ saved }) => {
+interface SummaryActionsProps {
+    saved?: DeepReadonly<SessionSummary>;
+    options: RecordingSummaryOptions | null;
+}
+
+const SummaryActions: React.FC<SummaryActionsProps> = observer(({ saved, options }) => {
     const store = useAppStore();
     const { summary } = store;
     const model = summary.modelStatus;
@@ -41,12 +51,14 @@ const SummaryActions: React.FC<{ saved?: Pick<SessionSummary, 'brief' | 'detaile
     }
 
     if (model?.state === 'ready' && !summary.modelError) {
+        const canResume = Boolean(options && saved?.generationVersion === recordingSummaryGenerationVersion
+            && saved.reviewedChunks?.length && sameRecordingSummaryOptions(saved.options, options));
         return <Stack gap="sm" align="flex-start">
             {summary.error && <Alert color="red" role="alert">{summary.error}</Alert>}
             {summary.stopped && <Text size="sm" role="status">Summary generation stopped.</Text>}
             {!saved?.detailed && <Text size="sm" c="dimmed">Generate a brief overview and detailed notes from the saved transcript on this computer.</Text>}
-            <Button disabled={!store.canSummarize || store.operations.isBusy} onClick={() => { void store.generateSummary(); }}>
-                {saved?.brief ? 'Regenerate summary' : saved?.detailed && saved.generationVersion ? 'Generate brief summary' : 'Generate summary'}
+            <Button disabled={!options || !store.canSummarize || store.operations.isBusy} onClick={() => { if (options) void store.generateSummary(options); }}>
+                {saved?.brief ? 'Regenerate summary' : canResume ? 'Generate brief summary' : 'Generate summary'}
             </Button>
         </Stack>;
     }
@@ -68,6 +80,19 @@ const SummaryActions: React.FC<{ saved?: Pick<SessionSummary, 'brief' | 'detaile
     </Stack>;
 });
 
+const SummarySetup: React.FC<{ saved?: DeepReadonly<SessionSummary> }> = observer(({ saved }) => {
+    const { summary } = useAppStore();
+    const [prompt, setPrompt] = useState(summary.runningOptions?.prompt ?? saved?.options?.prompt ?? defaultRecordingSummaryOptions.prompt);
+    const options = { ...defaultRecordingSummaryOptions, prompt };
+
+    return <Stack gap="sm">
+        <Textarea label="Prompt" value={prompt} onChange={(event) => setPrompt(event.currentTarget.value)}
+            disabled={summary.isRunning} maxLength={maxSummaryPromptLength} autosize={true} minRows={2} maxRows={9}
+            error={!prompt.trim() && 'Enter a prompt.'} />
+        <SummaryActions saved={saved} options={isRecordingSummaryOptions(options) ? options : null} />
+    </Stack>;
+});
+
 export const RecordingSummary: React.FC = observer(() => {
     const store = useAppStore();
     const transcript = store.transcription.savedTranscript;
@@ -78,15 +103,18 @@ export const RecordingSummary: React.FC = observer(() => {
 
     return <section className={styles.summaryPanel} aria-label="Recording summary" tabIndex={0}>
         <div className={styles.summaryColumn}>
-            {hasSummary && saved ? <Tabs defaultValue={saved.brief ? 'brief' : 'detailed'} keepMounted={false}>
+            {!hasSummary && <Title order={2} size="h3">Recording summary</Title>}
+            {hasCompleteTranscript && <SummarySetup saved={saved} />}
+            {Boolean(saved?.reviewedChunks?.length) && <Text size="sm" c="dimmed">Chunks used: {saved?.reviewedChunks?.length}</Text>}
+            {hasSummary && saved && <Tabs defaultValue={saved.brief ? 'brief' : 'detailed'} keepMounted={false}>
                 <Tabs.List aria-label="Summary format">
                     {saved.brief && <Tabs.Tab value="brief">Brief overview</Tabs.Tab>}
                     <Tabs.Tab value="detailed">Detailed notes</Tabs.Tab>
                 </Tabs.List>
                 {saved.brief && <Tabs.Panel value="brief" pt="md"><Text className={styles.summaryText}>{saved.brief}</Text></Tabs.Panel>}
                 <Tabs.Panel value="detailed" pt="md"><Text className={styles.summaryText}>{saved.detailed}</Text></Tabs.Panel>
-            </Tabs> : <Title order={2} size="h3">Recording summary</Title>}
-            {hasCompleteTranscript ? <SummaryActions saved={saved} /> : !hasSummary && (
+            </Tabs>}
+            {!hasCompleteTranscript && !hasSummary && (
                 <Text size="sm" c="dimmed">{store.transcription.isIncomplete ?
                     'Complete the transcription before generating a summary.' :
                     'Transcribe this recording to generate a summary.'}</Text>

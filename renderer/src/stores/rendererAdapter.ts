@@ -9,6 +9,7 @@ import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapt
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
 import type { SessionDetails, SessionListItem, SessionRawSpan, SessionSpeakerAssignment, SummaryGenerationResult, SummaryProgressEvent } from 'electron/src/types/sessions';
 import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
+import type { RecordingSummaryOptions } from 'electron/src/types/summaryOptions';
 import type { AnalyzeSpeakersOptions, SpeakerAnalysisProgressEvent, SpeakerAssetStatus, TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
@@ -25,7 +26,7 @@ export interface RendererAdapter {
     importAudio: () => Promise<SessionDetails | null>;
     optimizeAudio: (sessionId: string, mode?: 'original' | 'optimized') => Promise<SessionDetails>;
     setTranscriptDuplicateFilter: (sessionId: string, enabled: boolean) => Promise<SessionDetails>;
-    generateSummary: (sessionId: string) => Promise<SummaryGenerationResult>;
+    generateSummary: (sessionId: string, options?: RecordingSummaryOptions) => Promise<SummaryGenerationResult>;
     stopSummary: () => Promise<boolean>;
     analyzeSpeakers: (sessionId: string, options: AnalyzeSpeakersOptions) => Promise<SessionDetails>;
     stopSpeakerAnalysis: () => Promise<boolean>;
@@ -91,7 +92,7 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
         importAudio: () => api.sessions.importAudio(),
         optimizeAudio: (sessionId, mode) => api.sessions.optimizeAudio(sessionId, mode),
         setTranscriptDuplicateFilter: (sessionId, enabled) => api.sessions.setTranscriptDuplicateFilter(sessionId, enabled),
-        generateSummary: (sessionId) => api.sessions.generateSummary(sessionId),
+        generateSummary: (sessionId, options) => api.sessions.generateSummary(sessionId, options),
         stopSummary: () => api.sessions.stopSummary(),
         analyzeSpeakers: (sessionId, options) => api.sessions.analyzeSpeakers(sessionId, options),
         stopSpeakerAnalysis: () => api.sessions.stopSpeakerAnalysis(),

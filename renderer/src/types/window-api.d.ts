@@ -9,6 +9,7 @@ import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapt
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
 import type { SessionDetails, SessionListItem, SessionRawSpan, SessionSpeakerAssignment, SummaryGenerationResult, SummaryProgressEvent } from 'electron/src/types/sessions';
 import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
+import type { RecordingSummaryOptions } from 'electron/src/types/summaryOptions';
 import type { AnalyzeSpeakersOptions, SpeakerAnalysisProgressEvent, SpeakerAssetStatus, TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
@@ -29,7 +30,7 @@ declare global {
                 importAudio: () => Promise<SessionDetails | null>;
                 optimizeAudio: (sessionId: string, mode?: 'original' | 'optimized') => Promise<SessionDetails>;
                 setTranscriptDuplicateFilter: (sessionId: string, enabled: boolean) => Promise<SessionDetails>;
-                generateSummary: (sessionId: string) => Promise<SummaryGenerationResult>;
+                generateSummary: (sessionId: string, options?: RecordingSummaryOptions) => Promise<SummaryGenerationResult>;
                 stopSummary: () => Promise<boolean>;
                 analyzeSpeakers: (sessionId: string, options: AnalyzeSpeakersOptions) => Promise<SessionDetails>;
                 stopSpeakerAnalysis: () => Promise<boolean>;

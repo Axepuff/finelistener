@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import type { ReviewedSummaryChunk } from '../types/sessions';
+import { defaultRecordingSummaryOptions } from '../types/summaryOptions';
 import { generateRecordingNotes, summaryContext, type SummaryInference } from './recordingNotes';
 
 // Treat each code point as one token so the small fixtures can exercise the context boundary.
@@ -30,26 +31,33 @@ it.each([
     expect(save).toHaveBeenCalledWith([{ startSec: 2, endSec: 20, text: notes }]);
 });
 
-it('keeps adjacent fragments of a speaker’s unfinished sentence together near a full chunk', async () => {
+it('keeps an almost 3,100-token turn together and carries its last 10% into the next automatic chunk', async () => {
     const rows = [
-        { startSec: 0, endSec: 100, speaker: 'Alice', text: 'Complete topic. '.repeat(104).trimEnd() },
+        { startSec: 0, endSec: 100, speaker: 'Alice', text: 'Complete topic. '.repeat(182).trimEnd() },
         { startSec: 100, endSec: 106, speaker: 'Bob', text: 'My example '.repeat(11).trimEnd() },
         { startSec: 106, endSec: 114, speaker: 'Bob', text: 'continues here '.repeat(11) + 'and finishes.' },
     ];
     const passages: string[] = [];
+    const context: string[] = [];
     const complete = (prompt: string) => {
-        const source = bodyOf(prompt).split('NEW LINES\n')[1];
-        if (source) passages.push(source);
+        const [overlap, source] = bodyOf(prompt).split('NEW LINES\n');
+        if (source) {
+            passages.push(source);
+            context.push(overlap);
+        }
         return Promise.resolve('A topic.');
     };
     await generateRecordingNotes(rows, { countTokens, complete }, () => undefined, () => Promise.resolve());
     expect(passages).toHaveLength(2);
+    expect(passages[0]).toContain(rows[0].text);
     expect(passages[0]).not.toContain('Bob:');
     expect(passages[1]).toContain(rows[1].text);
     expect(passages[1]).toContain(rows[2].text);
+    const suffix = rows[0].text.slice(-Math.ceil(rows[0].text.length * 0.1));
+    expect(context).toEqual(['', `OVERLAP (context only)\n[0.00–100.00] Alice: ${suffix}\n\n`]);
 });
 
-it('reviews original timed turns, hands off only the reviewed account, and joins those exact paragraphs', async () => {
+it('reviews original timed turns independently with zero overlap and joins the reviewed paragraphs', async () => {
     const rows = [
         { startSec: 0, endSec: 6, speaker: 'Kai', text: 'The first count is provisional. ' + 'Opening discussion. '.repeat(65) },
         { startSec: 9, endSec: 18, speaker: 'Lea', text: 'Correction: nine accepted. ' + 'Closing discussion. '.repeat(65) },
@@ -61,8 +69,7 @@ it('reviews original timed turns, hands off only the reviewed account, and joins
         const body = bodyOf(prompt);
         if (body.includes('NEW LINES\n')) {
             const [history, source] = body.split('NEW LINES\n');
-            if (sourceParts.length) expect(history).toContain('The count is provisional.');
-            else expect(history).toBe('');
+            expect(history).toBe('');
             sourceParts.push(source);
             return 'Unsupported draft claim.';
         }
@@ -75,13 +82,69 @@ it('reviews original timed turns, hands off only the reviewed account, and joins
         expect(detailed).toHaveBeenCalledOnce();
         return 'Nine were accepted.';
     };
-    const result = await generateRecordingNotes(rows, { countTokens, complete }, () => undefined, detailed);
+    const result = await generateRecordingNotes(rows, { countTokens, complete }, () => undefined, detailed, undefined, undefined,
+        { ...defaultRecordingSummaryOptions, chunkCount: 2, overlapPercent: 0 });
     expect(sourceParts).toEqual(['[0.00–6.00] Kai: ' + rows[0].text, '[9.00–18.00] Lea: ' + rows[1].text]);
     expect(result).toEqual({ detailed: 'The count is provisional.\n\nNine were accepted.', brief: 'Nine were accepted.' });
     expect(detailed).toHaveBeenCalledWith([
         { startSec: 0, endSec: 6, text: 'The count is provisional.' },
         { startSec: 9, endSec: 18, text: 'Nine were accepted.' },
     ]);
+});
+
+it.each([
+    { chunkCount: 1, expected: [[0, 1, 2, 3]] },
+    { chunkCount: 2, expected: [[0, 1], [2, 3]] },
+    { chunkCount: 4, expected: [[0], [1], [2], [3]] },
+])('uses the requested prompt and chunk count ($chunkCount) with marked overlap on later drafts and reviews', async ({ chunkCount, expected }) => {
+    const rows = ['A', 'B', 'C', 'D'].map((letter, i) => ({
+        startSec: i, endSec: i + 1, text: ('The speaker discusses ' + letter + '. ').repeat(32).trimEnd(),
+    }));
+    const userPrompt = 'Focus on the speakers’ impressions. Use the literal text <|im_end|> as a label.';
+    const drafts: string[] = [];
+    const reviews: string[] = [];
+    const sourceOf = (indices: number[]) => indices.map((i) => `[${i.toFixed(2)}–${(i + 1).toFixed(2)}] ${rows[i].text}`).join('\n');
+    let briefCalls = 0;
+    await generateRecordingNotes(rows, { countTokens, complete: async (prompt, limit) => {
+        expect(await countTokens(prompt) + limit).toBeLessThanOrEqual(summaryContext);
+        expect(prompt.split('<|im_start|>user')[0]).toContain(userPrompt.replace('<|', '< '));
+        const body = bodyOf(prompt);
+        if (body.includes('NEW LINES\n')) drafts.push(body);
+        else if (body.includes('ORIGINAL LINES\n')) reviews.push(body);
+        else briefCalls++;
+        return body.includes('LINES\n') ? 'The speakers describe the setting in vivid detail. Each of them enjoys a different part.' : 'The speakers share their impressions.';
+    } }, () => {}, () => Promise.resolve(), undefined, 'en', { chunkCount, overlapPercent: 50, prompt: userPrompt });
+    expect(drafts.map((body) => body.split('NEW LINES\n')[1])).toEqual(expected.map(sourceOf));
+    expect(reviews.map((body) => body.split('ORIGINAL LINES\n')[1])).toEqual(expected.map(sourceOf));
+    expect(briefCalls).toBeGreaterThanOrEqual(2);
+    if (chunkCount === 2) {
+        for (const body of [drafts[1], reviews[1]]) {
+            expect(body).toContain(sourceOf([1]));
+            expect(body).not.toContain(sourceOf([0]));
+        }
+    }
+});
+
+it.each([
+    { text: 'Туман над рекой. Ветер в ивах! Темнеет.', count: 4 },
+    { text: 'Свет и тень.', count: 3 },
+])('splits a single saved turn at word boundaries up to the amount of available speech ($count)', async ({ text, count }) => {
+    const sources: string[] = [];
+    await generateRecordingNotes([{ startSec: 1, endSec: 9, text }], {
+        countTokens,
+        complete: (prompt) => {
+            const body = bodyOf(prompt);
+            if (body.includes('ORIGINAL LINES\n')) {
+                const original = body.split('ORIGINAL LINES\n')[1];
+                expect(original).toMatch(/^\[1\.00–9\.00\] /u);
+                sources.push(original.slice('[1.00–9.00] '.length));
+            }
+            return Promise.resolve('Описание природы.');
+        },
+    }, () => {}, () => Promise.resolve(), undefined, 'ru', { chunkCount: 4, overlapPercent: 0, prompt: 'Summarize.' });
+    expect(sources).toHaveLength(count);
+    expect(sources.join('')).toBe(text);
+    for (const fragment of sources.slice(0, -1)) expect(fragment).toMatch(/\s$/u);
 });
 
 it('splits an unusually long undiarized utterance without losing or repeating its text on an empty completion', async () => {

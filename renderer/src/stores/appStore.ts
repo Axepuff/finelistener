@@ -1,4 +1,5 @@
 import type { SessionDetails, SessionRawSpan, SessionSpeakerAssignment } from 'electron/src/types/sessions';
+import type { RecordingSummaryOptions } from 'electron/src/types/summaryOptions';
 import type { AnalyzeSpeakersOptions } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelName } from 'electron/src/types/whisper';
@@ -736,11 +737,11 @@ export class AppStore {
             && !this.transcription.draftTranscript && this.transcription.savedTranscript?.segments.some((segment) => segment.text.trim()));
     }
 
-    async generateSummary(): Promise<void> {
+    async generateSummary(options?: RecordingSummaryOptions): Promise<void> {
         const sessionId = this.workspace.activeSessionId;
         let transcript = this.transcription.savedTranscript;
         if (this.disposed || !sessionId || !transcript || !this.canSummarize || this.summary.modelStatus?.state !== 'ready') return;
-        await this.summary.generate(sessionId, (summary) => {
+        await this.summary.generate(sessionId, options, (summary) => {
             if (!this.disposed && this.workspace.activeSessionId === sessionId && this.transcription.savedTranscript === transcript) {
                 this.transcription.setSummary(summary);
                 transcript = this.transcription.savedTranscript;

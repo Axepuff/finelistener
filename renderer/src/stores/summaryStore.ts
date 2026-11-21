@@ -1,5 +1,6 @@
 import type { SessionSummary, SummaryGenerationFailure } from 'electron/src/types/sessions';
 import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
+import type { RecordingSummaryOptions } from 'electron/src/types/summaryOptions';
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { ForegroundOperationStore } from './foregroundOperationStore';
 import type { RendererAdapter } from './rendererAdapter';
@@ -10,12 +11,14 @@ const generationMessages: Record<SummaryGenerationFailure, string | null> = {
     'model-missing': 'Download the summary model to generate a summary.',
     'runtime-unavailable': 'The local summary service is unavailable.',
     'no-transcript': 'A complete transcript is required.',
+    'prompt-too-long': 'The prompt is too long for the available context. Shorten it and try again.',
     'transcript-changed': 'The transcript changed. Generate the summary again.',
     failed: 'Could not generate the summary. Try again.',
 };
 
 export class SummaryStore {
     private progressValue = '';
+    private runningOptionsValue?: RecordingSummaryOptions;
     private errorValue: string | null = null;
     private stopping = false;
     private stoppedValue = false;
@@ -35,6 +38,7 @@ export class SummaryStore {
     get isRunning(): boolean { return this.operations.kind === 'summarizing'; }
     get isStopping(): boolean { return this.stopping; }
     get progress(): string { return this.progressValue; }
+    get runningOptions(): Readonly<RecordingSummaryOptions> | undefined { return this.runningOptionsValue; }
     get error(): string | null { return this.errorValue; }
     get stopped(): boolean { return this.stoppedValue; }
     get modelStatus(): SummaryModelStatus | null { return this.modelValue; }
@@ -95,13 +99,14 @@ export class SummaryStore {
         }
     }
 
-    async generate(sessionId: string, onSaved: (summary: SessionSummary) => void): Promise<void> {
+    async generate(sessionId: string, options: RecordingSummaryOptions | undefined, onSaved: (summary: SessionSummary) => void): Promise<void> {
         if (!this.adapter) return;
         const operation = this.operations.begin('summarizing');
         if (!operation) return;
         this.errorValue = null;
         this.stopping = false;
         this.stoppedValue = false;
+        this.runningOptionsValue = options;
         this.progressValue = 'Preparing summary…';
         try {
             this.unsubscribe = this.adapter.onSummaryProgress((event) => {
@@ -110,7 +115,7 @@ export class SummaryStore {
                     if (event.saved) onSaved(event.saved);
                 }
             });
-            const result = await this.adapter.generateSummary(sessionId);
+            const result = await this.adapter.generateSummary(sessionId, options);
             if (!this.operations.owns(operation)) return;
             if (result.ok) onSaved(result.summary);
             else {
@@ -129,6 +134,7 @@ export class SummaryStore {
                 this.unsubscribe = null;
                 runInAction(() => {
                     this.stopping = false;
+                    this.runningOptionsValue = undefined;
                     this.operations.finish(operation);
                 });
             }
@@ -164,6 +170,7 @@ export class SummaryStore {
         this.modelRequest += 1;
         this.downloadPending = false;
         this.modelValue = null;
+        this.runningOptionsValue = undefined;
         this.modelFailure = null;
         this.errorValue = null;
     }

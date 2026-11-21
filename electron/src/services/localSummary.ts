@@ -7,6 +7,7 @@ import { app } from 'electron';
 import { runNativeProcess } from './nativeProcess';
 import { generateRecordingNotes, summaryContext } from './recordingNotes';
 import type { ReviewedSummaryChunk, SummarySourceRow } from '../types/sessions';
+import type { RecordingSummaryOptions } from '../types/summaryOptions';
 
 export const SUMMARY_MODEL = 'Qwen3-4B-Instruct-2507 Q4_K_M';
 
@@ -25,6 +26,7 @@ const runtimeBinary = (): string => {
 export const generateLocalSummary = async (
     rows: SummarySourceRow[], modelPath: string, signal: AbortSignal, progress: (message: string) => void,
     onReviewed: (chunks: ReviewedSummaryChunk[]) => Promise<void>, cachedChunks?: ReviewedSummaryChunk[], languageHint?: string,
+    options?: RecordingSummaryOptions,
 ): Promise<{ brief: string; detailed: string }> => {
     const binary = runtimeBinary();
     const tokenizer = path.join(path.dirname(binary), process.platform === 'win32' ? 'llama-tokenize.exe' : 'llama-tokenize');
@@ -62,7 +64,7 @@ export const generateLocalSummary = async (
         return end ? stdout.slice(0, end.index).trim() || null : null;
     };
     try {
-        return await generateRecordingNotes(rows, { countTokens, complete }, progress, onReviewed, cachedChunks, languageHint);
+        return await generateRecordingNotes(rows, { countTokens, complete }, progress, onReviewed, cachedChunks, languageHint, options);
     } finally {
         await fs.rm(promptPath, { force: true });
     }

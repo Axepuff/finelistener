@@ -4,6 +4,7 @@ import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResul
 import type { TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from './src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from './src/types/uiPreferences';
 import type { SessionRawSpan, SessionSpeakerAssignment, SummaryGenerationResult, SummaryProgressEvent } from './src/types/sessions';
+import type { RecordingSummaryOptions } from './src/types/summaryOptions';
 import type { SummaryModelStatus } from './src/types/summaryModel';
 import type { AnalyzeSpeakersOptions, SpeakerAnalysisProgressEvent } from './src/types/transcription';
 
@@ -30,7 +31,8 @@ contextBridge.exposeInMainWorld('api', {
         analyzeSpeakers: (sessionId: string, options: AnalyzeSpeakersOptions) =>
             ipcRenderer.invoke('sessions:analyze-speakers', sessionId, options),
         stopSpeakerAnalysis: () => ipcRenderer.invoke('sessions:stop-speaker-analysis'),
-        generateSummary: (sessionId: string): Promise<SummaryGenerationResult> => ipcRenderer.invoke('sessions:generate-summary', sessionId),
+        generateSummary: (sessionId: string, options?: RecordingSummaryOptions): Promise<SummaryGenerationResult> =>
+            ipcRenderer.invoke('sessions:generate-summary', sessionId, options),
         stopSummary: (): Promise<boolean> => ipcRenderer.invoke('sessions:stop-summary'),
         getSpeakerAssets: () => ipcRenderer.invoke('sessions:get-speaker-assets'),
         prepareSpeakerAssets: () => ipcRenderer.invoke('sessions:prepare-speaker-assets'),

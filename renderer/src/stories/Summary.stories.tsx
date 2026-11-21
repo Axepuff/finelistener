@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor } from 'storybook/test';
+import { defaultRecordingSummaryOptions } from '../../../electron/src/types/summaryOptions';
 import { Home } from '../Home';
 import { TranscribedText } from '../features/transcribed-text';
 import { StoryWorkspaceProvider } from './StoryWorkspaceProvider';
@@ -41,6 +42,11 @@ export const DownloadThenGenerate: Story = {
         await userEvent.click(await canvas.findByRole('button', { name: 'Download model' }));
         const generate = await canvas.findByRole('button', { name: 'Generate summary' });
         await expect(canvas.queryByRole('tab', { name: 'Brief overview' })).not.toBeInTheDocument();
+        const prompt = canvas.getByLabelText('Prompt');
+        await userEvent.clear(prompt);
+        await expect(generate).toBeDisabled();
+        const instruction = 'Describe how the speakers listen to recordings.';
+        await userEvent.type(prompt, instruction);
         await userEvent.click(generate);
         await expect(await canvas.findByRole('tabpanel', { name: 'Brief overview' })).toHaveTextContent('reopen a recording');
         await userEvent.click(canvas.getByRole('tab', { name: 'Detailed notes' }));
@@ -49,6 +55,8 @@ export const DownloadThenGenerate: Story = {
         await (loaded.workspace as StoryWorkspace).store.openSession('storybook-session');
         await openSummary(context);
         await expect(await canvas.findByRole('tabpanel', { name: 'Brief overview' })).toBeVisible();
+        await expect(canvas.getByText('Chunks used: 2')).toBeVisible();
+        await expect(canvas.getByLabelText('Prompt')).toHaveValue(instruction);
     },
 };
 
@@ -65,10 +73,20 @@ export const Stopped: Story = {
     parameters: { scenario: 'summary-cancel' },
     play: async (context) => {
         await openSummary(context);
-        await userEvent.click(await context.canvas.findByRole('button', { name: 'Generate summary' }));
-        await userEvent.click(await context.canvas.findByRole('button', { name: 'Stop generation' }));
-        await expect(await context.canvas.findByText('Summary generation stopped.')).toBeVisible();
-        await expect(context.canvas.getByRole('button', { name: 'Generate summary' })).toBeEnabled();
+        const { canvas } = context;
+        const prompt = canvas.getByLabelText('Prompt');
+        const instruction = 'Describe the conversation in two sentences.';
+        await userEvent.clear(prompt);
+        await userEvent.type(prompt, instruction);
+        await userEvent.click(await canvas.findByRole('button', { name: 'Generate summary' }));
+        await userEvent.click(canvas.getByRole('radio', { name: 'Plain Text' }));
+        await openSummary(context);
+        await expect(canvas.getByLabelText('Prompt')).toHaveValue(instruction);
+        await expect(canvas.getByLabelText('Prompt')).toBeDisabled();
+        await userEvent.click(await canvas.findByRole('button', { name: 'Stop generation' }));
+        await expect(await canvas.findByText('Summary generation stopped.')).toBeVisible();
+        await expect(canvas.getByLabelText('Prompt')).toHaveValue(instruction);
+        await expect(canvas.getByRole('button', { name: 'Generate summary' })).toBeEnabled();
     },
 };
 
@@ -88,6 +106,8 @@ export const DetailedOnly: Story = {
         await openSummary(context);
         await expect(await context.canvas.findByRole('tabpanel', { name: 'Detailed notes' })).toBeVisible();
         await expect(await context.canvas.findByRole('button', { name: 'Generate brief summary' })).toBeEnabled();
+        await userEvent.type(context.canvas.getByLabelText('Prompt'), ' Keep examples.');
+        await expect(context.canvas.getByRole('button', { name: 'Generate summary' })).toBeEnabled();
     },
 };
 
@@ -103,9 +123,13 @@ export const SavedWithoutModel: Story = {
 export const RegenerateSavedSummary: Story = {
     parameters: { scenario: 'summary-saved' },
     play: async (context) => {
-        const { canvas } = context;
+        const { canvas, loaded } = context;
         await openSummary(context);
         const originalBrief = 'Next week they will test';
+        const prompt = 'Describe how the speakers compare ways to find a passage.';
+        await expect(canvas.getByLabelText('Prompt')).toHaveValue(prompt);
+        await expect(canvas.queryByLabelText('Number of chunks')).not.toBeInTheDocument();
+        await expect(canvas.queryByLabelText('Chunk overlap (%)')).not.toBeInTheDocument();
         await expect(await canvas.findByRole('tabpanel', { name: 'Brief overview' })).toHaveTextContent(originalBrief);
         await userEvent.click(await canvas.findByRole('button', { name: 'Regenerate summary' }));
         await userEvent.click(await canvas.findByRole('button', { name: 'Download model' }));
@@ -113,6 +137,8 @@ export const RegenerateSavedSummary: Story = {
         await expect(canvas.getByRole('tabpanel', { name: 'Brief overview' })).toHaveTextContent(originalBrief);
         await userEvent.click(regenerate);
         await waitFor(() => expect(canvas.getByRole('tabpanel', { name: 'Brief overview' })).toHaveTextContent('reopen a recording'));
+        const saved = (loaded.workspace as StoryWorkspace).store.transcription.savedTranscript?.summary;
+        await expect(saved?.options).toEqual({ ...defaultRecordingSummaryOptions, prompt });
     },
 };
 

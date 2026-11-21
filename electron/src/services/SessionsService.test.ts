@@ -147,7 +147,11 @@ it('persists reversible duplicate-filter presentations without changing source r
 
     const input = await service.readSummaryInput(session.id);
     expect(input.rows.map((row) => row.text)).toEqual([duplicated, 'local reply.']);
-    const summary = { inputHash: input.inputHash, brief: 'Brief note', detailed: 'Detailed note', model: 'local' };
+    const summary = {
+        inputHash: input.inputHash, brief: 'Brief note', detailed: 'Detailed note', model: 'local',
+        options: { chunkCount: 4, overlapPercent: 15, prompt: 'Describe the conversation.' },
+        reviewedChunks: [{ startSec: 1, endSec: 3.2, text: 'Detailed note' }],
+    };
     await service.saveSummary(session.id, summary, new AbortController().signal);
     const reopened = new SessionsService();
     expect((await reopened.getSession(session.id)).transcript?.summary).toEqual(summary);

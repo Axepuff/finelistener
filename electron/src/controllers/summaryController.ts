@@ -2,8 +2,10 @@ import type { BrowserWindow, IpcMain } from 'electron';
 import { generateLocalSummary, SUMMARY_MODEL } from '../services/localSummary';
 import type { SessionsService } from '../services/SessionsService';
 import type { SessionSummary, SummaryGenerationResult, SummaryProgressEvent } from '../types/sessions';
-
-const generationVersion = 2;
+import {
+    defaultRecordingSummaryOptions, isRecordingSummaryOptions, recordingSummaryGenerationVersion,
+    sameRecordingSummaryOptions, type RecordingSummaryOptions,
+} from '../types/summaryOptions';
 
 export function registerSummaryController(
     ipc: IpcMain,
@@ -14,7 +16,7 @@ export function registerSummaryController(
 ) {
     let active: { controller: AbortController; result: Promise<SummaryGenerationResult> } | null = null;
 
-    const generate = async (sessionId: string, signal: AbortSignal): Promise<SummaryGenerationResult> => {
+    const generate = async (sessionId: string, options: RecordingSummaryOptions, signal: AbortSignal): Promise<SummaryGenerationResult> => {
         try {
             const { rows, inputHash, saved, languageHint } = await sessions.readSummaryInput(sessionId);
             signal.throwIfAborted();
@@ -26,9 +28,10 @@ export function registerSummaryController(
                     window.webContents.send('sessions:summary-progress', { sessionId, message, saved: checkpoint } satisfies SummaryProgressEvent);
                 }
             };
-            const provenance = { inputHash, model: SUMMARY_MODEL, generationVersion };
-            let reviewedChunks = saved?.generationVersion === generationVersion && saved.model === SUMMARY_MODEL && !saved.brief ?
-                saved.reviewedChunks : undefined;
+            const provenance = { inputHash, model: SUMMARY_MODEL, generationVersion: recordingSummaryGenerationVersion, options };
+            const canResume = saved?.generationVersion === recordingSummaryGenerationVersion && saved.model === SUMMARY_MODEL && !saved.brief
+                && sameRecordingSummaryOptions(saved.options, options);
+            let reviewedChunks = canResume ? saved.reviewedChunks : undefined;
             const summary = await generateLocalSummary(rows, modelPath, signal, publish, async (chunks) => {
                 reviewedChunks = chunks;
                 // Keep an existing complete result readable while a replacement brief is generated.
@@ -38,7 +41,7 @@ export function registerSummaryController(
                     brief: '', ...provenance,
                 }, signal);
                 publish('Writing the brief summary…', checkpoint);
-            }, reviewedChunks, languageHint);
+            }, reviewedChunks, languageHint, options);
             signal.throwIfAborted();
             const completed = await sessions.saveSummary(sessionId, { ...summary, reviewedChunks, ...provenance }, signal);
             return { ok: true, summary: completed };
@@ -48,6 +51,7 @@ export function registerSummaryController(
                 switch (error.message) {
                     case 'SUMMARY_MODEL_MISSING': return { ok: false, reason: 'model-missing' };
                     case 'SUMMARY_RUNTIME_UNAVAILABLE': return { ok: false, reason: 'runtime-unavailable' };
+                    case 'SUMMARY_PROMPT_TOO_LONG': return { ok: false, reason: 'prompt-too-long' };
                     case 'The transcript changed during summarization.': return { ok: false, reason: 'transcript-changed' };
                     case 'Session has no transcript':
                     case 'A complete transcript with speech is required.': return { ok: false, reason: 'no-transcript' };
@@ -66,11 +70,15 @@ export function registerSummaryController(
         return !result.ok && result.reason === 'cancelled';
     };
 
-    ipc.handle('sessions:generate-summary', async (_event, sessionId: unknown): Promise<SummaryGenerationResult> => {
+    ipc.handle('sessions:generate-summary', async (
+        _event, sessionId: unknown, request: unknown = defaultRecordingSummaryOptions,
+    ): Promise<SummaryGenerationResult> => {
         if (typeof sessionId !== 'string' || !sessionId.trim() || sessionId !== sessionId.trim()) throw new Error('Invalid session id');
         if (isUnavailable() || active) return { ok: false, reason: 'busy' };
+        if (!isRecordingSummaryOptions(request)) return { ok: false, reason: 'failed' };
+        const { chunkCount, overlapPercent, prompt } = request;
         const controller = new AbortController();
-        const result = generate(sessionId, controller.signal).finally(() => { active = null; });
+        const result = generate(sessionId, { chunkCount, overlapPercent, prompt }, controller.signal).finally(() => { active = null; });
         active = { controller, result };
         return result;
     });

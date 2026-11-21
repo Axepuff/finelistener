@@ -1,4 +1,5 @@
 import type { TranscribeOpts } from './transcription';
+import type { RecordingSummaryOptions } from './summaryOptions';
 
 export type SessionSourceKind = 'imported' | 'recorded';
 export type RecordingSource = 'system' | 'microphone';
@@ -147,6 +148,7 @@ export interface SessionSummary {
     model: string;
     inputHash: string;
     generationVersion?: number;
+    options?: RecordingSummaryOptions;
     reviewedChunks?: ReviewedSummaryChunk[];
 }
 
@@ -156,7 +158,7 @@ export interface SummaryProgressEvent {
     saved?: SessionSummary;
 }
 
-export type SummaryGenerationFailure = 'busy' | 'cancelled' | 'model-missing' | 'runtime-unavailable' | 'transcript-changed' | 'no-transcript' | 'failed';
+export type SummaryGenerationFailure = 'busy' | 'cancelled' | 'model-missing' | 'runtime-unavailable' | 'transcript-changed' | 'no-transcript' | 'prompt-too-long' | 'failed';
 export type SummaryGenerationResult = { ok: true; summary: SessionSummary } | { ok: false; reason: SummaryGenerationFailure };
 
 export interface SessionTranscriptV1 {
