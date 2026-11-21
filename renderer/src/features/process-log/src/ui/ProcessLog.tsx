@@ -36,11 +36,11 @@ export const ProcessLog: FC = observer(() => {
                         style={{
                             whiteSpace: 'pre-wrap',
                             overflowY: 'auto',
-                            fontFamily: 'monospace',
+                            fontFamily: 'var(--brand-font-family-code)',
                             flex: 1,
                             padding: 8,
                             borderRadius: 6,
-                            border: '1px solid var(--mantine-color-gray-3)',
+                            border: 'var(--brand-line-width) solid var(--brand-color-border)',
                         }}
                     >
                         {activityLog.content || 'Whisper log is empty.'}

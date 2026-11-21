@@ -1,0 +1,34 @@
+/*
+ * Design-system rules that Mantine's theme object cannot express.
+ * Token variables (--brand-*) come from cssVariablesResolver in theme.ts.
+ */
+
+/* Control heights: 24px in panel toolbars (xs), 32px default (sm, md), 40px only for the record button (lg). */
+.mantine-Button-root {
+    --button-height-xs: var(--brand-control-height-sm);
+    --button-height-sm: var(--brand-control-height);
+    --button-height-md: var(--brand-control-height);
+    --button-height-lg: var(--brand-control-height-lg);
+    --button-height-compact-sm: var(--brand-control-height-sm);
+    --button-padding-x-md: 12px;
+}
+
+.mantine-Input-wrapper {
+    --input-height-xs: var(--brand-control-height-sm);
+    --input-height-sm: var(--brand-control-height);
+    --input-height-md: var(--brand-control-height);
+    --input-height-lg: var(--brand-control-height-lg);
+}
+
+/* Focus: primary border plus a 3px ring. */
+.mantine-focus-auto:focus-visible {
+    outline: var(--brand-line-width) solid var(--brand-color-primary);
+    outline-offset: 0;
+    box-shadow: var(--brand-focus-ring);
+}
+
+.mantine-Input-input:focus,
+.mantine-Input-input:focus-within {
+    box-shadow: var(--brand-focus-ring);
+}
+

@@ -35,7 +35,7 @@ export const Home: React.FC = observer(() => {
                         separatorAriaLabel: 'Resize left sidebar',
                         node: (
                             <Paper
-                                bg="gray.0"
+                                bg="var(--brand-color-bg-layout)"
                                 h="100%"
                                 style={{ minHeight: 0, overflow: 'hidden' }}
                             >

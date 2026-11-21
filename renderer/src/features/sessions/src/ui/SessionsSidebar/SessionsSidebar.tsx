@@ -46,10 +46,10 @@ export const SessionsSidebar: React.FC = observer(() => {
         sessions.error ?? 'No sessions yet.';
 
     return (
-        <Paper bg="gray.0" h="100%" style={{ minHeight: 0, overflow: 'hidden' }}>
+        <Paper bg="var(--brand-color-bg-layout)" h="100%" style={{ minHeight: 0, overflow: 'hidden' }}>
             <Stack gap={12} p={16} h="100%" style={{ minHeight: 0 }}>
                 <Group justify="space-between" align="center" wrap="nowrap">
-                    <Text size="xs" fw={700} c="dimmed" style={{ letterSpacing: '0.08em' }}>
+                    <Text size="xs" fw={600} c="var(--brand-color-text-secondary)" style={{ letterSpacing: '0.08em' }}>
                         {'SESSIONS'}
                     </Text>
                     <Tooltip label="Refresh sessions" withArrow={true}>
@@ -96,8 +96,8 @@ export const SessionsSidebar: React.FC = observer(() => {
                                         }}
                                         withBorder={isActive}
                                         p={10}
-                                        bg={isActive ? 'white' : undefined}
-                                        style={{ borderColor: isActive ? 'var(--mantine-color-gray-5)' : undefined }}
+                                        bg={isActive ? 'var(--brand-color-bg-container)' : undefined}
+                                        style={{ borderColor: isActive ? 'var(--brand-color-text-tertiary)' : undefined }}
                                     >
                                         <Group justify="space-between" align="flex-start" wrap="nowrap" gap={8}>
                                             <UnstyledButton

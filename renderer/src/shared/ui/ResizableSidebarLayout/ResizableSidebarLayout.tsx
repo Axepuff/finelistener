@@ -285,11 +285,11 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
                         left: '50%',
                         top: 0,
                         bottom: 0,
-                        width: 2,
+                        width: 1,
                         transform: 'translateX(-50%)',
                         backgroundColor: sidebarState.isSidebarResizing ?
-                            'var(--mantine-color-gray-5)' :
-                            'var(--mantine-color-gray-3)',
+                            'var(--brand-color-text-tertiary)' :
+                            'var(--brand-color-border)',
                     }}
                 />
             </Box>
