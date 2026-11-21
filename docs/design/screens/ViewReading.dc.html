@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Transcript — Speakers, reading layout</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#136abf}a:hover{color:#228be6}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 780px; height: 760px; display: flex; flex-direction: column; overflow: hidden; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px;">
+  <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 12px 24px; border-bottom: 1px solid var(--brand-color-border-secondary, #f0f0f0);">
+    <div role="group" aria-label="Transcript view" style="display: flex; height: 32px; padding: 2px; box-sizing: border-box; border-radius: 4px; background: var(--brand-color-fill-secondary, #f0f0f0);">
+      <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Text</button>
+      <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Timecodes</button>
+      <button type="button" aria-pressed="true" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-weight: 600;">Speakers</button>
+      <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Summary</button>
+    </div>
+    <div style="flex: 1 1 auto;"></div>
+    <label style="width: 200px; height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-tertiary, #8c8c8c);">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"></circle><path d="M21 21l-6 -6"></path></svg>
+      <input type="search" aria-label="Search transcript" placeholder="Search transcript" style="flex: 1 1 auto; min-width: 0; border: 0; outline: none; background: transparent; font: inherit; color: var(--brand-color-text, #1f1f1f);">
+    </label>
+    <button type="button" aria-label="Copy transcript" style="width: 32px; height: 32px; padding: 0; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959); display: flex; align-items: center; justify-content: center;">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8v-2a2 2 0 0 0 -2 -2h-8a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h2"></path></svg>
+    </button>
+    <button type="button" style="height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f);">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"></path><path d="M7 11l5 5l5 -5"></path><path d="M12 4l0 12"></path></svg>
+      Export
+    </button>
+  </div>
+
+  <div style="flex: 1 1 auto; min-height: 0; overflow: auto; padding: 24px;">
+    <div style="max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px;">
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <span style="font-size: 12px; color: var(--brand-color-text-secondary, #595959); margin-right: 4px;">3 speakers</span>
+        <sc-for list="{{speakers}}" as="p" hint-placeholder-count="3">
+          <span style="{{p.tag}}">{{p.name}}</span>
+        </sc-for>
+        <button type="button" style="height: 24px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: var(--brand-color-link-active, #136abf); font-size: 12px;">Rename speakers</button>
+        <div style="flex: 1 1 auto;"></div>
+        <div role="group" aria-label="Speaker layout" style="display: flex; height: 24px; padding: 2px; box-sizing: border-box; border-radius: 4px; background: var(--brand-color-fill-secondary, #f0f0f0);">
+          <button type="button" aria-pressed="false" style="height: 20px; padding: 0 8px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959); font-size: 12px;">Dialogue</button>
+          <button type="button" aria-pressed="true" style="height: 20px; padding: 0 8px; border: 0; border-radius: 3px; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-size: 12px; font-weight: 600;">Reading</button>
+        </div>
+      </div>
+      <span style="font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">Each speaker keeps one color. Hover a passage to see who is speaking, click it to play from there.</span>
+
+      <sc-for list="{{paras}}" as="para" hint-placeholder-count="3">
+        <p style="margin: 0; font-size: 16px; line-height: 30px;"><sc-for list="{{para.spans}}" as="s" hint-placeholder-count="3"><span title="{{s.who}}" style="{{s.style}}">{{s.t}}</span> </sc-for></p>
+      </sc-for>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":780,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var pal = {
+      Alice: ['var(--brand-presets-green-1, #f6ffed)', 'var(--brand-presets-green-8, #227804)', '#95de64'],
+      Bob: ['var(--brand-presets-volcano-1, #fff2e8)', 'var(--brand-presets-volcano-8, #ad2202)', '#ff9c6e'],
+      Maria: ['var(--brand-presets-purple-1, #f9f0ff)', 'var(--brand-presets-purple-8, #391085)', '#b37feb']
+    };
+    var tag = function (n) { var p = pal[n]; return 'font-size: 12px; line-height: 20px; font-weight: 600; padding: 0 8px; border-radius: 3px; background: ' + p[0] + '; color: ' + p[1] + '; border: 1px solid ' + p[2] + ';'; };
+    var span = function (who, t, now) {
+      var p = pal[who];
+      var st = 'background: ' + p[0] + '; box-shadow: inset 0 -2px 0 ' + p[2] + '; padding: 2px 0; -webkit-box-decoration-break: clone; box-decoration-break: clone;';
+      if (now) st += ' outline: 1px solid ' + p[2] + '; border-radius: 2px;';
+      return { who: who, t: t, style: st };
+    };
+    return {
+      speakers: ['Alice', 'Bob', 'Maria'].map(function (n) { return { name: n, tag: tag(n) }; }),
+      paras: [
+        { spans: [
+          span('Alice', 'Let’s start with the recording flow. Right now people open the app and don’t know whether to record or import.'),
+          span('Bob', 'Agreed. The source switch sits above the settings, so the first thing you see is a form, not an action.'),
+          span('Maria', 'What if the window opens on the session list, and recording is one button in the title bar?', true)
+        ]},
+        { spans: [
+          span('Alice', 'That works. Then the settings panel only matters when you transcribe, and the recording itself stays front and center.'),
+          span('Bob', 'We also need to show progress better. Transcription, speaker analysis and the summary each take a while.')
+        ]},
+        { spans: [
+          span('Maria', 'One status line per step: Transcribing 42%, then Identifying speakers. The recording list should show it too.'),
+          span('Alice', 'And keep saying it plainly: everything runs offline, nothing leaves the computer.')
+        ]}
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

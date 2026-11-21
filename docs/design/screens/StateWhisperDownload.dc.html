@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings — Whisper model downloading</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#136abf}a:hover{color:#228be6}
+button{font:inherit;cursor:pointer}
+button:disabled{cursor:default}
+</style>
+</helmet>
+<aside aria-label="Transcription settings" style="width: 360px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--brand-color-bg-layout, #f5f5f5); border-left: 1px solid var(--brand-color-border, #d9d9d9); color: var(--brand-color-text, #1f1f1f); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px;">
+  <div style="flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 20px;">
+    <h2 style="margin: 0; font-size: 18px; line-height: 26px; font-weight: 600;">Settings</h2>
+
+    <div style="display: flex; flex-direction: column; gap: 4px;">
+      <label for="lang" style="font-weight: 600;">Language</label>
+      <div style="position: relative;">
+        <select id="lang" style="width: 100%; height: 32px; box-sizing: border-box; padding: 0 32px 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font: inherit; appearance: none;"><option>English</option></select>
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#595959" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 10px; top: 8px; pointer-events: none;"><path d="M6 9l6 6l6 -6"></path></svg>
+      </div>
+    </div>
+
+    <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px;">
+      <legend style="padding: 0 0 4px; font-weight: 600;">Model</legend>
+
+      <label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff);">
+        <input type="radio" name="model" style="margin: 4px 0 0; accent-color: #2e2e2e;">
+        <span style="flex: 1 1 auto; display: flex; flex-direction: column;">
+          <span style="display: flex; align-items: center; gap: 8px;"><span style="font-weight: 600;">Base</span><span style="font-size: 12px; color: var(--brand-color-text-secondary, #595959);">Fastest · included</span></span>
+          <span style="display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2b8a3e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5l10 -10"></path></svg>
+            Ready · 148 MB
+          </span>
+        </span>
+      </label>
+
+      <label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-quaternary, #bfbfbf);">
+        <input type="radio" name="model" disabled style="margin: 4px 0 0;">
+        <span style="flex: 1 1 auto; display: flex; flex-direction: column;">
+          <span style="display: flex; align-items: center; gap: 8px;"><span style="font-weight: 600;">Small</span><span style="font-size: 12px;">Balanced</span></span>
+          <span style="font-size: 12px; line-height: 18px;">264 MB · available after the current download</span>
+        </span>
+      </label>
+
+      <label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--brand-color-primary, #2e2e2e); background: var(--brand-color-bg-container, #ffffff);">
+        <input type="radio" name="model" checked style="margin: 4px 0 0; accent-color: #2e2e2e;">
+        <span style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px;">
+          <span style="display: flex; align-items: center; gap: 8px;"><span style="font-weight: 600;">Large</span><span style="font-size: 12px; color: var(--brand-color-text-secondary, #595959);">Best quality · v3 turbo</span></span>
+          <span role="status" style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="display: flex; justify-content: space-between; font-size: 12px; line-height: 18px;">
+              <span>Downloading… 38%</span>
+              <span style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; color: var(--brand-color-text-secondary, #595959);">332 / 874 MB</span>
+            </span>
+            <span style="height: 4px; border-radius: 1px; background: var(--brand-color-fill-secondary, #f0f0f0); overflow: hidden;"><span style="display: block; width: 38%; height: 100%; background: var(--brand-color-primary, #2e2e2e);"></span></span>
+            <span style="display: flex; align-items: center; justify-content: space-between; font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">
+              <span>About 2 min left</span>
+              <button type="button" style="height: 20px; padding: 0 6px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-link-active, #136abf); font-size: 12px;">Cancel download</button>
+            </span>
+          </span>
+        </span>
+      </label>
+      <span style="font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">Models are downloaded once and then work offline. One download at a time.</span>
+    </fieldset>
+
+    <div style="display: flex; flex-direction: column; gap: 12px; padding-top: 20px; border-top: 1px solid var(--brand-color-border, #d9d9d9);">
+      <label style="display: flex; align-items: flex-start; gap: 12px;">
+        <span style="flex: 1 1 auto; display: flex; flex-direction: column;">
+          <span style="font-weight: 600;">Identify speakers</span>
+          <span style="font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">Runs after transcription. The transcript is saved first.</span>
+        </span>
+        <input type="checkbox" role="switch" checked style="position: absolute; opacity: 0; width: 1px; height: 1px;">
+        <span aria-hidden="true" style="flex: 0 0 32px; width: 32px; height: 18px; margin-top: 2px; border-radius: 9px; background: var(--brand-color-primary, #2e2e2e); position: relative;"><span style="position: absolute; top: 2px; left: 16px; width: 14px; height: 14px; border-radius: 50%; background: #ffffff;"></span></span>
+      </label>
+    </div>
+  </div>
+
+  <div style="flex: 0 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff);">
+    <div role="status" style="display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 16px; margin-top: 1px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 3"></path></svg>
+      <span><span style="color: var(--brand-color-text, #1f1f1f);">Large can transcribe once it is downloaded.</span> You can start now with Base or wait.</span>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button type="button" disabled style="flex: 1 1 auto; height: 32px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-fill-tertiary, #f5f5f5); color: var(--brand-color-text-quaternary, #bfbfbf); font-weight: 600;">Transcribe with Large</button>
+      <button type="button" style="flex: 0 0 auto; height: 32px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f);">Use Base now</button>
+    </div>
+  </div>
+</aside>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":360,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

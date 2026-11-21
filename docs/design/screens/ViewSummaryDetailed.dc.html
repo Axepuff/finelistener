@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Transcript — Detailed summary</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#136abf}a:hover{color:#228be6}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 780px; height: 1100px; display: flex; flex-direction: column; overflow: hidden; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px;">
+  <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 12px 24px; border-bottom: 1px solid var(--brand-color-border-secondary, #f0f0f0);">
+    <div role="group" aria-label="Transcript view" style="display: flex; height: 32px; padding: 2px; box-sizing: border-box; border-radius: 4px; background: var(--brand-color-fill-secondary, #f0f0f0);">
+      <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Text</button>
+      <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Timecodes</button>
+      <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Speakers</button>
+      <button type="button" aria-pressed="true" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-weight: 600;">Summary</button>
+    </div>
+    <div style="flex: 1 1 auto;"></div>
+    <button type="button" aria-label="Copy summary" style="width: 32px; height: 32px; padding: 0; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959); display: flex; align-items: center; justify-content: center;">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8v-2a2 2 0 0 0 -2 -2h-8a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h2"></path></svg>
+    </button>
+    <button type="button" style="height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f);">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"></path><path d="M7 11l5 5l5 -5"></path><path d="M12 4l0 12"></path></svg>
+      Export summary
+    </button>
+  </div>
+
+  <div style="flex: 1 1 auto; min-height: 0; overflow: auto; padding: 24px;">
+    <div style="max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
+
+      <div style="display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 12px; border-radius: 6px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-fill-quaternary, #fafafa);">
+        <span style="font-weight: 600;">Prompt</span>
+        <span style="font-size: 12px; line-height: 20px; padding: 0 6px; border-radius: 3px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-fill-tertiary, #f5f5f5); color: var(--brand-color-text-secondary, #595959);">Default</span>
+        <span style="flex: 1 1 auto; min-width: 0; color: var(--brand-color-text-secondary, #595959); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Summarize what the speakers discuss. Preserve the main ideas, their context and any differences in viewpoint. Use only information supported by the transcript.</span>
+        <button type="button" aria-expanded="false" style="height: 24px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: var(--brand-color-link-active, #136abf); font-size: 12px;">Edit prompt</button>
+        <button type="button" style="height: 24px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-size: 12px;">Regenerate</button>
+      </div>
+
+      <div style="display: flex; align-items: flex-start; gap: 12px;">
+        <div style="flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px;">
+          <h2 style="margin: 0; font-size: 18px; line-height: 26px; font-weight: 600;">Summary</h2>
+          <span style="font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">Generated Nov 20, 2026, 14:12 · Chunks used: 4</span>
+        </div>
+        <div role="group" aria-label="Summary length" style="display: flex; height: 24px; padding: 2px; box-sizing: border-box; border-radius: 4px; background: var(--brand-color-fill-secondary, #f0f0f0);">
+          <button type="button" aria-pressed="false" style="height: 20px; padding: 0 8px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959); font-size: 12px;">Brief overview</button>
+          <button type="button" aria-pressed="true" style="height: 20px; padding: 0 8px; border: 0; border-radius: 3px; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-size: 12px; font-weight: 600;">Detailed notes</button>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <sc-for list="{{chunks}}" as="c" hint-placeholder-count="4">
+          <section style="{{c.box}}">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; line-height: 20px; color: var(--brand-color-text-secondary, #595959);">{{c.time}}</span>
+              <sc-for list="{{c.who}}" as="w" hint-placeholder-count="2">
+                <span style="{{w.tag}}">{{w.name}}</span>
+              </sc-for>
+              <div style="flex: 1 1 auto;"></div>
+              <button type="button" style="height: 24px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: var(--brand-color-text-secondary, #595959); font-size: 12px;">
+                <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13 -8z"></path></svg>
+                Play
+              </button>
+              <button type="button" style="height: 24px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: var(--brand-color-link-active, #136abf); font-size: 12px;">Show source</button>
+            </div>
+            <h3 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600;">{{c.title}}</h3>
+            <p style="margin: 0; font-size: 16px; line-height: 26px;">{{c.text}}</p>
+          </section>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":780,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var pal = {
+      Alice: ['var(--brand-presets-green-1, #f6ffed)', 'var(--brand-presets-green-8, #227804)', '#b7eb8f'],
+      Bob: ['var(--brand-presets-volcano-1, #fff2e8)', 'var(--brand-presets-volcano-8, #ad2202)', '#ffbb96'],
+      Maria: ['var(--brand-presets-purple-1, #f9f0ff)', 'var(--brand-presets-purple-8, #391085)', '#d3adf7']
+    };
+    var who = function (names) { return names.map(function (n) { var p = pal[n]; return { name: n, tag: 'font-size: 12px; line-height: 18px; font-weight: 600; padding: 0 6px; border-radius: 3px; background: ' + p[0] + '; color: ' + p[1] + '; border: 1px solid ' + p[2] + ';' }; }); };
+    var box = 'display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 6px; border: 1px solid var(--brand-color-border-secondary, #f0f0f0);';
+    var boxNow = 'display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 6px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-fill-tertiary, #f5f5f5);';
+    return {
+      chunks: [
+        { time: '00:00 – 00:27', who: who(['Alice', 'Bob']), box: box, title: 'Where the current flow falls short',
+          text: 'Alice opened with the recording flow: people who launch the app don’t know whether to record or import. Bob added that the source switch sits above the settings, so the window greets users with a form instead of an action.' },
+        { time: '00:27 – 00:52', who: who(['Maria', 'Alice']), box: boxNow, title: 'Sessions first, one record button',
+          text: 'Maria proposed opening the window on the session list and moving recording to a single button in the title bar. Alice agreed: transcription settings then matter only when transcribing, and the recording itself stays in focus.' },
+        { time: '00:52 – 01:21', who: who(['Bob', 'Maria']), box: box, title: 'Showing progress for long steps',
+          text: 'Bob noted that transcription, speaker analysis and the summary each take a while with little feedback. Maria suggested one status line per step, for example “Transcribing 42%” followed by “Identifying speakers”, repeated in the session list.' },
+        { time: '01:21 – 01:29', who: who(['Alice']), box: box, title: 'Stating the offline promise',
+          text: 'Alice asked to say plainly in the window that everything runs offline and no audio leaves the computer.' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

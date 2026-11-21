@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Model and summary errors</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#136abf}a:hover{color:#228be6}
+button{font:inherit;cursor:pointer}
+button:disabled{cursor:default}
+</style>
+</helmet>
+<div style="width: 780px; height: 1080px; box-sizing: border-box; padding: 32px; display: flex; flex-direction: column; gap: 28px; background: var(--brand-color-bg-layout, #f5f5f5); color: var(--brand-color-text, #1f1f1f); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px;">
+
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <span style="font-size: 12px; line-height: 18px; font-weight: 600; color: var(--brand-color-text-secondary, #595959);">Settings · Whisper model download failed</span>
+    <div style="width: 328px; display: flex; flex-direction: column; gap: 8px;">
+      <label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--brand-color-primary, #2e2e2e); background: var(--brand-color-bg-container, #ffffff);">
+        <input type="radio" name="m" checked style="margin: 4px 0 0; accent-color: #2e2e2e;">
+        <span style="display: flex; flex-direction: column;">
+          <span style="display: flex; gap: 8px;"><span style="font-weight: 600;">Base</span><span style="font-size: 12px; color: var(--brand-color-text-secondary, #595959);">Fastest · included</span></span>
+          <span style="font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">Ready · still selected</span>
+        </span>
+      </label>
+      <label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--brand-color-error-border, #ffd3cf); background: var(--brand-color-bg-container, #ffffff);">
+        <input type="radio" name="m" style="margin: 4px 0 0;">
+        <span style="flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px;">
+          <span style="display: flex; gap: 8px;"><span style="font-weight: 600;">Large</span><span style="font-size: 12px; color: var(--brand-color-text-secondary, #595959);">874 MB</span></span>
+          <span role="alert" style="display: flex; gap: 6px; font-size: 12px; line-height: 18px;">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d43b40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 14px; margin-top: 2px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>
+            Could not download the model. Check your connection and try again.
+          </span>
+          <button type="button" style="align-self: flex-start; height: 24px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-size: 12px;">Retry download</button>
+        </span>
+      </label>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <span style="font-size: 12px; line-height: 18px; font-weight: 600; color: var(--brand-color-text-secondary, #595959);">Summary · not enough disk space for the model</span>
+    <section role="alert" style="display: flex; gap: 8px; padding: 12px; border-radius: 6px; background: var(--brand-color-error-bg, #fff2f0); border: 1px solid var(--brand-color-error-border, #ffd3cf);">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d43b40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 16px; margin-top: 3px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-weight: 600;">Not enough disk space</span>
+          <span style="font-size: 12px; line-height: 18px;">The summary model needs 2.50 GB. Free up space on this disk and try again.</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" style="height: 24px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-primary, #2e2e2e); background: var(--brand-color-primary, #2e2e2e); color: #ffffff; font-size: 12px; font-weight: 600;">Try again</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <span style="font-size: 12px; line-height: 18px; font-weight: 600; color: var(--brand-color-text-secondary, #595959);">Summary · model download interrupted</span>
+    <section role="alert" style="display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 6px; border: 1px solid var(--brand-color-error-border, #ffd3cf); background: var(--brand-color-bg-container, #ffffff);">
+      <div style="display: flex; align-items: baseline; gap: 12px;">
+        <span style="flex: 1 1 auto; font-weight: 600;">Summary model download stopped at 47%</span>
+        <span style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; color: var(--brand-color-text-secondary, #595959);">1.17 / 2.50 GB</span>
+      </div>
+      <div aria-hidden="true" style="height: 6px; border-radius: 1px; background: var(--brand-color-fill-secondary, #f0f0f0); overflow: hidden;"><div style="width: 47%; height: 100%; background: var(--brand-color-error, #fa5252);"></div></div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="flex: 1 1 auto; font-size: 12px; line-height: 18px;">Could not download the model. Check your connection and try again.</span>
+        <button type="button" style="height: 24px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-primary, #2e2e2e); background: var(--brand-color-primary, #2e2e2e); color: #ffffff; font-size: 12px; font-weight: 600;">Retry download</button>
+      </div>
+    </section>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <span style="font-size: 12px; line-height: 18px; font-weight: 600; color: var(--brand-color-text-secondary, #595959);">Summary · prompt is too long</span>
+    <section style="display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 6px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-fill-quaternary, #fafafa);">
+      <label for="prompt" style="font-weight: 600;">Prompt</label>
+      <textarea id="prompt" rows="3" aria-invalid="true" aria-describedby="prompt-err" style="width: 100%; box-sizing: border-box; resize: vertical; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--brand-color-error, #fa5252); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font: inherit; line-height: 22px;">Summarize what the speakers discuss. Preserve the main ideas, their context and any differences in viewpoint. For every topic, quote the exact wording of each speaker, list every number mentioned, and…</textarea>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span id="prompt-err" role="alert" style="flex: 1 1 auto; display: flex; gap: 6px; font-size: 12px; line-height: 18px; color: var(--brand-color-error-active, #d43b40);">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 14px; margin-top: 2px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>
+          The prompt is too long for the available context. Shorten it and try again.
+        </span>
+        <button type="button" disabled style="height: 32px; padding: 0 14px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-fill-tertiary, #f5f5f5); color: var(--brand-color-text-quaternary, #bfbfbf); font-weight: 600;">Generate summary</button>
+      </div>
+    </section>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <span style="font-size: 12px; line-height: 18px; font-weight: 600; color: var(--brand-color-text-secondary, #595959);">Summary · generation failed or was stopped</span>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+      <section role="alert" style="display: flex; gap: 8px; padding: 12px; border-radius: 6px; background: var(--brand-color-error-bg, #fff2f0); border: 1px solid var(--brand-color-error-border, #ffd3cf);">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d43b40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 16px; margin-top: 3px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span style="font-size: 12px; line-height: 18px;"><span style="font-weight: 600;">Could not generate the summary.</span> Try again.</span>
+          <button type="button" style="align-self: flex-start; height: 24px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-primary, #2e2e2e); background: var(--brand-color-primary, #2e2e2e); color: #ffffff; font-size: 12px; font-weight: 600;">Generate summary</button>
+        </div>
+      </section>
+      <section role="status" style="display: flex; gap: 8px; padding: 12px; border-radius: 6px; background: var(--brand-color-fill-tertiary, #f5f5f5); border: 1px solid var(--brand-color-border, #d9d9d9);">
+        <span aria-hidden="true" style="flex: 0 0 10px; width: 10px; height: 10px; margin-top: 5px; border-radius: 2px; background: var(--brand-color-text-secondary, #595959);"></span>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span style="font-size: 12px; line-height: 18px;"><span style="font-weight: 600;">Summary generation stopped.</span> Processed chunks are kept, so it continues from where it stopped.</span>
+          <button type="button" style="align-self: flex-start; height: 24px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-size: 12px;">Continue</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":780,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

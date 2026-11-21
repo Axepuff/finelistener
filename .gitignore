@@ -15,6 +15,7 @@ miniaudio-loopback/*.vcxproj*
 CONTEXT.md
 docs/*
 !docs/recording-summary-prompts.md
+!docs/design/
 !docs/adr/
 docs/adr/*
 !docs/adr/0005-add-session-scoped-speaker-diarization.md
