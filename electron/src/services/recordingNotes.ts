@@ -202,7 +202,10 @@ const summarizeBrief = async (chunks: ReviewedSummaryChunk[], model: SummaryInfe
             first += count;
         }
         if (condensed.length === 1) return condensed[0];
-        if (condensed.length >= notes.length) throw new Error('The model could not condense the notes');
+        if (condensed.length >= notes.length
+            && condensed.reduce((size, text) => size + text.length, 0) >= notes.reduce((size, text) => size + text.length, 0)) {
+            throw new Error('The model could not condense the notes');
+        }
         notes = condensed;
     }
     throw new Error('There are no reviewed paragraphs');

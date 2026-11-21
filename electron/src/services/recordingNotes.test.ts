@@ -228,3 +228,27 @@ it('replaces short English answers and accepts a short source-language phrase on
         .resolves.toEqual({ detailed: speech.text, brief: speech.text });
     expect(answers).toHaveLength(0);
 });
+
+it('combines separately shortened paragraphs on a later pass', async () => {
+    const text = 'The meeting discussed delivery dates and warehouse capacity. '.repeat(20);
+    const notes = [0, 60].map((startSec) => ({ startSec, endSec: startSec + 60, text }));
+    const brief = 'The meeting discussed delivery dates.';
+    const complete = vi.fn(async (prompt: string, limit: number) => {
+        expect(await countTokens(prompt) + limit).toBeLessThanOrEqual(summaryContext);
+        return brief;
+    });
+    const result = await generateRecordingNotes([notes[0]], { countTokens, complete }, () => {},
+        () => Promise.resolve(), notes, 'en', { prompt: 'Summarize. '.repeat(250), chunkCount: 0, overlapPercent: 10 });
+    expect(result).toEqual({ brief, detailed: `${text}\n\n${text}` });
+    expect(complete).toHaveBeenCalledTimes(6);
+});
+
+it('stops reducing separate paragraphs when their volume does not decrease', async () => {
+    const text = 'Delivery'.repeat(70) + ' is pending.';
+    const notes = [0, 60].map((startSec) => ({ startSec, endSec: startSec + 60, text }));
+    const complete = vi.fn(() => Promise.resolve(text));
+    await expect(generateRecordingNotes([{ ...notes[0], text: 'The delivery is pending.' }], { countTokens, complete }, () => {},
+        () => Promise.resolve(), notes, 'en', { prompt: 'Summarize. '.repeat(300), chunkCount: 0, overlapPercent: 10 }))
+        .rejects.toThrow('The model could not condense the notes');
+    expect(complete).toHaveBeenCalledTimes(4);
+});
