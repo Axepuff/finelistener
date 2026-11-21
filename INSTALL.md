@@ -1,14 +1,14 @@
 # Install FineListener beta
 
-Download builds only from [FineListener Releases](https://github.com/Axepuff/finelistener/releases). This guide covers **1.5.0-beta.1**.
+Download builds only from [FineListener Releases](https://github.com/Axepuff/finelistener/releases). This guide covers **1.6.0-beta.1**.
 
 ## Choose a download
 
 | Computer | Recommended download |
 | --- | --- |
-| Windows x64, no compatible GPU or unsure | `FineListener-1.5.0-beta.1-win-x64-cpu-setup.exe` |
-| Windows x64 with a compatible GPU and current graphics drivers | `FineListener-1.5.0-beta.1-win-x64-gpu-setup.exe` |
-| Mac with Apple Silicon (M1 or later) | `FineListener-1.5.0-beta.1-mac-arm64.dmg` |
+| Windows x64, no compatible GPU or unsure | `FineListener-1.6.0-beta.1-win-x64-cpu-setup.exe` |
+| Windows x64 with a compatible GPU and current graphics drivers | `FineListener-1.6.0-beta.1-win-x64-gpu-setup.exe` |
+| Mac with Apple Silicon (M1 or later) | `FineListener-1.6.0-beta.1-mac-arm64.dmg` |
 
 Windows requires Windows 10 version 1903 or later. The Mac beta targets macOS 15 or later on Apple Silicon; no Intel Mac, Windows ARM or Linux build is provided. ZIP archives are also available for manual extraction.
 
@@ -44,6 +44,14 @@ The first speaker analysis downloads a verified Nemotron component from the same
 
 On Apple Silicon, the first GPU capability check can take about a minute while Metal shaders are compiled. If GPU analysis fails, select **CPU** in **Speaker analysis device** and retry; saved transcription remains available.
 
+## First summary
+
+After completing a transcription, open **Summary**. Choose **Download model** to install Qwen3-4B-Instruct-2507 Q4_K_M separately (about 2.50 GB of download and storage). This model is not bundled with the installer; once downloaded, it can be reused offline.
+
+Edit **Prompt** to describe what to include, then choose **Generate summary**. The **Brief overview** and **Detailed notes** are generated on your computer and saved with the session for later viewing. If brief generation fails after detailed notes are complete, keep the same prompt and choose **Generate brief summary** to retry.
+
+Summaries can omit details or contain incorrect claims. Review important results against the saved transcript and recording.
+
 ## Verify a download
 
 Compare the result with the matching filename in `SHA256SUMS.txt` from the release.
@@ -51,13 +59,13 @@ Compare the result with the matching filename in `SHA256SUMS.txt` from the relea
 Windows PowerShell:
 
 ```powershell
-Get-FileHash .\FineListener-1.5.0-beta.1-win-x64-cpu-setup.exe -Algorithm SHA256
+Get-FileHash .\FineListener-1.6.0-beta.1-win-x64-cpu-setup.exe -Algorithm SHA256
 ```
 
 macOS Terminal:
 
 ```bash
-shasum -a 256 ~/Downloads/FineListener-1.5.0-beta.1-mac-arm64.dmg
+shasum -a 256 ~/Downloads/FineListener-1.6.0-beta.1-mac-arm64.dmg
 ```
 
 ## Updates and feedback
