@@ -121,13 +121,13 @@ export const TranscribedText: React.FC = observer(() => {
                             variant="light"
                             onClick={handlePick}
                         >
-                            <IconPlus size={30} color="var(--mantine-color-gray-5)" />
+                            <IconPlus size={30} color="var(--brand-color-text-tertiary)" />
                         </ActionIcon>
 
-                        <Text size="md" fw={600} c="gray.6" ta="center">
+                        <Text size="md" fw={600} c="var(--brand-color-text)" ta="center">
                             {'No transcription available yet'}
                         </Text>
-                        <Text size="sm" c="gray.5" ta="center">
+                        <Text size="sm" c="var(--brand-color-text-secondary)" ta="center">
                             {'Upload a file and click "Transcribe" to see the result here.'}
                         </Text>
                     </Stack>

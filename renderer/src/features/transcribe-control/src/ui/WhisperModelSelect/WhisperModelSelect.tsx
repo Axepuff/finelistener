@@ -99,10 +99,10 @@ export const WhisperModelSelect: React.FC<Props> = observer(({
         }
 
         if (modelInfo?.isDownloaded) {
-            return <IconCircleCheck color="var(--mantine-color-green-6)" size={14} />;
+            return <IconCircleCheck color="var(--brand-color-success)" size={14} />;
         }
 
-        return <IconCloudDownload color="var(--mantine-color-gray-6)" size={14} />;
+        return <IconCloudDownload color="var(--brand-color-text-secondary)" size={14} />;
     };
 
     return (

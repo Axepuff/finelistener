@@ -36,7 +36,7 @@ export const FileSelect: FC = observer(() => {
         <Paper
             style={{
                 padding: 16,
-                borderColor: 'var(--mantine-color-gray-4)',
+                borderColor: 'var(--brand-color-border)',
             }}
         >
             <Stack gap={12}>

@@ -216,12 +216,12 @@ button.readingWord:focus-visible {
 }
 
 .saveButton {
-    background-color: #0f172a;
-    color: #ffffff;
+    background-color: var(--brand-color-primary);
+    color: var(--brand-color-bg-container);
 }
 
 .saveButton:hover {
-    background-color: #111f3b;
+    background-color: var(--brand-color-primary-hover);
 }
 
 @media (max-width: 900px) {
