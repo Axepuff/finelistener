@@ -22,6 +22,7 @@ const VARIANT_CONFIG = {
             buildAssetsDir('mac-arm64', 'whisper'),
             path.resolve(__dirname, 'build-assets/models'),
             buildAssetsDir('mac-arm64', 'nemotron'),
+            buildAssetsDir('mac-arm64', 'summary'),
         ],
         asarUnpack: [
             '**/node_modules/ffmpeg-static/**',
@@ -46,6 +47,7 @@ const VARIANT_CONFIG = {
             path.resolve(__dirname, 'build-assets/models'),
             buildAssetsDir('win-x64-gpu', 'miniaudio-loopback'),
             buildAssetsDir('win-x64-gpu', 'nemotron'),
+            buildAssetsDir('win-x64-gpu', 'summary'),
         ],
         asarUnpack: [
             '**/node_modules/ffmpeg-static/**',
@@ -70,6 +72,7 @@ const VARIANT_CONFIG = {
             path.resolve(__dirname, 'build-assets/models'),
             buildAssetsDir('win-x64-cpu', 'miniaudio-loopback'),
             buildAssetsDir('win-x64-cpu', 'nemotron'),
+            buildAssetsDir('win-x64-cpu', 'summary'),
         ],
         asarUnpack: [
             '**/node_modules/ffmpeg-static/**',
@@ -92,6 +95,10 @@ const VARIANT_CONFIG = {
 
 // Fall back to original dev-friendly config when no BUILD_VARIANT is set
 const variantCfg = VARIANT_CONFIG[BUILD_VARIANT] || null;
+const devSummaryVariants = process.platform === 'win32' && process.arch === 'x64'
+    ? ['win-x64-gpu', 'win-x64-cpu']
+    : process.platform === 'darwin' && process.arch === 'arm64' ? ['mac-arm64'] : [];
+const preparedSummary = devSummaryVariants.map((variant) => buildAssetsDir(variant, 'summary')).find(fs.existsSync);
 
 const extraResource = variantCfg
     ? variantCfg.extraResource
@@ -99,6 +106,7 @@ const extraResource = variantCfg
         path.resolve(__dirname, 'whisper.cpp'),
         path.resolve(__dirname, 'miniaudio-loopback'),
         path.resolve(__dirname, 'models'),
+        ...(preparedSummary ? [preparedSummary] : []),
     ];
 
 const asarUnpackPatterns = variantCfg
@@ -244,7 +252,8 @@ module.exports = {
             NSAudioCaptureUsageDescription: 'This app records system audio for transcription.',
         },
         extraResource,
-        ignore: [...packagerIgnore, /[\\/]\.artifact-work(?:[\\/]|$)/, /[\\/]build-assets(?:[\\/]|$)/, /[\\/]outputs(?:[\\/]|$)/,
+        ignore: [...packagerIgnore, /^[\\/](?:\.artifact-work|\.worktrees|\.debug|\.codex|storybook-static|debug-storybook\.log)(?:[\\/]|$)/,
+            /[\\/]build-assets(?:[\\/]|$)/, /[\\/]outputs(?:[\\/]|$)/,
             // SDK actions download build tools into the checkout; they are not application resources.
             /[\\/]VULKAN_SDK(?:[\\/]|$)/, /[\\/]vulkan_sdk\.exe$/, /[\\/]cuda_installer-[^\\/]+(?:[\\/]|$)/],
     },

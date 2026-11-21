@@ -2,6 +2,8 @@ import type { RecordingLevel, RecordingProgress, RecordingState } from 'electron
 import type { FinalizeRecordingResult } from 'electron/src/types/recordingArchive';
 import type { TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
 import type { SpeakerAnalysisProgressEvent } from 'electron/src/types/transcription';
+import type { SummaryProgressEvent } from 'electron/src/types/sessions';
+import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
 import { UI_PREFERENCE_DEFAULTS, type UiPreferenceKey, type UiPreferenceValueMap } from '../../../../electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress } from 'electron/src/types/whisper';
 import type { RendererAdapter } from '../rendererAdapter';
@@ -17,6 +19,8 @@ interface AdapterListeners {
     recordingError: Set<(payload: { message: string }) => void>;
     modelDownloadProgress: Set<(payload: WhisperModelDownloadProgress) => void>;
     speakerAnalysisProgress: Set<(event: SpeakerAnalysisProgressEvent) => void>;
+    summaryProgress: Set<(event: SummaryProgressEvent) => void>;
+    summaryModel: Set<(event: SummaryModelStatus) => void>;
 }
 
 export interface FakeRendererAdapterController {
@@ -50,6 +54,8 @@ export const createFakeRendererAdapter = (
         recordingError: new Set(),
         modelDownloadProgress: new Set(),
         speakerAnalysisProgress: new Set(),
+        summaryProgress: new Set(),
+        summaryModel: new Set(),
     };
     const unavailable = (): Promise<never> => Promise.reject(
         new Error('Not configured in fake renderer adapter'),
@@ -63,6 +69,11 @@ export const createFakeRendererAdapter = (
         importAudio: () => Promise.resolve(null),
         optimizeAudio: unavailable,
         setTranscriptDuplicateFilter: unavailable,
+        generateSummary: unavailable,
+        getSummaryModelStatus: () => Promise.resolve({ state: 'missing', model: 'Qwen3-4B', totalBytes: 2497281120, downloadedBytes: 0 }),
+        downloadSummaryModel: unavailable,
+        onSummaryModelChanged: (callback) => subscribe(listeners.summaryModel, callback),
+        stopSummary: () => Promise.resolve(false),
         analyzeSpeakers: unavailable,
         stopSpeakerAnalysis: () => Promise.resolve(false),
         getSpeakerAssets: () => Promise.resolve({ ready: false, gpuBackend: null }),
@@ -101,6 +112,7 @@ export const createFakeRendererAdapter = (
         onTranscribeProgress: (callback) => subscribe(listeners.transcribeProgress, callback),
         onTranscribeLog: (callback) => subscribe(listeners.transcribeLog, callback),
         onSpeakerAnalysisProgress: (callback) => subscribe(listeners.speakerAnalysisProgress, callback),
+        onSummaryProgress: (callback) => subscribe(listeners.summaryProgress, callback),
         onRecordingState: (callback) => subscribe(listeners.recordingState, callback),
         onRecordingProgress: (callback) => subscribe(listeners.recordingProgress, callback),
         onRecordingLevel: (callback) => subscribe(listeners.recordingLevel, callback),
@@ -122,7 +134,8 @@ export const createFakeRendererAdapter = (
                 listeners.recordingFinished.size +
                 listeners.recordingError.size +
                 listeners.modelDownloadProgress.size +
-                listeners.speakerAnalysisProgress.size;
+                listeners.speakerAnalysisProgress.size +
+                listeners.summaryProgress.size + listeners.summaryModel.size;
         },
         emitTranscribeText: (chunk) => listeners.transcribeText.forEach((callback) => callback(chunk)),
         emitTranscribeProgress: (value) => listeners.transcribeProgress.forEach((callback) => callback(value)),

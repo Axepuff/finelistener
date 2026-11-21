@@ -7,6 +7,7 @@ import { formatTranscriptPrefix, formatTranscriptRegionLabel, projectTranscript,
 import { projectSpeakerReading } from 'renderer/src/stores/speakerReading';
 import { speakerLabelsFor, speakerReadingToHtml } from 'renderer/src/stores/speakerReadingFormat';
 import { useAppStore } from '../../../../../AppContext';
+import { RecordingSummary } from './RecordingSummary';
 import { TranscribedTextContent } from './TranscribedTextContent';
 import { TranscribedTextControls } from './TranscribedTextControls';
 import { SpeakerAnalysisStatus, SpeakerControls } from './SpeakerControls';
@@ -16,9 +17,10 @@ import { parseTimeToSeconds } from './utils';
 export const TranscribedText: React.FC = observer(() => {
     const store = useAppStore();
     const { transcription } = store;
-    const [view, setView] = useState<TranscriptView>('plain');
+    const [view, setView] = useState<TranscriptView | 'summary'>('plain');
     const [speakerLayout, setSpeakerLayout] = useState<'reading' | 'turns'>('reading');
-    const showRegions = view !== 'plain';
+    const transcriptView = view === 'summary' ? 'plain' : view;
+    const showRegions = transcriptView !== 'plain';
     const showSpeakers = view === 'speakers';
     const showReading = showSpeakers && speakerLayout === 'reading';
     const [searchQuery, setSearchQuery] = useState('');
@@ -33,9 +35,9 @@ export const TranscribedText: React.FC = observer(() => {
         span: SessionSpeakerAssignment;
     } | null>(null);
     const needsSpeakerAnalysis = showSpeakers && transcription.visibleTranscript?.speakers?.status !== 'completed';
-    const displayedTranscript = needsSpeakerAnalysis ? null : transcription.visibleTranscript;
+    const displayedTranscript = needsSpeakerAnalysis || view === 'summary' ? null : transcription.visibleTranscript;
     const reading = useMemo(() => showReading ? projectSpeakerReading(displayedTranscript) : undefined, [showReading, displayedTranscript]);
-    const currentTextValue = reading ? reading.map((paragraph) => paragraph.text.trim()).join('\n\n') : transcriptToText(displayedTranscript, view);
+    const currentTextValue = reading ? reading.map((paragraph) => paragraph.text.trim()).join('\n\n') : transcriptToText(displayedTranscript, transcriptView);
     const isInitialEmptyState = (
         store.lifecycleState === 'initial'
         || store.lifecycleState === 'importing'
@@ -43,7 +45,7 @@ export const TranscribedText: React.FC = observer(() => {
     const isReadyEmptyState = store.transcriptionWorkflow.state === 'loaded';
     const audioTitle = store.workspace.activeSession?.title;
     const speakerLabels = useMemo(() => speakerLabelsFor(displayedTranscript), [displayedTranscript]);
-    const plainSegments = (reading ? [] : projectTranscript(displayedTranscript, view)).map((segment, index) => ({
+    const plainSegments = (reading ? [] : projectTranscript(displayedTranscript, transcriptView)).map((segment, index) => ({
         id: segment.members.map((member) => member.segment.rawSpan ? `${member.segment.rawSpan.segmentId}:${member.segment.rawSpan?.startChar}:${member.segment.rawSpan?.endChar}` : `legacy-${index}`).join('|'),
         text: segment.text,
         prefix: showRegions ? formatTranscriptPrefix(segment, showSpeakers ? displayedTranscript : null) : '',
@@ -134,7 +136,7 @@ export const TranscribedText: React.FC = observer(() => {
                 <>
                     <TranscribedTextControls
                         currentTextValue={currentTextValue}
-                        getClipboardHtml={() => reading ? speakerReadingToHtml(reading, speakerLabels) : transcriptToHtml(displayedTranscript, view)}
+                        getClipboardHtml={() => reading ? speakerReadingToHtml(reading, speakerLabels) : transcriptToHtml(displayedTranscript, transcriptView)}
                         view={view}
                         onViewChange={(value) => { setView(value); setSelectedSpan(null); }}
                         searchQuery={searchQuery}
@@ -145,127 +147,131 @@ export const TranscribedText: React.FC = observer(() => {
                         onNextMatch={() => moveToMatch(1)}
                         speakerControls={showSpeakers ? <SpeakerControls key={store.workspace.activeSessionId ?? ''} selectedSpan={currentSelectedSpan} onCloseSpan={() => setSelectedSpan(null)} /> : undefined}
                     />
-                    {showSpeakers && !needsSpeakerAnalysis ? (
-                        <SegmentedControl
-                            aria-label="Speaker view"
-                            size="xs"
-                            style={{ alignSelf: 'flex-start' }}
-                            data={[{ value: 'reading', label: 'Reading' }, { value: 'turns', label: 'Turns' }]}
-                            value={speakerLayout}
-                            onChange={(value) => {
-                                if (value === 'reading' || value === 'turns') {
-                                    setSpeakerLayout(value);
-                                    setSelectedSpan(null);
-                                    setSelectedMatchIndex(0);
-                                }
-                            }}
-                        />
-                    ) : null}
-                    <SpeakerAnalysisStatus />
+                    {view === 'summary' ? <RecordingSummary key={store.workspace.activeSessionId} /> : (
+                        <>
+                            {showSpeakers && !needsSpeakerAnalysis ? (
+                                <SegmentedControl
+                                    aria-label="Speaker view"
+                                    size="xs"
+                                    style={{ alignSelf: 'flex-start' }}
+                                    data={[{ value: 'reading', label: 'Reading' }, { value: 'turns', label: 'Turns' }]}
+                                    value={speakerLayout}
+                                    onChange={(value) => {
+                                        if (value === 'reading' || value === 'turns') {
+                                            setSpeakerLayout(value);
+                                            setSelectedSpan(null);
+                                            setSelectedMatchIndex(0);
+                                        }
+                                    }}
+                                />
+                            ) : null}
+                            <SpeakerAnalysisStatus />
 
-                    {store.lifecycleState === 'transcribing' ? (
-                        <Group gap={8} align="center" wrap="nowrap" style={{ width: '100%' }}>
-                            <Progress value={transcription.progress} size={4} style={{ flexGrow: 1 }} />
-                            <Text size="sm" style={{ minWidth: 48, textAlign: 'right' }}>
-                                {`${transcription.progress.toFixed(0)}%`}
-                            </Text>
-                        </Group>
-                    ) : null}
+                            {store.lifecycleState === 'transcribing' ? (
+                                <Group gap={8} align="center" wrap="nowrap" style={{ width: '100%' }}>
+                                    <Progress value={transcription.progress} size={4} style={{ flexGrow: 1 }} />
+                                    <Text size="sm" style={{ minWidth: 48, textAlign: 'right' }}>
+                                        {`${transcription.progress.toFixed(0)}%`}
+                                    </Text>
+                                </Group>
+                            ) : null}
 
-                    {transcription.isIncomplete ? (
-                        <Alert color={transcription.allSourcesFailed ? 'red' : 'yellow'} title={transcription.allSourcesFailed ? 'Transcription failed' : 'Incomplete transcription'}>
-                            <Stack gap={8}>
-                                <Text size="sm">{transcription.hasCompletedSources ?
-                                    'Completed sources are saved. Retry to transcribe the remaining sources using the original settings.' :
-                                    'No source was transcribed. Retry using the original settings.'}</Text>
-                                <Button size="compact-sm" variant="light" disabled={store.operations.isBusy} onClick={() => {
-                                    if (transcription.savedTranscript?.speakers) setConfirmRetrySpeakers({
+                            {transcription.isIncomplete ? (
+                                <Alert color={transcription.allSourcesFailed ? 'red' : 'yellow'} title={transcription.allSourcesFailed ? 'Transcription failed' : 'Incomplete transcription'}>
+                                    <Stack gap={8}>
+                                        <Text size="sm">{transcription.hasCompletedSources ?
+                                            'Completed sources are saved. Retry to transcribe the remaining sources using the original settings.' :
+                                            'No source was transcribed. Retry using the original settings.'}</Text>
+                                        <Button size="compact-sm" variant="light" disabled={store.operations.isBusy} onClick={() => {
+                                            if (transcription.savedTranscript?.speakers) setConfirmRetrySpeakers({
+                                                sessionId: store.workspace.activeSessionId,
+                                                speakers: transcription.savedTranscript.speakers,
+                                            });
+                                            else void handleRetry();
+                                        }}>
+                                            {'Retry remaining sources'}
+                                        </Button>
+                                    </Stack>
+                                </Alert>
+                            ) : null}
+                            {transcription.runOutcome === 'error' && !transcription.isIncomplete ? (
+                                <Alert color="red" title="Transcription failed">
+                                    {transcription.runErrorMessage}
+                                </Alert>
+                            ) : null}
+                            <Modal opened={confirmRetrySpeakers !== null} onClose={() => setConfirmRetrySpeakers(null)} title="Replace speaker labels?" centered={true}>
+                                <Stack gap="sm">
+                                    <Text size="sm">A successful retry may replace speaker names, assignments, and merges in this session.</Text>
+                                    <Group justify="flex-end">
+                                        <Button variant="default" onClick={() => setConfirmRetrySpeakers(null)}>Cancel</Button>
+                                        <Button color="red" disabled={store.operations.isBusy} onClick={() => {
+                                            const isCurrent = confirmRetrySpeakers?.sessionId === store.workspace.activeSessionId
+                                                && confirmRetrySpeakers.speakers === transcription.savedTranscript?.speakers;
+                                            setConfirmRetrySpeakers(null);
+                                            if (isCurrent) void handleRetry(true);
+                                            else store.activityLog.appendEvent('Speaker labels changed. Review the transcript before retrying.');
+                                        }}>Retry and replace</Button>
+                                    </Group>
+                                </Stack>
+                            </Modal>
+                            {transcription.duplicateFilterFailed ? (
+                                <Alert color="yellow" title="Duplicate filtering unavailable">
+                                    {'The unfiltered transcript is shown. Try the filter again.'}
+                                </Alert>
+                            ) : null}
+                            {store.workspace.activeSession?.tracks?.some((track) => track.failure) ? (
+                                <Alert color="yellow" title="Recording interrupted">
+                                    {'A recording source stopped early. Only the captured audio is available.'}
+                                </Alert>
+                            ) : null}
+                            {isReadyEmptyState ? (
+                                <Paper
+                                    role="status"
+                                    style={{
+                                        width: '100%',
+                                        minHeight: 0,
+                                        flex: 1,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                    }}
+                                >
+                                    <Stack gap={12} align="center" style={{ maxWidth: 360, padding: 16, textAlign: 'center' }}>
+                                        <ThemeIcon size={64} variant="light" color="red">
+                                            <IconHeadphones size={30} />
+                                        </ThemeIcon>
+                                        <Text size="lg" fw={600}>
+                                            {'Audio is ready to transcribe'}
+                                        </Text>
+                                        <Text size="sm" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
+                                            {audioTitle ?
+                                                `Click "Transcribe" to see the text for ${audioTitle} here.` :
+                                                'Click "Transcribe" to see the text here.'}
+                                        </Text>
+                                    </Stack>
+                                </Paper>
+                            ) : needsSpeakerAnalysis ? (
+                                <Text size="sm" c="dimmed">
+                                    {'The transcript will appear here after speaker analysis.'}
+                                </Text>
+                            ) : (
+                                <TranscribedTextContent
+                                    reading={reading ? { paragraphs: reading, labels: speakerLabels } : undefined}
+                                    showRegions={showRegions}
+                                    plainSegments={plainSegments}
+                                    matches={matches}
+                                    activeMatchIndex={activeMatchIndex}
+                                    searchQuery={searchQuery}
+                                    transcriptText={currentTextValue}
+                                    onRegionClick={handleRegionClick}
+                                    onEditSpeaker={showSpeakers && transcription.savedTranscript?.speakers ? (span) => setSelectedSpan({
                                         sessionId: store.workspace.activeSessionId,
-                                        speakers: transcription.savedTranscript.speakers,
-                                    });
-                                    else void handleRetry();
-                                }}>
-                                    {'Retry remaining sources'}
-                                </Button>
-                            </Stack>
-                        </Alert>
-                    ) : null}
-                    {transcription.runOutcome === 'error' && !transcription.isIncomplete ? (
-                        <Alert color="red" title="Transcription failed">
-                            {transcription.runErrorMessage}
-                        </Alert>
-                    ) : null}
-                    <Modal opened={confirmRetrySpeakers !== null} onClose={() => setConfirmRetrySpeakers(null)} title="Replace speaker labels?" centered={true}>
-                        <Stack gap="sm">
-                            <Text size="sm">A successful retry may replace speaker names, assignments, and merges in this session.</Text>
-                            <Group justify="flex-end">
-                                <Button variant="default" onClick={() => setConfirmRetrySpeakers(null)}>Cancel</Button>
-                                <Button color="red" disabled={store.operations.isBusy} onClick={() => {
-                                    const isCurrent = confirmRetrySpeakers?.sessionId === store.workspace.activeSessionId
-                                        && confirmRetrySpeakers.speakers === transcription.savedTranscript?.speakers;
-                                    setConfirmRetrySpeakers(null);
-                                    if (isCurrent) void handleRetry(true);
-                                    else store.activityLog.appendEvent('Speaker labels changed. Review the transcript before retrying.');
-                                }}>Retry and replace</Button>
-                            </Group>
-                        </Stack>
-                    </Modal>
-                    {transcription.duplicateFilterFailed ? (
-                        <Alert color="yellow" title="Duplicate filtering unavailable">
-                            {'The unfiltered transcript is shown. Try the filter again.'}
-                        </Alert>
-                    ) : null}
-                    {store.workspace.activeSession?.tracks?.some((track) => track.failure) ? (
-                        <Alert color="yellow" title="Recording interrupted">
-                            {'A recording source stopped early. Only the captured audio is available.'}
-                        </Alert>
-                    ) : null}
-                    {isReadyEmptyState ? (
-                        <Paper
-                            role="status"
-                            style={{
-                                width: '100%',
-                                minHeight: 0,
-                                flex: 1,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                            }}
-                        >
-                            <Stack gap={12} align="center" style={{ maxWidth: 360, padding: 16, textAlign: 'center' }}>
-                                <ThemeIcon size={64} variant="light" color="red">
-                                    <IconHeadphones size={30} />
-                                </ThemeIcon>
-                                <Text size="lg" fw={600}>
-                                    {'Audio is ready to transcribe'}
-                                </Text>
-                                <Text size="sm" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
-                                    {audioTitle ?
-                                        `Click "Transcribe" to see the text for ${audioTitle} here.` :
-                                        'Click "Transcribe" to see the text here.'}
-                                </Text>
-                            </Stack>
-                        </Paper>
-                    ) : needsSpeakerAnalysis ? (
-                        <Text size="sm" c="dimmed">
-                            {'The transcript will appear here after speaker analysis.'}
-                        </Text>
-                    ) : (
-                        <TranscribedTextContent
-                            reading={reading ? { paragraphs: reading, labels: speakerLabels } : undefined}
-                            showRegions={showRegions}
-                            plainSegments={plainSegments}
-                            matches={matches}
-                            activeMatchIndex={activeMatchIndex}
-                            searchQuery={searchQuery}
-                            transcriptText={currentTextValue}
-                            onRegionClick={handleRegionClick}
-                            onEditSpeaker={showSpeakers && transcription.savedTranscript?.speakers ? (span) => setSelectedSpan({
-                                sessionId: store.workspace.activeSessionId,
-                                generation: transcription.savedTranscript?.speakers?.generation,
-                                span,
-                            }) : undefined}
-                        />
+                                        generation: transcription.savedTranscript?.speakers?.generation,
+                                        span,
+                                    }) : undefined}
+                                />
+                            )}
+                        </>
                     )}
                 </>
             )}

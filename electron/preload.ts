@@ -3,7 +3,9 @@ import type { RecordingStartOptions } from './src/services/RecordingService';
 import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResult } from './src/types/recordingArchive';
 import type { TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from './src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from './src/types/uiPreferences';
-import type { SessionRawSpan, SessionSpeakerAssignment } from './src/types/sessions';
+import type { SessionRawSpan, SessionSpeakerAssignment, SummaryGenerationResult, SummaryProgressEvent } from './src/types/sessions';
+import type { RecordingSummaryOptions } from './src/types/summaryOptions';
+import type { SummaryModelStatus } from './src/types/summaryModel';
 import type { AnalyzeSpeakersOptions, SpeakerAnalysisProgressEvent } from './src/types/transcription';
 
 type WhisperModelDownloadProgressPayload = {
@@ -29,6 +31,9 @@ contextBridge.exposeInMainWorld('api', {
         analyzeSpeakers: (sessionId: string, options: AnalyzeSpeakersOptions) =>
             ipcRenderer.invoke('sessions:analyze-speakers', sessionId, options),
         stopSpeakerAnalysis: () => ipcRenderer.invoke('sessions:stop-speaker-analysis'),
+        generateSummary: (sessionId: string, options?: RecordingSummaryOptions): Promise<SummaryGenerationResult> =>
+            ipcRenderer.invoke('sessions:generate-summary', sessionId, options),
+        stopSummary: (): Promise<boolean> => ipcRenderer.invoke('sessions:stop-summary'),
         getSpeakerAssets: () => ipcRenderer.invoke('sessions:get-speaker-assets'),
         prepareSpeakerAssets: () => ipcRenderer.invoke('sessions:prepare-speaker-assets'),
         renameSpeaker: (sessionId: string, speakerId: string, name: string) =>
@@ -40,6 +45,13 @@ contextBridge.exposeInMainWorld('api', {
         revealFolder: (sessionId: string) => ipcRenderer.invoke('sessions:reveal-folder', sessionId),
     },
     saveText: (content: string) => ipcRenderer.invoke('saveText', content),
+    getSummaryModelStatus: (): Promise<SummaryModelStatus> => ipcRenderer.invoke('summary-model:status'),
+    downloadSummaryModel: (): Promise<SummaryModelStatus> => ipcRenderer.invoke('summary-model:download'),
+    onSummaryModelChanged: (cb: (status: SummaryModelStatus) => void) => {
+        const handler = (_e: unknown, status: SummaryModelStatus) => cb(status);
+        ipcRenderer.on('summary-model:changed', handler);
+        return () => ipcRenderer.removeListener('summary-model:changed', handler);
+    },
     startSystemRecording: (options?: RecordingStartOptions): Promise<StartRecordingResult> => ipcRenderer.invoke('recording:start', options),
     stopSystemRecording: (): Promise<FinalizeRecordingResult> => ipcRenderer.invoke('recording:stop'),
     listRecoverableRecordings: (): Promise<RecoverableRecording[]> => ipcRenderer.invoke('recording:list-recoverable'),
@@ -92,6 +104,11 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.on('sessions:speaker-analysis-progress', handler);
 
         return () => ipcRenderer.removeListener('sessions:speaker-analysis-progress', handler);
+    },
+    onSummaryProgress: (cb: (event: SummaryProgressEvent) => void) => {
+        const handler = (_e: unknown, event: SummaryProgressEvent) => cb(event);
+        ipcRenderer.on('sessions:summary-progress', handler);
+        return () => ipcRenderer.removeListener('sessions:summary-progress', handler);
     },
     onRecordingState: (cb: (state: string) => void) => {
         const handler = (_e: unknown, state: string) => cb(state);

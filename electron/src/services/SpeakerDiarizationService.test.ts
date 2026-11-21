@@ -75,7 +75,7 @@ it('waits for process close after cancellation', async () => {
         }
         expect(pid).toBeDefined();
         controller.abort();
-        await expect(running).rejects.toThrow('Speaker analysis cancelled');
+        await expect(running).rejects.toMatchObject({ name: 'AbortError' });
         expect(() => process.kill(pid!, 0)).toThrow();
     } finally {
         controller.abort();

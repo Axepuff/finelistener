@@ -14,6 +14,7 @@ miniaudio-loopback/*.sln
 miniaudio-loopback/*.vcxproj*
 CONTEXT.md
 docs/*
+!docs/recording-summary-prompts.md
 !docs/adr/
 docs/adr/*
 !docs/adr/0005-add-session-scoped-speaker-diarization.md
@@ -29,6 +30,8 @@ docs/testing/*
 !docs/testing/diarization-timestamps.md
 !docs/testing/community-1-acceptance.md
 !docs/testing/nemotron-acceptance.md
+!docs/testing/recording-summary-acceptance.md
+!docs/testing/recording-summary-warehouse-ru.txt
 outputs/
 .artifact-work/
 

@@ -6,6 +6,7 @@ import type {
     SessionDetails,
     SessionFileV1,
     SessionListItem,
+    SessionSummary,
     SessionTranscriptV1,
     SessionTranscriptionInfo,
     SessionSourceTrack,
@@ -13,7 +14,7 @@ import type {
 import { AudioPreprocessor } from './AudioPreprocessor';
 import type { RecordingResult } from './RecordingService';
 import { deriveSourceTranscript } from './transcriptDuplicateFilter';
-import { deriveSpeakerTranscript, materializeRecognitionTranscript } from './sessionTranscript';
+import { deriveSpeakerTranscript, getSummaryInput, materializeRecognitionTranscript } from './sessionTranscript';
 
 const SESSION_FILE_NAME = 'session.json';
 const SESSION_VERSION = 1 as const;
@@ -166,7 +167,7 @@ export class SessionsService {
     public async deleteSession(sessionId: string): Promise<void> {
         const sessionDir = this.resolveSessionDir(sessionId);
 
-        await fs.rm(sessionDir, { recursive: true, force: true });
+        await this.withTranscriptWrite(sessionId, () => fs.rm(sessionDir, { recursive: true, force: true }));
     }
 
     public async listSessions(): Promise<SessionListItem[]> {
@@ -521,6 +522,29 @@ export class SessionsService {
         await this.withTranscriptWrite(sessionId, () => this.writeTranscript(sessionId, transcript, transcription));
     }
 
+    public async readSummaryInput(sessionId: string) {
+        const { transcript, session } = await this.readStoredTranscript(sessionId);
+        const input = getSummaryInput(transcript);
+        if (!input) throw new Error('A complete transcript with speech is required.');
+        const saved = transcript.summary?.inputHash === input.inputHash ? transcript.summary : undefined;
+        const setting = transcript.sourceRun?.settings.language ?? session.transcription?.language;
+        const languageHint = typeof setting === 'string' ? setting.trim() : '';
+        return { ...input, saved, ...(languageHint && languageHint.toLowerCase() !== 'auto' ? { languageHint } : {}) };
+    }
+
+    public async saveSummary(sessionId: string, summary: SessionSummary, signal: AbortSignal): Promise<SessionSummary> {
+        return this.withTranscriptWrite(sessionId, async () => {
+            signal.throwIfAborted();
+            const { transcript, transcriptPath } = await this.readStoredTranscript(sessionId);
+            if (getSummaryInput(transcript)?.inputHash !== summary.inputHash) {
+                throw new Error('The transcript changed during summarization.');
+            }
+            // This rename commits the summary. Cancellation after it must return the saved result.
+            await writeJsonFile(transcriptPath, { ...transcript, summary }, signal);
+            return summary;
+        });
+    }
+
     public async replaceTranscriptIfCurrent(
         sessionId: string,
         expectedFingerprint: string,
@@ -530,7 +554,7 @@ export class SessionsService {
     ): Promise<boolean> {
         return this.withTranscriptWrite(sessionId, async () => {
             signal?.throwIfAborted();
-            const current = await this.readTranscriptForUpdate(sessionId);
+            const { transcript: current } = await this.readStoredTranscript(sessionId);
             if (this.recognitionFingerprint(current) !== expectedFingerprint) return false;
             if (expectedActiveGeneration !== undefined && this.activeSessionGeneration !== expectedActiveGeneration) return false;
             if (this.activeSessionId !== null && this.activeSessionId !== sessionId) return false;
@@ -546,19 +570,22 @@ export class SessionsService {
         update: (transcript: SessionTranscriptV1) => SessionTranscriptV1,
     ): Promise<SessionDetails> {
         await this.withTranscriptWrite(sessionId, async () => {
-            const current = await this.readTranscriptForUpdate(sessionId);
+            const { transcript: current } = await this.readStoredTranscript(sessionId);
             await this.writeTranscript(sessionId, update(current));
         });
         return this.getSession(sessionId);
     }
 
-    private async readTranscriptForUpdate(sessionId: string): Promise<SessionTranscriptV1> {
+    private async readStoredTranscript(sessionId: string): Promise<{
+        session: SessionFileV1; transcript: SessionTranscriptV1; transcriptPath: string;
+    }> {
         const sessionDir = this.resolveSessionDir(sessionId);
         const session = await readJsonFile<SessionFileV1>(path.join(sessionDir, SESSION_FILE_NAME));
         if (!session?.transcript?.path) throw new Error('Session has no transcript');
-        const transcript = await readJsonFile<SessionTranscriptV1>(path.join(sessionDir, session.transcript.path));
+        const transcriptPath = await this.resolveOwnedFile(sessionDir, session.transcript.path);
+        const transcript = await readJsonFile<SessionTranscriptV1>(transcriptPath);
         if (transcript?.version !== 1) throw new Error('Invalid session transcript');
-        return transcript;
+        return { session, transcript, transcriptPath };
     }
 
     private async writeTranscript(
@@ -584,7 +611,8 @@ export class SessionsService {
 
         const transcriptPath = path.join(sessionDir, TRANSCRIPT_FILE_RELATIVE_PATH);
 
-        await writeJsonFile(transcriptPath, transcript, signal);
+        const summaryIsStale = transcript.summary && transcript.summary.inputHash !== getSummaryInput(transcript)?.inputHash;
+        await writeJsonFile(transcriptPath, summaryIsStale ? { ...transcript, summary: undefined } : transcript, signal);
         await writeJsonFile(sessionFilePath, session);
     }
 

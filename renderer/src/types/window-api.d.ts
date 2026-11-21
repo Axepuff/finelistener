@@ -7,7 +7,9 @@ import type {
 import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResult } from 'electron/src/types/recordingArchive';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
-import type { SessionDetails, SessionListItem, SessionRawSpan, SessionSpeakerAssignment } from 'electron/src/types/sessions';
+import type { SessionDetails, SessionListItem, SessionRawSpan, SessionSpeakerAssignment, SummaryGenerationResult, SummaryProgressEvent } from 'electron/src/types/sessions';
+import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
+import type { RecordingSummaryOptions } from 'electron/src/types/summaryOptions';
 import type { AnalyzeSpeakersOptions, SpeakerAnalysisProgressEvent, SpeakerAssetStatus, TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
@@ -28,6 +30,8 @@ declare global {
                 importAudio: () => Promise<SessionDetails | null>;
                 optimizeAudio: (sessionId: string, mode?: 'original' | 'optimized') => Promise<SessionDetails>;
                 setTranscriptDuplicateFilter: (sessionId: string, enabled: boolean) => Promise<SessionDetails>;
+                generateSummary: (sessionId: string, options?: RecordingSummaryOptions) => Promise<SummaryGenerationResult>;
+                stopSummary: () => Promise<boolean>;
                 analyzeSpeakers: (sessionId: string, options: AnalyzeSpeakersOptions) => Promise<SessionDetails>;
                 stopSpeakerAnalysis: () => Promise<boolean>;
                 getSpeakerAssets: () => Promise<SpeakerAssetStatus>;
@@ -54,6 +58,10 @@ declare global {
             onTranscribeProgressValue: (cb: (event: TranscriptionProgressEvent) => void) => () => void;
             onTranscribeLog: (cb: (line: string) => void) => () => void;
             onSpeakerAnalysisProgress: (cb: (event: SpeakerAnalysisProgressEvent) => void) => () => void;
+            onSummaryProgress: (cb: (event: SummaryProgressEvent) => void) => () => void;
+            getSummaryModelStatus: () => Promise<SummaryModelStatus>;
+            downloadSummaryModel: () => Promise<SummaryModelStatus>;
+            onSummaryModelChanged: (cb: (status: SummaryModelStatus) => void) => () => void;
             onRecordingState: (cb: (state: RecordingState) => void) => () => void;
             onRecordingProgress: (cb: (progress: RecordingProgress) => void) => () => void;
             onRecordingLevel: (cb: (level: RecordingLevel) => void) => () => void;

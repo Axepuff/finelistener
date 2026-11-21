@@ -1,13 +1,30 @@
 import { createHash, randomUUID } from 'crypto';
 import { assignedSpeaker, completeWordTimings, fallbackSpeaker } from '../utils/speakerAssignment';
 import type {
-    SessionSpeakerInterval, SessionSpeakerMetadataV1, SessionTranscriptSegmentV1, SessionTranscriptV1,
+    SessionSpeakerInterval, SessionSpeakerMetadataV1, SessionTranscriptSegmentV1, SessionTranscriptV1, SummarySourceRow,
 } from '../types/sessions';
 import type { StructuredTranscriptionResult } from './whisperServer/utils';
 import { deriveSourceTranscript } from './transcriptDuplicateFilter';
 
 const TRANSCRIPT_LINE_REGEX =
     /^\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s+-->\s+(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)$/;
+
+export const getSummaryInput = (transcript: SessionTranscriptV1): { rows: SummarySourceRow[]; inputHash: string } | null => {
+    if (transcript.sourceRun?.status === 'incomplete') return null;
+
+    // Saved segments already reflect the duplicate filter and speaker corrections.
+    const names = new Map(transcript.speakers?.speakers.map(({ id, name }) => [id, name.trim()]));
+    const rows: SummarySourceRow[] = [];
+    for (const segment of [...transcript.segments].sort((a, b) => a.startSec - b.startSec)) {
+        const fragment = segment.text.trim().replace(/\s+/gu, ' ');
+        if (!fragment) continue;
+        const speaker = names.size ? names.get(segment.speakerId ?? '') || 'Unknown speaker' : undefined;
+        rows.push({ startSec: segment.startSec, endSec: segment.endSec ?? segment.startSec, text: fragment, speaker });
+    }
+    if (!rows.length) return null;
+    const inputHash = createHash('sha256').update(JSON.stringify([transcript.recognitionRevision, rows])).digest('hex');
+    return { rows, inputHash };
+};
 
 const parseTimestampToSeconds = (match: RegExpMatchArray, offset: number): number => {
     const hours = Number(match[offset + 0]);

@@ -8,6 +8,8 @@ import { registerTranscriptionController } from './transcriptionController';
 import { registerUiPreferencesController } from './uiPreferencesController';
 import { registerWhisperModelController } from './whisperModelController';
 import { registerSpeakerController } from './speakerController';
+import { registerSummaryController } from './summaryController';
+import { registerSummaryModelController } from './summaryModelController';
 import { SessionsService } from '../services/SessionsService';
 import { RecordingArchive } from '../services/RecordingArchive';
 import { getUiPreferenceValue } from './uiPreferencesController';
@@ -21,9 +23,14 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     registerFileController(ipcMain, getMainWindow);
     let shuttingDown = false;
     let speakerBusy = () => false;
-    const transcriptionService = registerTranscriptionController(ipcMain, getMainWindow, sessionsService, () => shuttingDown || speakerBusy());
-    const speakerWorkflow = registerSpeakerController(ipcMain, getMainWindow, sessionsService, () => shuttingDown || transcriptionService.isBusy);
+    let summaryBusy = () => false;
+    const transcriptionService = registerTranscriptionController(ipcMain, getMainWindow, sessionsService, () => shuttingDown || speakerBusy() || summaryBusy());
+    const speakerWorkflow = registerSpeakerController(ipcMain, getMainWindow, sessionsService, () => shuttingDown || transcriptionService.isBusy || summaryBusy());
+    const summaryModel = registerSummaryModelController(ipcMain, getMainWindow);
+    const summaryWorkflow = registerSummaryController(ipcMain, getMainWindow, sessionsService,
+        () => shuttingDown || transcriptionService.isBusy || speakerBusy(), (signal) => summaryModel.requireInstalled(signal));
     speakerBusy = () => speakerWorkflow.isBusy;
+    summaryBusy = () => summaryWorkflow.isBusy;
     registerRecordingController(ipcMain, getMainWindow, recordingArchive);
     registerSessionsController(ipcMain, getMainWindow, sessionsService);
     registerDebugController(ipcMain, getMainWindow);
@@ -32,7 +39,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
 
     return async () => {
         shuttingDown = true;
-        const stopped = await Promise.allSettled([speakerWorkflow.stopAndWait(), transcriptionService.stopAndWait()]);
+        const stopped = await Promise.allSettled([speakerWorkflow.stopAndWait(), transcriptionService.stopAndWait(),
+            summaryWorkflow.stopAndWait(), summaryModel.stopAndWait()]);
         const failures = stopped.filter((result) => result.status === 'rejected').map((result): unknown => result.reason);
         if (failures.length > 0) throw new AggregateError(failures, 'Failed to stop speech processing');
     };
