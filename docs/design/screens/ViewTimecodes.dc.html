@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Transcript — Timecodes view</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#136abf}a:hover{color:#228be6}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 780px; height: 760px; display: flex; flex-direction: column; overflow: hidden; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px;">
+  <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 12px 24px; border-bottom: 1px solid var(--brand-color-border-secondary, #f0f0f0);">
+    <div role="group" aria-label="Transcript view" style="display: flex; height: 32px; padding: 2px; box-sizing: border-box; border-radius: 4px; background: var(--brand-color-fill-secondary, #f0f0f0);">
+      <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Text</button>
+      <button type="button" aria-pressed="true" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-weight: 600;">Timecodes</button>
+      <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Speakers</button>
+      <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Summary</button>
+    </div>
+    <div style="flex: 1 1 auto;"></div>
+    <label style="width: 200px; height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959);">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"></circle><path d="M21 21l-6 -6"></path></svg>
+      <input type="search" aria-label="Search transcript" placeholder="Search transcript" style="flex: 1 1 auto; min-width: 0; border: 0; outline: none; background: transparent; font: inherit; color: var(--brand-color-text, #1f1f1f);">
+    </label>
+    <button type="button" aria-label="Copy transcript" style="width: 32px; height: 32px; padding: 0; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959); display: flex; align-items: center; justify-content: center;">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8v-2a2 2 0 0 0 -2 -2h-8a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h2"></path></svg>
+    </button>
+    <button type="button" style="height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f);">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"></path><path d="M7 11l5 5l5 -5"></path><path d="M12 4l0 12"></path></svg>
+      Export
+    </button>
+  </div>
+
+  <div style="flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px 24px 24px;">
+    <div style="max-width: 700px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">
+        <span>Click a line to play from it. Shift-click to select a segment.</span>
+        <div style="flex: 1 1 auto;"></div>
+        <span style="display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: 3px; background: var(--brand-color-info-bg, #f0faff); border: 1px solid var(--brand-color-info-border, #a1ddff); color: var(--brand-color-text, #1f1f1f);">Segment <span style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;">00:38 — 01:04</span> · 4 lines</span>
+      </div>
+      <div role="list" style="display: flex; flex-direction: column;">
+        <sc-for list="{{lines}}" as="l" hint-placeholder-count="12">
+          <div role="listitem" style="{{l.row}}">
+            <span style="width: 12px; flex: 0 0 12px; display: flex; align-items: center; height: 26px; color: var(--brand-color-info, #228be6);">
+              <sc-if value="{{l.now}}" hint-placeholder-val="{{false}}">
+                <svg aria-label="Playing" role="img" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13 -8z"></path></svg>
+              </sc-if>
+            </span>
+            <span style="flex: 0 0 168px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; line-height: 26px; color: var(--brand-color-text-secondary, #595959);">{{l.t}}</span>
+            <span style="flex: 1 1 auto; min-width: 0; font-size: 16px; line-height: 26px;">{{l.text}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":780,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var data = [
+      ['00:00:02 – 00:00:09', 'Let’s start with the recording flow.'],
+      ['00:00:09 – 00:00:14', 'Right now people open the app and don’t know whether to record or import.'],
+      ['00:00:14 – 00:00:21', 'Agreed. The source switch sits above the settings,'],
+      ['00:00:21 – 00:00:27', 'so the first thing you see is a form, not an action.'],
+      ['00:00:27 – 00:00:38', 'What if the window opens on the session list, and recording is one button in the title bar?'],
+      ['00:00:38 – 00:00:45', 'That works. Then the settings panel only matters when you transcribe,', 'seg', true],
+      ['00:00:45 – 00:00:52', 'and the recording itself stays front and center.', 'seg'],
+      ['00:00:52 – 00:00:59', 'We also need to show progress better.', 'seg'],
+      ['00:00:59 – 00:01:04', 'Transcription, speaker analysis and the summary each take a while.', 'seg'],
+      ['00:01:04 – 00:01:12', 'One status line per step: Transcribing 42%, then Identifying speakers.'],
+      ['00:01:12 – 00:01:21', 'The recording list should show it too.'],
+      ['00:01:21 – 00:01:29', 'And keep saying it plainly: everything runs offline, nothing leaves the computer.']
+    ];
+    var base = 'display: flex; align-items: flex-start; gap: 8px; padding: 6px 12px 6px 8px;';
+    var lines = data.map(function (d, i) {
+      var seg = d[2] === 'seg';
+      var prevSeg = i > 0 && data[i - 1][2] === 'seg';
+      var nextSeg = i < data.length - 1 && data[i + 1][2] === 'seg';
+      var row = base;
+      if (seg) {
+        row += ' background: var(--brand-color-info-bg, #f0faff); border-left: 1px solid var(--brand-color-info-border, #a1ddff); border-right: 1px solid var(--brand-color-info-border, #a1ddff);';
+        if (!prevSeg) row += ' border-top: 1px solid var(--brand-color-info-border, #a1ddff); border-radius: 6px 6px 0 0;';
+        if (!nextSeg) row += ' border-bottom: 1px solid var(--brand-color-info-border, #a1ddff); border-radius: 0 0 6px 6px;';
+      } else {
+        row += ' border: 1px solid transparent;';
+      }
+      if (d[3]) row += ' font-weight: 600;';
+      return { t: d[0], text: d[1], row: row, now: !!d[3] };
+    });
+    return { lines: lines };
+  }
+}
+</script>
+</body>
+</html>

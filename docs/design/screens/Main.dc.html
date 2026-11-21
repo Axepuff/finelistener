@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FineListener — open session</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#f5f5f5}
+a{color:#136abf}a:hover{color:#228be6}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 100%; height: 900px; display: flex; flex-direction: column; overflow: hidden; background: var(--brand-color-bg-layout, #f5f5f5); color: var(--brand-color-text, #1f1f1f); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px;">
+
+  <!-- Title bar -->
+  <header style="height: 48px; flex: 0 0 48px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 84px; background: var(--brand-color-bg-container, #ffffff); border-bottom: 1px solid var(--brand-color-border, #d9d9d9);">
+    <span style="font-weight: 600; font-size: 14px;">FineListener</span>
+    <span style="width: 1px; height: 16px; background: var(--brand-color-border, #d9d9d9);"></span>
+    <span style="font-weight: 600;">Design discussion</span>
+    <span style="font-size: 12px; line-height: 20px; padding: 0 6px; border-radius: 3px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-fill-tertiary, #f5f5f5); color: var(--brand-color-text-secondary, #595959);">English</span>
+    <span style="font-size: 12px; color: var(--brand-color-text-secondary, #595959);">Saved · Nov 20, 2026, 14:05</span>
+    <div style="flex: 1 1 auto;"></div>
+    <button type="button" style="height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f);">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"></path><path d="M7 9l5 -5l5 5"></path><path d="M12 4l0 12"></path></svg>
+      Import audio
+    </button>
+    <button type="button" style="height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-radius: 4px; border: 1px solid var(--brand-color-primary, #2e2e2e); background: var(--brand-color-primary, #2e2e2e); color: #ffffff; font-weight: 600;">
+      <span style="width: 10px; height: 10px; border-radius: 50%; background: var(--brand-color-error, #fa5252);"></span>
+      Start recording
+    </button>
+  </header>
+
+  <!-- Player: controls + 100px waveform -->
+  <section aria-label="Audio player" style="flex: 0 0 auto; box-sizing: border-box; padding: 12px 16px 4px; background: var(--brand-color-bg-container, #ffffff); border-bottom: 1px solid var(--brand-color-border, #d9d9d9); display: flex; flex-direction: column; gap: 8px;">
+    <div style="height: 32px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+      <button type="button" aria-label="Pause audio" style="width: 32px; height: 32px; border-radius: 50%; border: 0; background: var(--brand-color-primary, #2e2e2e); color: #ffffff; display: flex; align-items: center; justify-content: center; padding: 0;">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>
+      </button>
+      <span style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 14px;"><span style="font-weight: 600;">00:41.20</span><span style="color: var(--brand-color-text-secondary, #595959);"> / 03:12.48</span></span>
+      <div style="flex: 1 1 auto;"></div>
+      <span style="display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 4px 0 8px; border-radius: 3px; background: var(--brand-color-info-bg, #f0faff); border: 1px solid var(--brand-color-info-border, #a1ddff); font-size: 12px;">
+        <span>Segment <span style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;">00:38.00 — 01:04.00</span></span>
+        <button type="button" aria-label="Clear segment" style="width: 18px; height: 18px; padding: 0; border: 0; background: transparent; color: var(--brand-color-text-secondary, #595959); display: flex; align-items: center; justify-content: center;">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6l-12 12"></path><path d="M6 6l12 12"></path></svg>
+        </button>
+      </span>
+      <button type="button" style="height: 24px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-size: 12px;">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h-4v16h4"></path></svg>
+        Mark start
+      </button>
+      <button type="button" style="height: 24px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-size: 12px;">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h4v16h-4"></path></svg>
+        Mark end
+      </button>
+      <span style="width: 1px; height: 16px; background: var(--brand-color-border, #d9d9d9);"></span>
+      <div role="group" aria-label="Audio version" style="display: flex; height: 24px; padding: 2px; box-sizing: border-box; border-radius: 4px; background: var(--brand-color-fill-secondary, #f0f0f0);">
+        <button type="button" aria-pressed="false" style="height: 20px; padding: 0 8px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959); font-size: 12px;">Original</button>
+        <button type="button" aria-pressed="true" style="height: 20px; padding: 0 8px; border: 0; border-radius: 3px; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-size: 12px; font-weight: 600;">Optimized</button>
+      </div>
+    </div>
+    <div style="height: 100px; display: flex; flex-direction: column;">
+      <div style="position: relative; height: 80px;">
+        <div aria-hidden="true" style="position: absolute; top: 0; bottom: 0; left: 19.8%; width: 13.5%; background: var(--brand-color-info-bg, #f0faff); border-left: 1px solid var(--brand-color-info-border, #a1ddff); border-right: 1px solid var(--brand-color-info-border, #a1ddff);"></div>
+        <div role="img" aria-label="Waveform, 41 seconds played of 3 minutes 12 seconds" style="position: absolute; inset: 0; display: flex; align-items: center; gap: 2px;">
+          <sc-for list="{{bars}}" as="b" hint-placeholder-count="200">
+            <div style="{{b.style}}"></div>
+          </sc-for>
+        </div>
+        <div aria-hidden="true" style="position: absolute; top: -4px; bottom: 0; left: 21.5%; width: 1px; background: var(--brand-color-info, #228be6);">
+          <div style="position: absolute; top: 0; left: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--brand-color-info, #228be6);"></div>
+        </div>
+      </div>
+      <div aria-hidden="true" style="height: 20px; display: flex; justify-content: space-between; align-items: flex-end; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; line-height: 16px; color: var(--brand-color-text-secondary, #595959);">
+        <span>00:00</span><span>00:30</span><span>01:00</span><span>01:30</span><span>02:00</span><span>02:30</span><span>03:00</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Three panels -->
+  <div style="flex: 1 1 auto; min-height: 0; display: flex;">
+
+    <!-- Sessions -->
+    <nav aria-label="Sessions" style="flex: 0 1 300px; min-width: 240px; height: 668px; box-sizing: border-box; overflow: auto; background: var(--brand-color-bg-layout, #f5f5f5); border-right: 1px solid var(--brand-color-border, #d9d9d9); padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <h2 style="margin: 0; font-size: 18px; line-height: 26px; font-weight: 600;">Sessions</h2>
+        <span style="font-size: 12px; color: var(--brand-color-text-secondary, #595959);">6</span>
+      </div>
+      <label style="height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959);">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"></circle><path d="M21 21l-6 -6"></path></svg>
+        <input type="search" aria-label="Search sessions" placeholder="Search sessions" style="flex: 1 1 auto; min-width: 0; border: 0; outline: none; background: transparent; font: inherit; color: var(--brand-color-text, #1f1f1f);">
+      </label>
+      <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div style="font-size: 12px; line-height: 20px; font-weight: 600; color: var(--brand-color-text-secondary, #595959); padding: 4px 10px 2px;">{{g.label}}</div>
+          <sc-for list="{{g.items}}" as="s" hint-placeholder-count="2">
+            <a href="#" style="{{s.style}}">
+              <span style="font-weight: 600; color: var(--brand-color-text, #1f1f1f); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{s.title}}</span>
+              <span style="font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">{{s.meta}}</span>
+              <sc-if value="{{s.progress}}" hint-placeholder-val="{{false}}">
+                <span style="display: flex; flex-direction: column; gap: 4px; padding-top: 2px;">
+                  <span style="font-size: 12px; line-height: 18px; color: var(--brand-color-text, #1f1f1f);">Transcribing… 42%</span>
+                  <span style="height: 4px; border-radius: 1px; background: var(--brand-color-fill-secondary, #f0f0f0); overflow: hidden;"><span style="display: block; width: 42%; height: 100%; background: var(--brand-color-primary, #2e2e2e);"></span></span>
+                </span>
+              </sc-if>
+            </a>
+          </sc-for>
+        </div>
+      </sc-for>
+    </nav>
+
+    <!-- Transcript -->
+    <main style="flex: 1 1 0; min-width: 440px; height: 668px; display: flex; flex-direction: column; background: var(--brand-color-bg-container, #ffffff);">
+      <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 24px; border-bottom: 1px solid var(--brand-color-border-secondary, #f0f0f0);">
+        <div role="group" aria-label="Transcript view" style="display: flex; height: 32px; padding: 2px; box-sizing: border-box; border-radius: 4px; background: var(--brand-color-fill-secondary, #f0f0f0);">
+          <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Text</button>
+          <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Timecodes</button>
+          <button type="button" aria-pressed="true" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-weight: 600;">Speakers</button>
+          <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Summary</button>
+        </div>
+        <div style="flex: 1 1 auto;"></div>
+        <label style="width: 220px; height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 4px 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-primary, #2e2e2e); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959);">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"></circle><path d="M21 21l-6 -6"></path></svg>
+          <input type="search" aria-label="Search transcript" value="recording" style="flex: 1 1 auto; min-width: 0; border: 0; outline: none; background: transparent; font: inherit; color: var(--brand-color-text, #1f1f1f);">
+          <span role="status" style="font-size: 12px; color: var(--brand-color-text-secondary, #595959); white-space: nowrap;">2 of 3</span>
+          <button type="button" aria-label="Previous match" style="width: 24px; height: 24px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959); display: flex; align-items: center; justify-content: center;">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6 -6l6 6"></path></svg>
+          </button>
+          <button type="button" aria-label="Next match" style="width: 24px; height: 24px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959); display: flex; align-items: center; justify-content: center;">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6l6 -6"></path></svg>
+          </button>
+        </label>
+        <button type="button" aria-label="Copy transcript" style="width: 32px; height: 32px; padding: 0; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959); display: flex; align-items: center; justify-content: center;">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8v-2a2 2 0 0 0 -2 -2h-8a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h2"></path></svg>
+        </button>
+        <button type="button" style="height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f);">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"></path><path d="M7 11l5 5l5 -5"></path><path d="M12 4l0 12"></path></svg>
+          Export
+        </button>
+      </div>
+
+      <div style="flex: 1 1 auto; min-height: 0; overflow: auto; padding: 24px;">
+        <div style="max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 4px;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 12px 16px;">
+            <span style="font-size: 12px; color: var(--brand-color-text-secondary, #595959); margin-right: 4px;">3 speakers</span>
+            <sc-for list="{{speakers}}" as="p" hint-placeholder-count="3">
+              <span style="{{p.tagStyle}}">{{p.name}}</span>
+            </sc-for>
+            <button type="button" style="height: 24px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: var(--brand-color-link-active, #136abf); font-size: 12px;">Rename speakers</button>
+            <div style="flex: 1 1 auto;"></div>
+            <div role="group" aria-label="Speaker layout" style="display: flex; height: 24px; padding: 2px; box-sizing: border-box; border-radius: 4px; background: var(--brand-color-fill-secondary, #f0f0f0);">
+              <button type="button" aria-pressed="true" style="height: 20px; padding: 0 8px; border: 0; border-radius: 3px; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-size: 12px; font-weight: 600;">Dialogue</button>
+              <button type="button" aria-pressed="false" style="height: 20px; padding: 0 8px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959); font-size: 12px;">Reading</button>
+            </div>
+          </div>
+          <sc-for list="{{turns}}" as="t" hint-placeholder-count="6">
+            <div style="{{t.rowStyle}}">
+              <span style="flex: 0 0 64px; padding-top: 3px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; line-height: 20px; color: var(--brand-color-text-secondary, #595959);">{{t.time}}</span>
+              <div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px;">
+                <span style="{{t.nameStyle}}">{{t.name}}</span>
+                <p style="margin: 0; font-size: 16px; line-height: 26px;"><sc-for list="{{t.parts}}" as="x" hint-placeholder-count="1"><span style="{{x.style}}">{{x.t}}</span></sc-for></p>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </main>
+
+    <!-- Settings -->
+    <aside aria-label="Transcription settings" style="flex: 0 1 360px; min-width: 320px; height: 668px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--brand-color-bg-layout, #f5f5f5); border-left: 1px solid var(--brand-color-border, #d9d9d9);">
+      <div style="flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 20px;">
+        <h2 style="margin: 0; font-size: 18px; line-height: 26px; font-weight: 600;">Settings</h2>
+
+        <div style="display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 6px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff);">
+          <span style="width: 32px; height: 32px; flex: 0 0 32px; border-radius: 4px; background: var(--brand-color-fill-tertiary, #f5f5f5); color: var(--brand-color-text-secondary, #595959); display: flex; align-items: center; justify-content: center;">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"></path><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z"></path><circle cx="11" cy="16" r="1"></circle><path d="M12 16l0 -5l2 1"></path></svg>
+          </span>
+          <span style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;">
+            <span style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Design discussion.wav</span>
+            <span style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">03:12 · 48 kHz · stereo</span>
+          </span>
+          <button type="button" style="height: 24px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: var(--brand-color-link-active, #136abf); font-size: 12px;">Replace</button>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <label for="lang" style="font-weight: 600;">Language</label>
+          <div style="position: relative;">
+            <select id="lang" style="width: 100%; height: 32px; box-sizing: border-box; padding: 0 32px 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font: inherit; appearance: none;">
+              <option>English</option><option>Auto-detect</option><option>Russian</option>
+            </select>
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#595959" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 10px; top: 8px; pointer-events: none;"><path d="M6 9l6 6l6 -6"></path></svg>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label for="model" style="font-weight: 600;">Model</label>
+            <span style="display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 20px; padding: 0 6px; border-radius: 3px; background: var(--brand-color-success-bg, #bdc9be); border: 1px solid var(--brand-color-success-border, #8bb08f); color: var(--brand-color-text, #1f1f1f);">
+              <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5l10 -10"></path></svg>
+              Downloaded
+            </span>
+          </div>
+          <div style="position: relative;">
+            <select id="model" style="width: 100%; height: 32px; box-sizing: border-box; padding: 0 32px 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font: inherit; appearance: none;">
+              <option>Large v3 — best quality</option><option>Medium</option><option>Small — fastest</option>
+            </select>
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#595959" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 10px; top: 8px; pointer-events: none;"><path d="M6 9l6 6l6 -6"></path></svg>
+          </div>
+          <span style="font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">Use a local model file instead</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px; padding-top: 20px; border-top: 1px solid var(--brand-color-border, #d9d9d9);">
+          <label style="display: flex; align-items: flex-start; gap: 12px;">
+            <span style="flex: 1 1 auto; display: flex; flex-direction: column;">
+              <span style="font-weight: 600;">Identify speakers</span>
+              <span style="font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">Runs after transcription. The transcript is saved first.</span>
+            </span>
+            <input type="checkbox" role="switch" checked style="position: absolute; opacity: 0; width: 1px; height: 1px;">
+            <span aria-hidden="true" style="flex: 0 0 32px; width: 32px; height: 18px; margin-top: 2px; border-radius: 9px; background: var(--brand-color-primary, #2e2e2e); position: relative;"><span style="position: absolute; top: 2px; left: 16px; width: 14px; height: 14px; border-radius: 50%; background: #ffffff;"></span></span>
+          </label>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <label for="device" style="font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">Speaker analysis device</label>
+            <div style="position: relative;">
+              <select id="device" style="width: 100%; height: 32px; box-sizing: border-box; padding: 0 32px 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font: inherit; appearance: none;">
+                <option>Auto — GPU when available</option><option>GPU</option><option>CPU</option>
+              </select>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#595959" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 10px; top: 8px; pointer-events: none;"><path d="M6 9l6 6l6 -6"></path></svg>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" aria-expanded="false" style="display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0; border: 0; border-top: 1px solid var(--brand-color-border, #d9d9d9); padding-top: 20px; box-sizing: content-box; background: transparent; color: var(--brand-color-text, #1f1f1f); font-weight: 600; text-align: left;">
+          Advanced settings
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#595959" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6l6 -6"></path></svg>
+        </button>
+      </div>
+
+      <div style="flex: 0 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff);">
+        <div role="status" style="display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2b8a3e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5l10 -10"></path></svg>
+          <span><span style="color: var(--brand-color-text, #1f1f1f);">Transcribed in 0:48.</span> Speakers identified.</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" style="flex: 1 1 auto; height: 32px; border-radius: 4px; border: 1px solid var(--brand-color-primary, #2e2e2e); background: var(--brand-color-primary, #2e2e2e); color: #ffffff; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            Transcribe segment
+          </button>
+          <button type="button" aria-label="Clear workspace" style="width: 32px; height: 32px; flex: 0 0 32px; padding: 0; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959); display: flex; align-items: center; justify-content: center;">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l16 0"></path><path d="M10 11l0 6"></path><path d="M14 11l0 6"></path><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"></path><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"></path></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Status bar -->
+  <footer style="flex: 0 0 28px; height: 28px; box-sizing: border-box; display: flex; align-items: center; gap: 16px; padding: 0 16px; background: var(--brand-color-bg-container, #ffffff); border-top: 1px solid var(--brand-color-border, #d9d9d9); font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">
+    <span style="display: flex; align-items: center; gap: 6px;">
+      <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><circle cx="12" cy="16" r="1"></circle><path d="M8 11v-4a4 4 0 1 1 8 0v4"></path></svg>
+      Runs offline. Audio never leaves this computer.
+    </span>
+    <div style="flex: 1 1 auto;"></div>
+    <span style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;">large-v3 · Metal</span>
+    <button type="button" style="height: 20px; display: flex; align-items: center; gap: 6px; padding: 0 6px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959); font-size: 12px;">
+      <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7l5 5l-5 5"></path><path d="M12 19l7 0"></path></svg>
+      Log
+    </button>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var N = 200, played = 43, segA = 40, segB = 67;
+    var bars = [];
+    for (var i = 0; i < N; i++) {
+      var env = 0.35 + 0.65 * Math.abs(Math.sin(i * 0.045 + 0.4));
+      var v = Math.abs(Math.sin(i * 0.71) * 0.55 + Math.sin(i * 0.23 + 1.3) * 0.35 + Math.sin(i * 1.9) * 0.1);
+      var pause = (i % 37 > 33) ? 0.12 : 1;
+      var h = Math.max(3, Math.round(76 * env * v * pause));
+      var c = i < played ? '#C2480F' : '#E00D0D';
+      bars.push({ style: 'flex: 1 1 0; min-width: 1px; height: ' + h + 'px; border-radius: 1px; position: relative; background: ' + c + ';' });
+    }
+
+    var base = 'display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 4px; text-decoration: none; border: 1px solid transparent;';
+    var active = 'display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 4px; text-decoration: none; background: var(--brand-color-bg-container, #ffffff); border: 1px solid var(--brand-color-border, #d9d9d9);';
+    var groups = [
+      { label: 'Today', items: [
+        { title: 'Design discussion', meta: '03:12 · 3 speakers', style: active, progress: false },
+        { title: 'Weekly sync', meta: '27:40 · recorded', style: base, progress: true }
+      ]},
+      { label: 'Yesterday', items: [
+        { title: 'Customer interview', meta: '41:05 · 2 speakers', style: base, progress: false },
+        { title: 'Voice note', meta: '00:48', style: base, progress: false }
+      ]},
+      { label: 'Earlier', items: [
+        { title: 'Product review', meta: '1:02:14 · 4 speakers', style: base, progress: false },
+        { title: 'Signal processing lecture', meta: '1:28:40', style: base, progress: false }
+      ]}
+    ];
+
+    var pal = {
+      Alice: { bg: 'var(--brand-presets-green-1, #f6ffed)', fg: 'var(--brand-presets-green-8, #227804)', bd: '#b7eb8f' },
+      Bob:   { bg: 'var(--brand-presets-volcano-1, #fff2e8)', fg: 'var(--brand-presets-volcano-8, #ad2202)', bd: '#ffbb96' },
+      Maria: { bg: 'var(--brand-presets-purple-1, #f9f0ff)', fg: 'var(--brand-presets-purple-8, #391085)', bd: '#d3adf7' }
+    };
+    var tag = function (n) { var p = pal[n]; return 'font-size: 12px; line-height: 20px; font-weight: 600; padding: 0 8px; border-radius: 3px; background: ' + p.bg + '; color: ' + p.fg + '; border: 1px solid ' + p.bd + ';'; };
+    var nameStyle = function (n) { return 'align-self: flex-start; font-size: 12px; line-height: 18px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: ' + pal[n].bg + '; color: ' + pal[n].fg + ';'; };
+    var speakers = ['Alice', 'Bob', 'Maria'].map(function (n) { return { name: n, tagStyle: tag(n) }; });
+
+    var plain = '';
+    var match = 'background: var(--brand-color-warning-bg, #fff7e6); box-shadow: inset 0 0 0 1px var(--brand-color-warning-border, #ffcc7a); border-radius: 2px;';
+    var hit = 'background: var(--brand-color-warning-border, #ffcc7a); border-radius: 2px;';
+    var row = 'display: flex; gap: 12px; padding: 10px 12px; border-radius: 6px;';
+    var rowNow = row + ' background: var(--brand-color-fill-tertiary, #f5f5f5);';
+    var turns = [
+      { time: '00:00:02', name: 'Alice', parts: [{ t: 'Let’s start with the ', style: plain }, { t: 'recording', style: match }, { t: ' flow. Right now people open the app and don’t know whether to record or import.', style: plain }] },
+      { time: '00:00:14', name: 'Bob', parts: [{ t: 'Agreed. The source switch sits above the settings, so the first thing you see is a form, not an action.', style: plain }] },
+      { time: '00:00:27', name: 'Maria', parts: [{ t: 'What if the window opens on the session list, and recording is one button in the title bar?', style: plain }] },
+      { time: '00:00:38', name: 'Alice', now: true, parts: [{ t: 'That works. Then the settings panel only matters when you transcribe, and the ', style: plain }, { t: 'recording', style: hit }, { t: ' itself stays front and center.', style: plain }] },
+      { time: '00:00:52', name: 'Bob', parts: [{ t: 'We also need to show progress better. Transcription, speaker analysis and the summary each take a while.', style: plain }] },
+      { time: '00:01:06', name: 'Maria', parts: [{ t: 'One status line per step: Transcribing 42%, then Identifying speakers. The ', style: plain }, { t: 'recording', style: match }, { t: ' list should show it too.', style: plain }] },
+      { time: '00:01:21', name: 'Alice', parts: [{ t: 'And keep saying it plainly: everything runs offline, nothing leaves the computer.', style: plain }] }
+    ].map(function (t) { return Object.assign({}, t, { rowStyle: t.now ? rowNow : row, nameStyle: nameStyle(t.name) }); });
+
+    return { bars: bars, groups: groups, speakers: speakers, turns: turns };
+  }
+}
+</script>
+</body>
+</html>

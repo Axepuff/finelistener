@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Transcript — Summary view</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#136abf}a:hover{color:#228be6}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 780px; height: 900px; display: flex; flex-direction: column; overflow: hidden; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px;">
+  <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 12px 24px; border-bottom: 1px solid var(--brand-color-border-secondary, #f0f0f0);">
+    <div role="group" aria-label="Transcript view" style="display: flex; height: 32px; padding: 2px; box-sizing: border-box; border-radius: 4px; background: var(--brand-color-fill-secondary, #f0f0f0);">
+      <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Text</button>
+      <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Timecodes</button>
+      <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Speakers</button>
+      <button type="button" aria-pressed="true" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-weight: 600;">Summary</button>
+    </div>
+    <div style="flex: 1 1 auto;"></div>
+    <button type="button" aria-label="Copy summary" style="width: 32px; height: 32px; padding: 0; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959); display: flex; align-items: center; justify-content: center;">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8v-2a2 2 0 0 0 -2 -2h-8a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h2"></path></svg>
+    </button>
+    <button type="button" style="height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f);">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"></path><path d="M7 11l5 5l5 -5"></path><path d="M12 4l0 12"></path></svg>
+      Export summary
+    </button>
+  </div>
+
+  <div style="flex: 1 1 auto; min-height: 0; overflow: auto; padding: 24px;">
+    <div style="max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
+
+      <section aria-label="Summary prompt" style="display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 6px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-fill-quaternary, #fafafa);">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <label for="prompt" style="font-weight: 600; margin-right: 4px;">Prompt</label>
+          <button type="button" aria-pressed="true" style="height: 24px; padding: 0 8px; border-radius: 3px; border: 1px solid var(--brand-color-primary, #2e2e2e); background: var(--brand-color-primary, #2e2e2e); color: #ffffff; font-size: 12px; font-weight: 600;">Default</button>
+          <button type="button" aria-pressed="false" style="height: 24px; padding: 0 8px; border-radius: 3px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959); font-size: 12px;">Meeting notes</button>
+          <button type="button" aria-pressed="false" style="height: 24px; padding: 0 8px; border-radius: 3px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959); font-size: 12px;">Action items</button>
+          <button type="button" aria-pressed="false" style="height: 24px; padding: 0 8px; border-radius: 3px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959); font-size: 12px;">Interview</button>
+          <button type="button" aria-label="Manage presets" style="height: 24px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 3px; border: 1px dashed var(--brand-color-border, #d9d9d9); background: transparent; color: var(--brand-color-text-secondary, #595959); font-size: 12px;">
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5l0 14"></path><path d="M5 12l14 0"></path></svg>
+            New preset
+          </button>
+        </div>
+        <textarea id="prompt" rows="3" style="width: 100%; box-sizing: border-box; resize: vertical; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font: inherit; line-height: 22px;">Summarize what the speakers discuss. Preserve the main ideas, their context and any differences in viewpoint. Use only information supported by the transcript.</textarea>
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span style="font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">Runs on this computer with the local summary model.</span>
+          <div style="flex: 1 1 auto;"></div>
+          <button type="button" disabled style="height: 32px; padding: 0 12px; border: 0; border-radius: 4px; background: transparent; color: var(--brand-color-text-quaternary, #bfbfbf);">Save as preset</button>
+          <button type="button" style="height: 32px; padding: 0 14px; border-radius: 4px; border: 1px solid var(--brand-color-primary, #2e2e2e); background: var(--brand-color-primary, #2e2e2e); color: #ffffff; font-weight: 600;">Regenerate summary</button>
+        </div>
+      </section>
+
+      <article style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+          <div style="flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px;">
+            <h2 style="margin: 0; font-size: 18px; line-height: 26px; font-weight: 600;">Summary</h2>
+            <span style="font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">Generated Nov 20, 2026, 14:12 · Chunks used: 4</span>
+          </div>
+          <div role="group" aria-label="Summary length" style="display: flex; height: 24px; padding: 2px; box-sizing: border-box; border-radius: 4px; background: var(--brand-color-fill-secondary, #f0f0f0);">
+            <button type="button" aria-pressed="true" style="height: 20px; padding: 0 8px; border: 0; border-radius: 3px; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-size: 12px; font-weight: 600;">Brief overview</button>
+            <button type="button" aria-pressed="false" style="height: 20px; padding: 0 8px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959); font-size: 12px;">Detailed notes</button>
+          </div>
+        </div>
+        <p style="margin: 0; font-size: 16px; line-height: 26px;">The team reviewed the main workspace. People who open the app don’t know whether to record or import, because the window starts with a settings form. The group agreed to open the window on the session list and move recording to a single button in the title bar, so settings appear only when they are needed.</p>
+        <p style="margin: 0; font-size: 16px; line-height: 26px;">Long steps also need clearer feedback: transcription, speaker analysis and the summary should each show one status line with progress, repeated in the session list. The window should state plainly that everything runs offline and no audio leaves the computer.</p>
+      </article>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":780,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recording errors</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#136abf}a:hover{color:#228be6}
+button{font:inherit;cursor:pointer}
+button:disabled{cursor:default}
+</style>
+</helmet>
+<div style="width: 780px; height: 1080px; box-sizing: border-box; padding: 32px; display: flex; flex-direction: column; gap: 28px; background: var(--brand-color-bg-layout, #f5f5f5); color: var(--brand-color-text, #1f1f1f); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px;">
+
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <span style="font-size: 12px; line-height: 18px; font-weight: 600; color: var(--brand-color-text-secondary, #595959);">On launch · top of the session list</span>
+    <section role="alert" style="width: 300px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 6px; background: var(--brand-color-warning-bg, #fff7e6); border: 1px solid var(--brand-color-warning-border, #ffcc7a);">
+      <div style="display: flex; gap: 8px;">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#bf5d00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 16px; margin-top: 3px;"><path d="M12 9v4"></path><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z"></path><path d="M12 16h.01"></path></svg>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-weight: 600;">Unfinished recording</span>
+          <span style="font-size: 12px; line-height: 18px;">Audio from an interrupted recording is available. Nov 21, 18:02 · 34:10</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; padding-left: 24px;">
+        <button type="button" style="height: 24px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-primary, #2e2e2e); background: var(--brand-color-primary, #2e2e2e); color: #ffffff; font-size: 12px; font-weight: 600;">Recover</button>
+        <button type="button" style="height: 24px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-size: 12px;">Delete</button>
+      </div>
+    </section>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <span style="font-size: 12px; line-height: 18px; font-weight: 600; color: var(--brand-color-text-secondary, #595959);">Start recording · macOS has not allowed system audio yet</span>
+    <section style="display: flex; flex-direction: column; gap: 12px; padding: 20px; border-radius: 6px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff);">
+      <h3 style="margin: 0; font-size: 18px; line-height: 26px; font-weight: 600;">Record a meeting</h3>
+      <div role="alert" style="display: flex; gap: 8px; padding: 12px; border-radius: 6px; background: var(--brand-color-warning-bg, #fff7e6); border: 1px solid var(--brand-color-warning-border, #ffcc7a);">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#bf5d00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 16px; margin-top: 3px;"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11v-4a4 4 0 1 1 8 0v4"></path></svg>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-weight: 600;">Allow system audio recording</span>
+            <span style="font-size: 12px; line-height: 18px;">Turn on FineListener in System Settings › Privacy &amp; Security › Screen &amp; System Audio Recording, then come back. The microphone works without it.</span>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" style="height: 24px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-primary, #2e2e2e); background: var(--brand-color-primary, #2e2e2e); color: #ffffff; font-size: 12px; font-weight: 600;">Open System Settings</button>
+            <button type="button" style="height: 24px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-size: 12px;">Record microphone only</button>
+          </div>
+        </div>
+      </div>
+      <button type="button" disabled style="height: 40px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-fill-tertiary, #f5f5f5); color: var(--brand-color-text-quaternary, #bfbfbf); font-weight: 600;">Start recording</button>
+    </section>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <span style="font-size: 12px; line-height: 18px; font-weight: 600; color: var(--brand-color-text-secondary, #595959);">Start recording · no space for a new recording</span>
+    <section role="alert" style="display: flex; gap: 8px; padding: 12px; border-radius: 6px; background: var(--brand-color-error-bg, #fff2f0); border: 1px solid var(--brand-color-error-border, #ffd3cf);">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d43b40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 16px; margin-top: 3px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-weight: 600;">Recording storage is full</span>
+          <span style="font-size: 12px; line-height: 18px;">Recover or delete an unfinished recording before starting a new one.</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" style="height: 24px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-size: 12px;">Show unfinished recordings</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <span style="font-size: 12px; line-height: 18px; font-weight: 600; color: var(--brand-color-text-secondary, #595959);">While recording · recording strip, one source is silent</span>
+    <section style="display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 6px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff);">
+      <sc-for list="{{meters}}" as="m" hint-placeholder-count="2">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="flex: 0 0 104px; font-weight: 600;">{{m.label}}</span>
+          <div aria-hidden="true" style="flex: 1 1 auto; display: flex; gap: 2px; height: 12px;">
+            <sc-for list="{{m.segs}}" as="s" hint-placeholder-count="30"><span style="{{s}}"></span></sc-for>
+          </div>
+          <span style="flex: 0 0 64px; text-align: right; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; color: var(--brand-color-text-secondary, #595959);">{{m.db}}</span>
+        </div>
+      </sc-for>
+      <div role="status" style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 4px; background: var(--brand-color-warning-bg, #fff7e6); border: 1px solid var(--brand-color-warning-border, #ffcc7a); font-size: 12px; line-height: 18px;">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bf5d00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"></path><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z"></path><path d="M12 16h.01"></path></svg>
+        <span style="flex: 1 1 auto;"><span style="font-weight: 600;">No audio from Microphone for 30 s.</span> Check the selected recording devices. Recording continues.</span>
+      </div>
+    </section>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <span style="font-size: 12px; line-height: 18px; font-weight: 600; color: var(--brand-color-text-secondary, #595959);">After recording · top of the transcript panel</span>
+    <section role="alert" style="display: flex; gap: 8px; padding: 12px; border-radius: 6px; background: var(--brand-color-warning-bg, #fff7e6); border: 1px solid var(--brand-color-warning-border, #ffcc7a);">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#bf5d00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 16px; margin-top: 3px;"><path d="M12 9v4"></path><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z"></path><path d="M12 16h.01"></path></svg>
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <span style="font-weight: 600;">System audio stopped at 18:42</span>
+        <span style="font-size: 12px; line-height: 18px;">A recording source stopped early. Only the captured audio is available. Microphone recorded the full 34:10.</span>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":780,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var meter = function (lit) {
+      var segs = [];
+      for (var i = 0; i < 30; i++) {
+        var c = '#f0f0f0';
+        if (i < lit) c = i < 21 ? '#2b8a3e' : (i < 27 ? '#e67700' : '#fa5252');
+        segs.push('flex: 1 1 0; border-radius: 1px; background: ' + c + ';');
+      }
+      return segs;
+    };
+    return {
+      meters: [
+        { label: 'System audio', db: '−16 dB', segs: meter(17) },
+        { label: 'Microphone', db: 'silent', segs: meter(0) }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
