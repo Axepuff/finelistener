@@ -1,0 +1,8 @@
+/* The title bar replaces the native one on macOS, so it has to move the window. */
+.workspace-title-bar {
+    -webkit-app-region: drag;
+}
+
+.workspace-title-bar button {
+    -webkit-app-region: no-drag;
+}

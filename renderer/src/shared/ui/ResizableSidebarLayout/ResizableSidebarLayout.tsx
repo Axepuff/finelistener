@@ -16,6 +16,9 @@ interface SidebarConfig {
 
 interface Props {
     content: React.ReactNode;
+    // Narrowest width the content may take. Side panels shrink towards their own
+    // minimum widths first, and dragging never pushes the content below this width.
+    contentMinWidth?: number;
     leftSidebar?: SidebarConfig;
     rightSidebar?: SidebarConfig;
     // Legacy API for a single sidebar.
@@ -45,6 +48,7 @@ const getDeltaBySidebarPosition = (
 // TODO change it to react-resizable-panels lib
 export const ResizableSidebarLayout: React.FC<Props> = ({
     content,
+    contentMinWidth = 0,
     leftSidebar,
     rightSidebar,
     sidebar,
@@ -56,6 +60,9 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
     separatorAriaLabel = 'Resize sidebar',
 }) => {
     const appStore = useAppStore();
+    const layoutRef = useRef<HTMLDivElement | null>(null);
+    const leftSidebarRef = useRef<HTMLDivElement | null>(null);
+    const rightSidebarRef = useRef<HTMLDivElement | null>(null);
     const legacySidebarConfig = sidebar ? {
         node: sidebar,
         minWidth: minSidebarWidth,
@@ -67,6 +74,22 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
 
     const resolvedLeftSidebar = leftSidebar ?? (sidebarPosition === 'left' ? legacySidebarConfig : undefined);
     const resolvedRightSidebar = rightSidebar ?? (sidebarPosition === 'right' ? legacySidebarConfig : undefined);
+
+    // The sidebar resized last keeps its width when space runs out; the other one shrinks first.
+    const [lastResizedSidebar, setLastResizedSidebar] = useState<SidebarPosition | null>(null);
+    // Set after both sidebars are created, so the handler of one can reach the other.
+    const resizeEndRef = useRef<((position: SidebarPosition) => void) | null>(null);
+
+    // Widest the dragged sidebar may become: the other sidebar can give up space down to its
+    // minimum width, the content never goes below contentMinWidth.
+    const getAvailableSidebarWidth = (position: SidebarPosition): number => {
+        const layoutWidth = layoutRef.current?.clientWidth ?? 0;
+        const otherSidebar = position === 'left' ? resolvedRightSidebar : resolvedLeftSidebar;
+
+        if (layoutWidth === 0) return Number.POSITIVE_INFINITY;
+
+        return layoutWidth - contentMinWidth - (otherSidebar?.minWidth ?? 0);
+    };
 
     const useResizableSidebar = (sidebarConfig: SidebarConfig | undefined, position: SidebarPosition) => {
         const hasSidebar = sidebarConfig !== undefined;
@@ -90,12 +113,17 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
             if (!hasSidebar) return;
 
             event.preventDefault();
+            const renderedSidebar = position === 'left' ? leftSidebarRef.current : rightSidebarRef.current;
+
+            // Start from the rendered width: the sidebar may be narrower than its stored width
+            // when the window is too narrow for it.
             resizeStateRef.current = {
                 startX: event.clientX,
-                startWidth: sidebarWidth,
+                startWidth: renderedSidebar?.offsetWidth || sidebarWidth,
             };
+            setLastResizedSidebar(position);
             setIsSidebarResizing(true);
-        }, [hasSidebar, sidebarWidth]);
+        }, [hasSidebar, position, sidebarWidth]);
 
         useEffect(() => {
             if (!hasSidebar) return;
@@ -107,7 +135,8 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
                 if (!resizeState) return;
 
                 const delta = getDeltaBySidebarPosition(event.clientX, resizeState, position);
-                const nextWidth = clampSidebarWidth(resizeState.startWidth + delta);
+                const availableWidth = Math.max(minWidth, getAvailableSidebarWidth(position));
+                const nextWidth = Math.min(clampSidebarWidth(resizeState.startWidth + delta), availableWidth);
 
                 setSidebarWidth(nextWidth);
             };
@@ -115,6 +144,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
             const handlePointerUp = () => {
                 setIsSidebarResizing(false);
                 resizeStateRef.current = null;
+                resizeEndRef.current?.(position);
             };
 
             window.addEventListener('pointermove', handlePointerMove);
@@ -124,7 +154,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
                 window.removeEventListener('pointermove', handlePointerMove);
                 window.removeEventListener('pointerup', handlePointerUp);
             };
-        }, [clampSidebarWidth, isSidebarResizing, position, hasSidebar]);
+        }, [clampSidebarWidth, isSidebarResizing, minWidth, position, hasSidebar]);
 
         useEffect(() => {
             if (!hasSidebar) {
@@ -219,6 +249,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
 
         return {
             sidebarWidth,
+            setSidebarWidth: (value: number) => setSidebarWidth(clampSidebarWidth(value)),
             isSidebarResizing,
             handleSidebarResizeStart,
         };
@@ -227,8 +258,24 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
     const leftSidebarState = useResizableSidebar(resolvedLeftSidebar, 'left');
     const rightSidebarState = useResizableSidebar(resolvedRightSidebar, 'right');
 
+    // After a drag, store the width the other sidebar was squeezed to. Both saved widths then
+    // fit together, so the layout comes back the same after a restart, without the
+    // last-resized priority that only lives in memory.
+    resizeEndRef.current = (position) => {
+        const otherState = position === 'left' ? rightSidebarState : leftSidebarState;
+        const otherSidebar = position === 'left' ? rightSidebarRef.current : leftSidebarRef.current;
+
+        if (!otherSidebar) return;
+
+        const renderedWidth = Math.floor(otherSidebar.getBoundingClientRect().width);
+
+        if (renderedWidth < otherState.sidebarWidth) {
+            otherState.setSidebarWidth(renderedWidth);
+        }
+    };
+
     const contentNode = (
-        <Box style={{ minWidth: 0, minHeight: 0, flex: 1, overflow: 'hidden' }}>
+        <Box style={{ minWidth: contentMinWidth, minHeight: 0, flex: 1, overflow: 'hidden' }}>
             {content}
         </Box>
     );
@@ -236,6 +283,8 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
     const renderSidebarNode = (
         sidebarConfig: SidebarConfig | undefined,
         sidebarState: ReturnType<typeof useResizableSidebar>,
+        sidebarRef: React.RefObject<HTMLDivElement | null>,
+        position: SidebarPosition,
     ) => {
         if (!sidebarConfig) {
             return null;
@@ -243,12 +292,17 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
 
         return (
             <Box
+                ref={sidebarRef}
                 style={{
                     width: sidebarState.sidebarWidth,
                     minWidth: sidebarConfig.minWidth,
                     maxWidth: sidebarConfig.maxWidth,
                     minHeight: 0,
-                    flexShrink: 0,
+                    // Shrinks towards minWidth when the window is too narrow for the stored width.
+                    // The other sidebar's large factor makes it give up nearly all the space until
+                    // it reaches its own min-width; factors stay >= 1 so flexbox distributes the
+                    // whole overflow once only one sidebar can still shrink.
+                    flexShrink: lastResizedSidebar === null || lastResizedSidebar === position ? 1 : 1000,
                 }}
             >
                 {sidebarConfig.node}
@@ -297,12 +351,12 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
     };
 
     return (
-        <Box style={{ display: 'flex', gap: 0, minHeight: 0, flex: 1, overflow: 'hidden' }}>
-            {renderSidebarNode(resolvedLeftSidebar, leftSidebarState)}
+        <Box ref={layoutRef} style={{ display: 'flex', gap: 0, minHeight: 0, flex: 1, overflow: 'hidden' }}>
+            {renderSidebarNode(resolvedLeftSidebar, leftSidebarState, leftSidebarRef, 'left')}
             {renderSeparatorNode(resolvedLeftSidebar, leftSidebarState)}
             {contentNode}
             {renderSeparatorNode(resolvedRightSidebar, rightSidebarState)}
-            {renderSidebarNode(resolvedRightSidebar, rightSidebarState)}
+            {renderSidebarNode(resolvedRightSidebar, rightSidebarState, rightSidebarRef, 'right')}
         </Box>
     );
 };
