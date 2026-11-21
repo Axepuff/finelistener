@@ -44,10 +44,10 @@ button:disabled{cursor:default}
       <span style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;"><span style="font-weight: 600;">00:00.00</span><span style="color: var(--brand-color-text-secondary, #595959);"> / 27:40.12</span></span>
       <span style="font-size: 12px; color: var(--brand-color-text-secondary, #595959);">You can listen while it transcribes.</span>
       <div style="flex: 1 1 auto;"></div>
-      <span style="font-size: 12px; color: var(--brand-color-text-secondary, #595959);">Segment and audio version are locked while transcribing</span>
+      <span style="font-size: 12px; color: var(--brand-color-text-secondary, #595959);">Segment and version locked</span>
       <div role="group" aria-label="Audio version" style="display: flex; height: 24px; padding: 2px; box-sizing: border-box; border-radius: 4px; background: var(--brand-color-fill-secondary, #f0f0f0);">
         <button type="button" disabled style="height: 20px; padding: 0 8px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-quaternary, #bfbfbf); font-size: 12px;">Original</button>
-        <button type="button" disabled aria-pressed="true" style="height: 20px; padding: 0 8px; border: 0; border-radius: 3px; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-tertiary, #8c8c8c); font-size: 12px; font-weight: 600;">Optimized</button>
+        <button type="button" disabled aria-pressed="true" style="height: 20px; padding: 0 8px; border: 0; border-radius: 3px; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959); font-size: 12px; font-weight: 600;">Optimized</button>
       </div>
     </div>
     <div style="height: 100px; display: flex; flex-direction: column;">
@@ -56,14 +56,14 @@ button:disabled{cursor:default}
           <sc-for list="{{bars}}" as="b" hint-placeholder-count="200"><div style="{{b}}"></div></sc-for>
         </div>
       </div>
-      <div aria-hidden="true" style="height: 20px; display: flex; justify-content: space-between; align-items: flex-end; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; line-height: 16px; color: var(--brand-color-text-tertiary, #8c8c8c);">
+      <div aria-hidden="true" style="height: 20px; display: flex; justify-content: space-between; align-items: flex-end; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; line-height: 16px; color: var(--brand-color-text-secondary, #595959);">
         <span>00:00</span><span>05:00</span><span>10:00</span><span>15:00</span><span>20:00</span><span>25:00</span>
       </div>
     </div>
   </section>
 
-  <div style="flex: 1 1 auto; min-height: 0; display: flex; flex-wrap: wrap;">
-    <nav aria-label="Sessions" style="flex: 0 0 300px; height: 668px; box-sizing: border-box; overflow: auto; background: var(--brand-color-bg-layout, #f5f5f5); border-right: 1px solid var(--brand-color-border, #d9d9d9); padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+  <div style="flex: 1 1 auto; min-height: 0; display: flex;">
+    <nav aria-label="Sessions" style="flex: 0 1 300px; min-width: 240px; height: 668px; box-sizing: border-box; overflow: auto; background: var(--brand-color-bg-layout, #f5f5f5); border-right: 1px solid var(--brand-color-border, #d9d9d9); padding: 16px; display: flex; flex-direction: column; gap: 12px;">
       <div style="display: flex; align-items: center; justify-content: space-between;">
         <h2 style="margin: 0; font-size: 18px; line-height: 26px; font-weight: 600;">Sessions</h2>
         <span style="font-size: 12px; color: var(--brand-color-text-secondary, #595959);">6</span>
@@ -79,9 +79,9 @@ button:disabled{cursor:default}
       </div>
       <sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
         <div aria-disabled="true" style="display: flex; flex-direction: column; gap: 2px;">
-          <div style="font-size: 12px; line-height: 20px; font-weight: 600; color: var(--brand-color-text-tertiary, #8c8c8c); padding: 4px 10px 2px;">{{g.label}}</div>
+          <div style="font-size: 12px; line-height: 20px; font-weight: 600; color: var(--brand-color-text-secondary, #595959); padding: 4px 10px 2px;">{{g.label}}</div>
           <sc-for list="{{g.items}}" as="s" hint-placeholder-count="2">
-            <div style="display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; color: var(--brand-color-text-tertiary, #8c8c8c);">
+            <div style="display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; color: var(--brand-color-text-secondary, #595959);">
               <span style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{s.title}}</span>
               <span style="font-size: 12px; line-height: 18px;">{{s.meta}}</span>
             </div>
@@ -90,8 +90,8 @@ button:disabled{cursor:default}
       </sc-for>
     </nav>
 
-    <main style="flex: 999 1 480px; min-width: 0; height: 668px; display: flex; flex-direction: column; background: var(--brand-color-bg-container, #ffffff);">
-      <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 12px 24px; border-bottom: 1px solid var(--brand-color-border-secondary, #f0f0f0);">
+    <main style="flex: 1 1 0; min-width: 440px; height: 668px; display: flex; flex-direction: column; background: var(--brand-color-bg-container, #ffffff);">
+      <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 24px; border-bottom: 1px solid var(--brand-color-border-secondary, #f0f0f0);">
         <div role="group" aria-label="Transcript view" style="display: flex; height: 32px; padding: 2px; box-sizing: border-box; border-radius: 4px; background: var(--brand-color-fill-secondary, #f0f0f0);">
           <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Text</button>
           <button type="button" aria-pressed="true" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text, #1f1f1f); font-weight: 600;">Timecodes</button>
@@ -99,7 +99,7 @@ button:disabled{cursor:default}
           <button type="button" disabled title="Available after transcription" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-quaternary, #bfbfbf);">Summary</button>
         </div>
         <div style="flex: 1 1 auto;"></div>
-        <label style="width: 200px; height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-tertiary, #8c8c8c);">
+        <label style="width: 200px; height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959);">
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"></circle><path d="M21 21l-6 -6"></path></svg>
           <input type="search" aria-label="Search transcript" placeholder="Search so far" style="flex: 1 1 auto; min-width: 0; border: 0; outline: none; background: transparent; font: inherit; color: var(--brand-color-text, #1f1f1f);">
         </label>
@@ -118,9 +118,9 @@ button:disabled{cursor:default}
             </div>
           </sc-for>
           <div style="display: flex; align-items: flex-start; gap: 12px; padding: 6px 8px;">
-            <span style="flex: 0 0 152px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; line-height: 26px; color: var(--brand-color-text-tertiary, #8c8c8c);">00:23:14 – …</span>
+            <span style="flex: 0 0 152px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; line-height: 26px; color: var(--brand-color-text-secondary, #595959);">00:23:14 – …</span>
             <span style="flex: 0 0 auto; margin-top: 4px; font-size: 12px; line-height: 18px; padding: 0 6px; border-radius: 3px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-fill-tertiary, #f5f5f5); color: var(--brand-color-text-secondary, #595959);">System</span>
-            <span style="flex: 1 1 auto; min-width: 0; font-size: 16px; line-height: 26px; color: var(--brand-color-text-secondary, #595959);">and once the build passes we can ship it to the<span aria-hidden="true" style="display: inline-block; width: 8px; height: 18px; margin-left: 3px; vertical-align: -3px; background: var(--brand-color-text-tertiary, #8c8c8c);"></span></span>
+            <span style="flex: 1 1 auto; min-width: 0; font-size: 16px; line-height: 26px; color: var(--brand-color-text-secondary, #595959);">and once the build passes we can ship it to the<span aria-hidden="true" style="display: inline-block; width: 8px; height: 18px; margin-left: 3px; vertical-align: -3px; background: var(--brand-color-text-secondary, #595959);"></span></span>
           </div>
           <div role="status" style="display: flex; align-items: center; gap: 8px; padding: 16px 8px 0; font-size: 12px; line-height: 18px; color: var(--brand-color-text-secondary, #595959);">
             <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"></path></svg>
@@ -130,7 +130,7 @@ button:disabled{cursor:default}
       </div>
     </main>
 
-    <aside aria-label="Transcription progress" style="flex: 0 0 360px; height: 668px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--brand-color-bg-layout, #f5f5f5); border-left: 1px solid var(--brand-color-border, #d9d9d9);">
+    <aside aria-label="Transcription progress" style="flex: 0 1 360px; min-width: 320px; height: 668px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--brand-color-bg-layout, #f5f5f5); border-left: 1px solid var(--brand-color-border, #d9d9d9);">
       <div style="flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 20px;">
         <div style="display: flex; flex-direction: column; gap: 2px;">
           <h2 style="margin: 0; font-size: 18px; line-height: 26px; font-weight: 600;">Transcription</h2>

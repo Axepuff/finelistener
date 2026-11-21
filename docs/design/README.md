@@ -20,7 +20,7 @@ The files are not meant to be opened directly in a browser: they need the design
 
 ## Screens
 
-Full window, 1440×900. The window is fluid: side panels keep their width, the transcript panel takes the rest.
+Full window, drawn at 1440×900. See "Window size and panel widths" below for narrower windows.
 
 | File | What it shows |
 | --- | --- |
@@ -56,6 +56,27 @@ Error sheets, 780 px wide. Each block is labelled with where it appears:
 | --- | --- |
 | `ErrRecording.dc.html` | Interrupted recording on launch, missing macOS system-audio permission, recording storage full, a silent source while recording, a source that stopped early. |
 | `ErrModels.dc.html` | Whisper model download failed, not enough disk space for the summary model, interrupted summary model download, prompt too long, summary generation failed or stopped. |
+
+## Window size and panel widths
+
+- Minimum window size: 1024×640 (`minWidth` / `minHeight` on the `BrowserWindow`). Narrower windows are not supported.
+- The three panels stay in one row and never wrap.
+
+| Panel | Default | Minimum |
+| --- | --- | --- |
+| Sessions | 300 px | 240 px |
+| Transcript | rest of the window | 440 px |
+| Settings | 360 px | 320 px |
+
+- As the window narrows, the side panels shrink from their default towards their minimum before the transcript goes below 440 px. 240 + 440 + 320 = 1000 px, so all three panels fit at the 1024 px minimum.
+- User-resized side panel widths are clamped to these minimums and to whatever keeps the transcript at 440 px or more.
+- Toolbars inside a panel (transcript view switcher, search, export) wrap to a second row when the panel is narrow. Each panel scrolls on its own; the window never scrolls.
+
+## Text contrast
+
+- All readable text, including 12 px captions, timecodes, group labels and metadata, uses `brand-color-text` or `brand-color-text-secondary` (`#595959`, about 7:1 on white and 6.5:1 on `#f5f5f5`).
+- `brand-color-text-tertiary` (`#8c8c8c`, 3.36:1 on white) is not used for text in these designs. It may be used only for non-text graphics such as an outlined status dot, where 3:1 is enough.
+- `brand-color-text-quaternary` is used only for disabled controls.
 
 ## Rules that apply to every screen
 

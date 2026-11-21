@@ -74,22 +74,22 @@ button{font:inherit;cursor:pointer}
           <div style="position: absolute; top: 0; left: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--brand-color-info, #228be6);"></div>
         </div>
       </div>
-      <div aria-hidden="true" style="height: 20px; display: flex; justify-content: space-between; align-items: flex-end; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; line-height: 16px; color: var(--brand-color-text-tertiary, #8c8c8c);">
+      <div aria-hidden="true" style="height: 20px; display: flex; justify-content: space-between; align-items: flex-end; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; line-height: 16px; color: var(--brand-color-text-secondary, #595959);">
         <span>00:00</span><span>00:30</span><span>01:00</span><span>01:30</span><span>02:00</span><span>02:30</span><span>03:00</span>
       </div>
     </div>
   </section>
 
   <!-- Three panels -->
-  <div style="flex: 1 1 auto; min-height: 0; display: flex; flex-wrap: wrap;">
+  <div style="flex: 1 1 auto; min-height: 0; display: flex;">
 
     <!-- Sessions -->
-    <nav aria-label="Sessions" style="flex: 0 0 300px; height: 668px; box-sizing: border-box; overflow: auto; background: var(--brand-color-bg-layout, #f5f5f5); border-right: 1px solid var(--brand-color-border, #d9d9d9); padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+    <nav aria-label="Sessions" style="flex: 0 1 300px; min-width: 240px; height: 668px; box-sizing: border-box; overflow: auto; background: var(--brand-color-bg-layout, #f5f5f5); border-right: 1px solid var(--brand-color-border, #d9d9d9); padding: 16px; display: flex; flex-direction: column; gap: 12px;">
       <div style="display: flex; align-items: center; justify-content: space-between;">
         <h2 style="margin: 0; font-size: 18px; line-height: 26px; font-weight: 600;">Sessions</h2>
         <span style="font-size: 12px; color: var(--brand-color-text-secondary, #595959);">6</span>
       </div>
-      <label style="height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-tertiary, #8c8c8c);">
+      <label style="height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-border, #d9d9d9); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959);">
         <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"></circle><path d="M21 21l-6 -6"></path></svg>
         <input type="search" aria-label="Search sessions" placeholder="Search sessions" style="flex: 1 1 auto; min-width: 0; border: 0; outline: none; background: transparent; font: inherit; color: var(--brand-color-text, #1f1f1f);">
       </label>
@@ -113,7 +113,7 @@ button{font:inherit;cursor:pointer}
     </nav>
 
     <!-- Transcript -->
-    <main style="flex: 999 1 480px; min-width: 0; height: 668px; display: flex; flex-direction: column; background: var(--brand-color-bg-container, #ffffff);">
+    <main style="flex: 1 1 0; min-width: 440px; height: 668px; display: flex; flex-direction: column; background: var(--brand-color-bg-container, #ffffff);">
       <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 24px; border-bottom: 1px solid var(--brand-color-border-secondary, #f0f0f0);">
         <div role="group" aria-label="Transcript view" style="display: flex; height: 32px; padding: 2px; box-sizing: border-box; border-radius: 4px; background: var(--brand-color-fill-secondary, #f0f0f0);">
           <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Text</button>
@@ -122,7 +122,7 @@ button{font:inherit;cursor:pointer}
           <button type="button" aria-pressed="false" style="height: 28px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; color: var(--brand-color-text-secondary, #595959);">Summary</button>
         </div>
         <div style="flex: 1 1 auto;"></div>
-        <label style="width: 220px; height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 4px 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-primary, #2e2e2e); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-tertiary, #8c8c8c);">
+        <label style="width: 220px; height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 4px 0 10px; border-radius: 4px; border: 1px solid var(--brand-color-primary, #2e2e2e); background: var(--brand-color-bg-container, #ffffff); color: var(--brand-color-text-secondary, #595959);">
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"></circle><path d="M21 21l-6 -6"></path></svg>
           <input type="search" aria-label="Search transcript" value="recording" style="flex: 1 1 auto; min-width: 0; border: 0; outline: none; background: transparent; font: inherit; color: var(--brand-color-text, #1f1f1f);">
           <span role="status" style="font-size: 12px; color: var(--brand-color-text-secondary, #595959); white-space: nowrap;">2 of 3</span>
@@ -170,7 +170,7 @@ button{font:inherit;cursor:pointer}
     </main>
 
     <!-- Settings -->
-    <aside aria-label="Transcription settings" style="flex: 0 0 360px; height: 668px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--brand-color-bg-layout, #f5f5f5); border-left: 1px solid var(--brand-color-border, #d9d9d9);">
+    <aside aria-label="Transcription settings" style="flex: 0 1 360px; min-width: 320px; height: 668px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--brand-color-bg-layout, #f5f5f5); border-left: 1px solid var(--brand-color-border, #d9d9d9);">
       <div style="flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 20px;">
         <h2 style="margin: 0; font-size: 18px; line-height: 26px; font-weight: 600;">Settings</h2>
 
