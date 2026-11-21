@@ -167,6 +167,9 @@ jobs:
       - name: Prepare Nemotron before compiling Whisper
         run: python scripts/prepare-nemotron.py win-x64-gpu
 
+      - name: Prepare the local summary runtime
+        run: python scripts/prepare-summary-runtime.py win-x64-gpu
+
       - name: Verify Nemotron release component
         run: python scripts/verify-speaker-release.py build-assets/win-x64-gpu/nemotron/component.json
 

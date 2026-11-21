@@ -15,6 +15,7 @@ const lifecycle = vi.hoisted(() => ({
 vi.mock('electron', () => ({
     app: {
         isPackaged: false,
+        getPath: () => 'test-profile',
         requestSingleInstanceLock: () => true,
         whenReady: () => Promise.resolve(),
         on: (name: string, listener: (...args: unknown[]) => unknown) => lifecycle.events.set(name, listener),
@@ -81,6 +82,8 @@ it('waits for speech preparation before cleanup and keeps repeated quits and lat
         expect(lifecycle.quit).not.toHaveBeenCalled();
         await expect(lifecycle.ipc.get('sessions:analyze-speakers')!(undefined, 'session', {}))
             .rejects.toThrow('Speaker action failed.');
+        await expect(lifecycle.ipc.get('sessions:generate-summary')!(undefined, 'session'))
+            .resolves.toEqual({ ok: false, reason: 'busy' });
         await expect(lifecycle.ipc.get('transcribeStream')!(undefined, 'audio.wav', {}))
             .rejects.toThrow('Another operation is in progress');
         finishSpeakers(true);

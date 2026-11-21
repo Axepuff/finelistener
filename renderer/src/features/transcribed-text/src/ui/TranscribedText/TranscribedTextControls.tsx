@@ -1,5 +1,5 @@
 import { ActionIcon, Box, Button, Group, Notification, SegmentedControl, Switch, Text, TextInput } from '@mantine/core';
-import { IconChevronDown, IconChevronUp, IconClockHour2, IconCopy, IconDownload, IconSearch, IconTextSize, IconUsers, IconX } from '@tabler/icons-react';
+import { IconChevronDown, IconChevronUp, IconClockHour2, IconCopy, IconDownload, IconNotes, IconSearch, IconTextSize, IconUsers, IconX } from '@tabler/icons-react';
 import React, { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useAppStore } from 'renderer/src/AppContext';
@@ -9,8 +9,8 @@ import type { TranscriptView } from 'renderer/src/stores/transcriptFormat';
 interface Props {
     currentTextValue: string;
     getClipboardHtml: () => string;
-    view: TranscriptView;
-    onViewChange: (view: TranscriptView) => void;
+    view: TranscriptView | 'summary';
+    onViewChange: (view: TranscriptView | 'summary') => void;
     searchQuery: string;
     onSearchChange: (value: string) => void;
     matchCount: number;
@@ -87,11 +87,12 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
     return (
         <>
             <Group className={styles.controlsRow} justify="space-between" align="center" wrap="wrap">
-                <Group gap={6} wrap="nowrap" style={{ maxWidth: '100%' }}>
+                <Group gap={6} wrap="wrap" style={{ maxWidth: '100%' }}>
                     <SegmentedControl
+                        aria-label="Session view"
                         value={view}
                         onChange={(value) => {
-                            if (value === 'plain' || value === 'timecodes' || value === 'speakers') onViewChange(value);
+                            if (value === 'plain' || value === 'timecodes' || value === 'speakers' || value === 'summary') onViewChange(value);
                         }}
                         className={styles.viewToggle}
                         data={[
@@ -122,74 +123,80 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
                                     </Group>
                                 ),
                             },
+                            {
+                                value: 'summary',
+                                label: <Group gap={6} wrap="nowrap"><IconNotes size={16} /><span>Summary</span></Group>,
+                            },
                         ]}
                     />
                     {speakerControls}
                 </Group>
 
-                <Group gap={8} align="center" wrap="wrap" className={styles.actionsGroup}>
-                    {store.transcription.duplicateFilterAvailable ? (
-                        <Switch
-                            checked={store.transcription.duplicateFilterEnabled}
-                            disabled={store.operations.isBusy}
-                            label="Hide duplicate speech"
-                            onChange={(event) => {
-                                void handleDuplicateFilterChange(event.currentTarget.checked);
-                            }}
-                        />
-                    ) : null}
-                    <TextInput
-                        value={searchQuery}
-                        onChange={(event) => onSearchChange(event.currentTarget.value)}
-                        onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
-                                event.preventDefault();
-                                if (event.shiftKey) onPreviousMatch();
-                                else onNextMatch();
-                            } else if (event.key === 'Escape') {
-                                onSearchChange('');
-                            }
-                        }}
-                        placeholder="Search text..."
-                        aria-label="Search transcript"
-                        leftSection={<IconSearch size={16} />}
-                        rightSection={searchQuery ? (
-                            <ActionIcon variant="subtle" color="gray" size="sm" aria-label="Clear search" onClick={() => onSearchChange('')}>
-                                <IconX size={14} />
-                            </ActionIcon>
+                {view !== 'summary' && (
+                    <Group gap={8} align="center" wrap="wrap" className={styles.actionsGroup}>
+                        {store.transcription.duplicateFilterAvailable ? (
+                            <Switch
+                                checked={store.transcription.duplicateFilterEnabled}
+                                disabled={store.operations.isBusy}
+                                label="Hide duplicate speech"
+                                onChange={(event) => {
+                                    void handleDuplicateFilterChange(event.currentTarget.checked);
+                                }}
+                            />
                         ) : null}
-                        className={styles.searchInput}
-                    />
-                    {searchQuery.trim() ? (
-                        <Text size="xs" c="dimmed" className={styles.searchCount} role="status">
-                            {matchCount > 0 ? `${activeMatchIndex + 1} of ${matchCount}` : '0 results'}
-                        </Text>
-                    ) : null}
-                    <ActionIcon variant="subtle" color="gray" size={32} aria-label="Previous search result" disabled={matchCount === 0} onClick={onPreviousMatch}>
-                        <IconChevronUp size={16} />
-                    </ActionIcon>
-                    <ActionIcon variant="subtle" color="gray" size={32} aria-label="Next search result" disabled={matchCount === 0} onClick={onNextMatch}>
-                        <IconChevronDown size={16} />
-                    </ActionIcon>
-                    <ActionIcon
-                        variant="subtle"
-                        color="gray"
-                        disabled={currentTextValue.length === 0}
-                        onClick={handleCopy}
-                        aria-label="Copy transcript"
-                        size={36}
-                    >
-                        <IconCopy size={18} />
-                    </ActionIcon>
-                    <Button
-                        disabled={currentTextValue.length === 0}
-                        onClick={handleSave}
-                        leftSection={<IconDownload size={14} />}
-                        className={styles.saveButton}
-                    >
-                        {'Save .txt'}
-                    </Button>
-                </Group>
+                        <TextInput
+                            value={searchQuery}
+                            onChange={(event) => onSearchChange(event.currentTarget.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    if (event.shiftKey) onPreviousMatch();
+                                    else onNextMatch();
+                                } else if (event.key === 'Escape') {
+                                    onSearchChange('');
+                                }
+                            }}
+                            placeholder="Search text..."
+                            aria-label="Search transcript"
+                            leftSection={<IconSearch size={16} />}
+                            rightSection={searchQuery ? (
+                                <ActionIcon variant="subtle" color="gray" size="sm" aria-label="Clear search" onClick={() => onSearchChange('')}>
+                                    <IconX size={14} />
+                                </ActionIcon>
+                            ) : null}
+                            className={styles.searchInput}
+                        />
+                        {searchQuery.trim() ? (
+                            <Text size="xs" c="dimmed" className={styles.searchCount} role="status">
+                                {matchCount > 0 ? `${activeMatchIndex + 1} of ${matchCount}` : '0 results'}
+                            </Text>
+                        ) : null}
+                        <ActionIcon variant="subtle" color="gray" size={32} aria-label="Previous search result" disabled={matchCount === 0} onClick={onPreviousMatch}>
+                            <IconChevronUp size={16} />
+                        </ActionIcon>
+                        <ActionIcon variant="subtle" color="gray" size={32} aria-label="Next search result" disabled={matchCount === 0} onClick={onNextMatch}>
+                            <IconChevronDown size={16} />
+                        </ActionIcon>
+                        <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            disabled={currentTextValue.length === 0}
+                            onClick={handleCopy}
+                            aria-label="Copy transcript"
+                            size={36}
+                        >
+                            <IconCopy size={18} />
+                        </ActionIcon>
+                        <Button
+                            disabled={currentTextValue.length === 0}
+                            onClick={handleSave}
+                            leftSection={<IconDownload size={14} />}
+                            className={styles.saveButton}
+                        >
+                            {'Save .txt'}
+                        </Button>
+                    </Group>
+                )}
             </Group>
 
             {isCopyNotificationOpen ? (

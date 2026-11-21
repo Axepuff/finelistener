@@ -1,6 +1,6 @@
 {
   "name": "finelistener",
-  "version": "1.5.0-beta.1",
+  "version": "1.6.0-beta.1",
   "description": "Electron app that converts audio to txt",
   "main": "dist/electron/main.js",
   "scripts": {
@@ -16,9 +16,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p renderer/tsconfig.json --noEmit",
     "format": "npm run lint:fix",
     "test": "vitest --project unit",
-    "prebuild:assets:mac": "bash scripts/build-whisper.sh mac-arm64 && bash scripts/prepare-models.sh && python scripts/prepare-nemotron.py mac-arm64",
-    "prebuild:assets:win-gpu": "bash scripts/build-whisper.sh win-x64-gpu && bash scripts/build-miniaudio.sh win-x64-gpu && bash scripts/prepare-models.sh && python scripts/prepare-nemotron.py win-x64-gpu && python scripts/prepare-windows-runtime.py win-x64-gpu",
-    "prebuild:assets:win-cpu": "bash scripts/build-whisper.sh win-x64-cpu && bash scripts/build-miniaudio.sh win-x64-cpu && bash scripts/prepare-models.sh && python scripts/prepare-nemotron.py win-x64-cpu && python scripts/prepare-windows-runtime.py win-x64-cpu",
+    "prebuild:assets:mac": "bash scripts/build-whisper.sh mac-arm64 && bash scripts/prepare-models.sh && python scripts/prepare-nemotron.py mac-arm64 && python scripts/prepare-summary-runtime.py mac-arm64",
+    "prebuild:assets:win-gpu": "bash scripts/build-whisper.sh win-x64-gpu && bash scripts/build-miniaudio.sh win-x64-gpu && bash scripts/prepare-models.sh && python scripts/prepare-nemotron.py win-x64-gpu && python scripts/prepare-summary-runtime.py win-x64-gpu && python scripts/prepare-windows-runtime.py win-x64-gpu",
+    "prebuild:assets:win-cpu": "bash scripts/build-whisper.sh win-x64-cpu && bash scripts/build-miniaudio.sh win-x64-cpu && bash scripts/prepare-models.sh && python scripts/prepare-nemotron.py win-x64-cpu && python scripts/prepare-summary-runtime.py win-x64-cpu && python scripts/prepare-windows-runtime.py win-x64-cpu",
     "make": "electron-forge make",
     "make:mac": "npm run build && cross-env BUILD_VARIANT=mac-arm64 electron-forge make --platform=darwin --arch=arm64",
     "make:win-gpu": "npm run build && cross-env BUILD_VARIANT=win-x64-gpu electron-forge make --platform=win32 --arch=x64",
@@ -149,6 +149,7 @@
     "@wavesurfer/react": "^1.0.11",
     "application-loopback": "^1.2.6",
     "audiotee": "^0.0.7",
+    "eld": "2.1.1",
     "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^8.2.0",
     "ffmpeg-static": "^5.3.0",

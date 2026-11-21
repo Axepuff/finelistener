@@ -1,4 +1,5 @@
 import type { TranscribeOpts } from './transcription';
+import type { RecordingSummaryOptions } from './summaryOptions';
 
 export type SessionSourceKind = 'imported' | 'recorded';
 export type RecordingSource = 'system' | 'microphone';
@@ -128,9 +129,42 @@ export interface SessionTranscriptPresentationV1 {
     duplicateFilter?: TranscriptDuplicateFilterV1;
 }
 
+export interface SummarySourceRow {
+    startSec: number;
+    endSec: number;
+    text: string;
+    speaker?: string;
+}
+
+export interface ReviewedSummaryChunk {
+    startSec: number;
+    endSec: number;
+    text: string;
+}
+
+export interface SessionSummary {
+    brief: string;
+    detailed: string;
+    model: string;
+    inputHash: string;
+    generationVersion?: number;
+    options?: RecordingSummaryOptions;
+    reviewedChunks?: ReviewedSummaryChunk[];
+}
+
+export interface SummaryProgressEvent {
+    sessionId: string;
+    message: string;
+    saved?: SessionSummary;
+}
+
+export type SummaryGenerationFailure = 'busy' | 'cancelled' | 'model-missing' | 'runtime-unavailable' | 'transcript-changed' | 'no-transcript' | 'prompt-too-long' | 'failed';
+export type SummaryGenerationResult = { ok: true; summary: SessionSummary } | { ok: false; reason: SummaryGenerationFailure };
+
 export interface SessionTranscriptV1 {
     version: 1;
     segments: SessionTranscriptSegmentV1[];
+    summary?: SessionSummary;
     recognitionRevision?: string;
     recognitionSegments?: SessionTranscriptSegmentV1[];
     speakers?: SessionSpeakerMetadataV1;

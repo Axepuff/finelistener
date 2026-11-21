@@ -1,23 +1,24 @@
-# FineListener 1.5.0-beta.1
+# FineListener 1.6.0-beta.1
 
-The **Speakers** tab now opens in **Reading**. Speaker colors show who is talking within each paragraph, including short replies. The text keeps the original words and punctuation from Whisper. Select a word with a timestamp to play from it, or switch to **Turns** to review and correct speaker assignments.
+The new **Summary** tab generates a **Brief overview** and **Detailed notes** from a saved transcript locally. Edit the **Prompt** to guide the summary. Results are saved with the session and remain available when you reopen it.
 
 ## Downloads
 
 | Platform | Installer | ZIP archive |
 | --- | --- | --- |
-| Windows x64 CPU | [Download installer](https://github.com/Axepuff/finelistener/releases/download/v1.5.0-beta.1/FineListener-1.5.0-beta.1-win-x64-cpu-setup.exe) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.5.0-beta.1/FineListener-1.5.0-beta.1-win-x64-cpu.zip) |
-| Windows x64 GPU | [Download installer](https://github.com/Axepuff/finelistener/releases/download/v1.5.0-beta.1/FineListener-1.5.0-beta.1-win-x64-gpu-setup.exe) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.5.0-beta.1/FineListener-1.5.0-beta.1-win-x64-gpu.zip) |
-| macOS Apple Silicon | [Download DMG](https://github.com/Axepuff/finelistener/releases/download/v1.5.0-beta.1/FineListener-1.5.0-beta.1-mac-arm64.dmg) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.5.0-beta.1/FineListener-1.5.0-beta.1-mac-arm64.zip) |
+| Windows x64 CPU | [Download installer](https://github.com/Axepuff/finelistener/releases/download/v1.6.0-beta.1/FineListener-1.6.0-beta.1-win-x64-cpu-setup.exe) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.6.0-beta.1/FineListener-1.6.0-beta.1-win-x64-cpu.zip) |
+| Windows x64 GPU | [Download installer](https://github.com/Axepuff/finelistener/releases/download/v1.6.0-beta.1/FineListener-1.6.0-beta.1-win-x64-gpu-setup.exe) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.6.0-beta.1/FineListener-1.6.0-beta.1-win-x64-gpu.zip) |
+| macOS Apple Silicon | [Download DMG](https://github.com/Axepuff/finelistener/releases/download/v1.6.0-beta.1/FineListener-1.6.0-beta.1-mac-arm64.dmg) | [Download ZIP](https://github.com/Axepuff/finelistener/releases/download/v1.6.0-beta.1/FineListener-1.6.0-beta.1-mac-arm64.zip) |
 
 Choose Windows CPU if you are unsure which Windows build to use. The Mac beta targets macOS 15 or later on M1 or newer; Intel Macs are not supported by this release. Windows requires Windows 10 version 1903 or later.
 
-[Installation and first-launch instructions](https://github.com/Axepuff/finelistener/blob/v1.5.0-beta.1/INSTALL.md) · [SHA-256 checksums](https://github.com/Axepuff/finelistener/releases/download/v1.5.0-beta.1/SHA256SUMS.txt)
+[Installation and first-launch instructions](https://github.com/Axepuff/finelistener/blob/v1.6.0-beta.1/INSTALL.md) · [SHA-256 checksums](https://github.com/Axepuff/finelistener/releases/download/v1.6.0-beta.1/SHA256SUMS.txt)
 
 ## Included
 
 - Record microphone and system audio or import an existing recording.
 - Transcribe locally with Whisper and label speakers with Nemotron 3. Audio processing stays on your computer.
+- Generate summaries offline after downloading the separate Qwen3-4B-Instruct-2507 Q4_K_M model (about 2.50 GB). The summary model is not bundled with the installer.
 - During overlapping speech, Reading uses the saved speaker assignment when available. If the color is estimated from voice activity, the tooltip on the word identifies the estimate.
 - Save sessions and reopen their recordings and transcripts, including revealing a session's folder.
 - Choose CPU or supported GPU acceleration for speaker analysis. Ambiguous overlapping speech can remain **Unknown speaker**.
@@ -36,5 +37,6 @@ The basic transcription model is bundled. Speaker analysis downloads an addition
 - The first Metal capability check may take about a minute. If GPU speaker analysis fails, choose CPU and retry; the saved transcript remains available.
 - Automatic updates are not included. Install newer releases manually.
 - Recognition and speaker labels can be inaccurate, especially during overlapping speech. Review important transcripts.
+- Summaries can omit details or contain incorrect claims. Check important results against the transcript and recording. Generation can fail; completed detailed notes are saved so the brief can be retried with the same prompt.
 
 [Report a problem](https://github.com/Axepuff/finelistener/issues) with the version, OS, selected build and reproduction steps. Avoid attaching private recordings or transcripts.
