@@ -7,7 +7,7 @@ import { AppStore } from '../stores/appStore';
 import { createFakeRendererAdapter } from '../stores/testing/fakeRendererAdapter';
 import { STORY_AUDIO_PATH } from './storyAudio';
 
-export type WorkspaceScenario = 'empty' | 'ready' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error'
+export type WorkspaceScenario = 'empty' | 'ready' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error' | 'recording-start-error'
     | 'summary-ready' | 'summary-install' | 'summary-downloading' | 'summary-download-error' | 'summary-generating'
     | 'summary-cancel' | 'summary-error' | 'summary-saved' | 'summary-partial'
     | 'nemotron' | 'nemotron-reading' | 'nemotron-downloading' | 'nemotron-analyzing' | 'nemotron-error';
@@ -218,7 +218,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         onRecordingLevel: (callback) => { levelListener = callback; return () => { levelListener = null; }; },
         onRecordingProgress: (callback) => { progressListener = callback; return () => { progressListener = null; }; },
         startSystemRecording: () => {
-            if (scenario === 'recording-error') return Promise.reject(new Error('Demo recording device unavailable'));
+            if (scenario === 'recording-error' || scenario === 'recording-start-error') return Promise.reject(new Error('Demo recording device unavailable'));
             recordingState = 'recording';
             emitRecording();
             return Promise.resolve({ recordingId: 'demo-recording', startedAt: Date.now() });

@@ -1,6 +1,6 @@
 import { Box, Button, Divider, Group, Text } from '@mantine/core';
 import { IconPlayerStopFilled, IconUpload } from '@tabler/icons-react';
-import { useSystemAudioRecorder } from '@~/recorder/src/ui/SystemAudioRecorder/core/useSystemAudioRecorder';
+import { useSystemAudioRecorder } from '@~/recorder';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useAppStore } from 'renderer/src/AppContext';

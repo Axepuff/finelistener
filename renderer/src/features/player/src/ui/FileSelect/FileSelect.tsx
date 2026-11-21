@@ -1,8 +1,9 @@
 import { Button, Paper, SegmentedControl, Stack, Text } from '@mantine/core';
 import { IconFileMusic } from '@tabler/icons-react';
 import { RecordingRecovery, SystemAudioRecorder } from '@~/recorder';
+import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
-import { useMemo, useState, type FC } from 'react';
+import { useEffect, useMemo, useState, type FC } from 'react';
 import { useAppStore } from '../../../../../AppContext';
 
 type SourceMode = 'file' | 'record';
@@ -17,6 +18,21 @@ const shortenFileName = (target: string): string => target.split(/[/\\]/).pop() 
 export const FileSelect: FC = observer(() => {
     const store = useAppStore();
     const [sourceMode, setSourceMode] = useState<SourceMode>('file');
+
+    // Recording can also start from the title bar; switch to the recorder so its progress
+    // and errors are visible. Each start attempt and each new error switches it again.
+    useEffect(() => {
+        const showRecorder = (shouldShow: unknown) => {
+            if (shouldShow) setSourceMode('record');
+        };
+        const disposeOperation = reaction(() => store.operations.kind === 'recording', showRecorder, { fireImmediately: true });
+        const disposeError = reaction(() => store.recording.session.recordingError, showRecorder, { fireImmediately: true });
+
+        return () => {
+            disposeOperation();
+            disposeError();
+        };
+    }, [store]);
 
     const handlePick = async () => {
         const result = await store.importAudio();

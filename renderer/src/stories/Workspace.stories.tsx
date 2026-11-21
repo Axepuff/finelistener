@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, spyOn, userEvent, waitFor, within } from 'storybook/test';
+import { useState, type FC } from 'react';
+import { expect, fireEvent, spyOn, userEvent, waitFor, within } from 'storybook/test';
 import { Home } from '../Home';
 import { TranscribedText } from '../features/transcribed-text';
 import { createStoryWorkspace, type WorkspaceScenario, type StoryWorkspace } from './storyWorkspace';
@@ -39,6 +40,15 @@ export const Transcript: Story = {
     },
 };
 export const Empty: Story = { parameters: { scenario: 'empty' } };
+export const RecordingStartError: Story = {
+    parameters: { scenario: 'recording-start-error', docs: { description: { story: 'Recording started from the title bar fails; the recorder opens with the error. The developer console contains the expected failure log.' } } },
+    play: async ({ canvas }) => {
+        const start = within(canvas.getByRole('banner')).getByRole('button', { name: 'Start recording' });
+        await waitFor(() => expect(start).toBeEnabled());
+        await userEvent.click(start);
+        await waitFor(() => expect(canvas.getByText('Could not start recording. Check the selected devices.')).toBeVisible());
+    },
+};
 export const AudioReady: Story = { parameters: { scenario: 'ready' } };
 export const Transcribing: Story = { parameters: { scenario: 'transcribing' } };
 export const TranscriptionError: Story = { parameters: { scenario: 'error', docs: { description: { story: 'An intentional adapter failure demonstrates the real transcription error state. The developer console contains the expected failure log.' } } } };
@@ -222,5 +232,44 @@ export const SessionFolder: Story = {
         await userEvent.click(page.getByRole('menuitem', { name: 'Reveal session folder' }));
         await waitFor(() => expect(page.queryByRole('menuitem', { name: 'Reveal session folder' })).not.toBeInTheDocument());
         await expect(store.workspace.activeSessionId).toBeNull();
+    },
+};
+
+const PANEL_TEST_WIDTH = 1185;
+
+const RemountableWorkspace: FC = () => {
+    const [mountKey, setMountKey] = useState(0);
+
+    return (
+        <div style={{ width: PANEL_TEST_WIDTH }}>
+            <button type="button" onClick={() => setMountKey((key) => key + 1)}>{'Remount workspace'}</button>
+            <Home key={mountKey} />
+        </div>
+    );
+};
+
+export const RememberedPanelWidths: Story = {
+    render: () => <RemountableWorkspace />,
+    play: async ({ canvas, canvasElement, loaded }) => {
+        const { store } = loaded.workspace as StoryWorkspace;
+        const widths = () => ['nav[aria-label="Sessions"]', 'main', 'aside'].map((selector) => (
+            Math.round(canvasElement.querySelector(selector)?.getBoundingClientRect().width ?? 0)
+        ));
+        await waitFor(() => expect(widths()).toEqual([300, 525, 360]));
+        const separator = canvas.getByRole('separator', { name: 'Resize sessions panel' });
+        const startX = separator.getBoundingClientRect().left + 5;
+        await fireEvent.pointerDown(separator, { clientX: startX });
+        // The move listener is attached by an effect after the resize state updates.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        await fireEvent.pointerMove(window, { clientX: startX + 300 });
+        await fireEvent.pointerUp(window);
+        // Sessions grows until Settings reaches its 320px minimum; the transcript keeps 440px.
+        await waitFor(() => expect(widths()).toEqual([425, 440, 320]));
+        await waitFor(async () => expect([
+            await store.getUiPreference('homeSidebarWidth'),
+            await store.getUiPreference('homeRightSidebarWidth'),
+        ]).toEqual([425, 320]));
+        await userEvent.click(canvas.getByRole('button', { name: 'Remount workspace' }));
+        await waitFor(() => expect(widths()).toEqual([425, 440, 320]));
     },
 };

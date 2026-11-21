@@ -77,6 +77,8 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
 
     // The sidebar resized last keeps its width when space runs out; the other one shrinks first.
     const [lastResizedSidebar, setLastResizedSidebar] = useState<SidebarPosition | null>(null);
+    // Set after both sidebars are created, so the handler of one can reach the other.
+    const resizeEndRef = useRef<((position: SidebarPosition) => void) | null>(null);
 
     // Widest the dragged sidebar may become: the other sidebar can give up space down to its
     // minimum width, the content never goes below contentMinWidth.
@@ -142,6 +144,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
             const handlePointerUp = () => {
                 setIsSidebarResizing(false);
                 resizeStateRef.current = null;
+                resizeEndRef.current?.(position);
             };
 
             window.addEventListener('pointermove', handlePointerMove);
@@ -246,6 +249,7 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
 
         return {
             sidebarWidth,
+            setSidebarWidth: (value: number) => setSidebarWidth(clampSidebarWidth(value)),
             isSidebarResizing,
             handleSidebarResizeStart,
         };
@@ -253,6 +257,22 @@ export const ResizableSidebarLayout: React.FC<Props> = ({
 
     const leftSidebarState = useResizableSidebar(resolvedLeftSidebar, 'left');
     const rightSidebarState = useResizableSidebar(resolvedRightSidebar, 'right');
+
+    // After a drag, store the width the other sidebar was squeezed to. Both saved widths then
+    // fit together, so the layout comes back the same after a restart, without the
+    // last-resized priority that only lives in memory.
+    resizeEndRef.current = (position) => {
+        const otherState = position === 'left' ? rightSidebarState : leftSidebarState;
+        const otherSidebar = position === 'left' ? rightSidebarRef.current : leftSidebarRef.current;
+
+        if (!otherSidebar) return;
+
+        const renderedWidth = Math.floor(otherSidebar.getBoundingClientRect().width);
+
+        if (renderedWidth < otherState.sidebarWidth) {
+            otherState.setSidebarWidth(renderedWidth);
+        }
+    };
 
     const contentNode = (
         <Box style={{ minWidth: contentMinWidth, minHeight: 0, flex: 1, overflow: 'hidden' }}>
