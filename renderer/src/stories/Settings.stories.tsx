@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, spyOn, userEvent, waitFor, within } from 'storybook/test';
 import { Home } from '../Home';
 import { createStoryWorkspace, type WorkspaceScenario, type StoryWorkspace } from './storyWorkspace';
 import { StoryWorkspaceProvider } from './StoryWorkspaceProvider';
@@ -66,3 +66,65 @@ export const CancelDownload: Story = {
 export const Failed: Story = { parameters: { scenario: 'settings-failed' } };
 
 export const Downloading: Story = { parameters: { scenario: 'settings-downloading' } };
+
+
+export const RecorderWithOpenSession: Story = {
+    parameters: { scenario: 'settings-recording-error' },
+    play: async ({ canvas, canvasElement, loaded }) => {
+        const page = within(canvasElement.ownerDocument.body);
+        const { store, adapter } = loaded.workspace as StoryWorkspace;
+        const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
+        // The controls must remain mounted in Home when an existing session is open.
+        await expect(settings.queryByLabelText('System audio')).not.toBeNull();
+        const disclosure = settings.getByText('Recording settings', { selector: 'summary' });
+        disclosure.focus();
+        await userEvent.keyboard('{Enter}');
+        const recorder = within(settings.getByRole('region', { name: 'Recording controls' }));
+        await waitFor(() => expect(recorder.getByRole('textbox', { name: 'System audio' })).toBeEnabled());
+        await userEvent.click(recorder.getByRole('textbox', { name: 'System audio' }));
+        await userEvent.click(page.getByRole('option', { name: 'Off' }));
+        await expect(recorder.getByRole('textbox', { name: 'System audio' })).toHaveValue('Off');
+        await userEvent.click(disclosure);
+        const start = spyOn(adapter, 'startSystemRecording');
+        try {
+            const header = within(canvas.getByRole('banner'));
+            await userEvent.click(header.getByRole('button', { name: 'Start recording' }));
+            await waitFor(() => expect(recorder.getByText('Could not start recording. Check the selected devices.')).toBeVisible());
+            await expect(store.workspace.activeSessionId).toBe('storybook-session');
+            await expect(start).toHaveBeenLastCalledWith(expect.objectContaining({ sources: { system: null, microphone: 'demo-microphone' } }));
+            await userEvent.click(recorder.getByRole('textbox', { name: 'System audio' }));
+            await userEvent.click(page.getByRole('option', { name: 'Default device' }));
+            await userEvent.click(recorder.getByRole('button', { name: 'Start recording' }));
+            await waitFor(() => expect(recorder.getByText('Written: 1313 KB')).toBeVisible());
+            await expect(recorder.getByText('System audio: 40% peak, 12% rms')).toBeVisible();
+            await expect(recorder.getByText('Microphone: 20% peak, 6% rms')).toBeVisible();
+            await expect(recorder.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
+            await expect(recorder.getByRole('textbox', { name: 'System audio' })).toBeDisabled();
+            await expect(settings.getByRole('button', { name: 'Transcribe' })).toBeDisabled();
+            await userEvent.click(header.getByRole('button', { name: 'Stop recording' }));
+            await waitFor(() => expect(recorder.getByRole('textbox', { name: 'Microphone' })).toBeEnabled());
+            await expect(settings.getByRole('button', { name: 'Transcribe' })).toBeEnabled();
+        } finally { start.mockRestore(); }
+    },
+};
+
+export const RecorderWarningInWorkspace: Story = {
+    parameters: { scenario: 'settings-recording-silence' },
+    play: async ({ canvas, loaded }) => {
+        const { adapter } = loaded.workspace as StoryWorkspace;
+        const privacy = spyOn(adapter, 'openRecordingPreferences');
+        try {
+            const header = within(canvas.getByRole('banner'));
+            await userEvent.click(header.getByRole('button', { name: 'Start recording' }));
+            const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
+            await waitFor(() => expect(settings.getByText(/No system audio detected/)).toBeVisible(), { timeout: 5000 });
+            await userEvent.click(settings.getByRole('button', { name: 'Open privacy settings' }));
+            await expect(privacy).toHaveBeenCalledOnce();
+            await userEvent.click(header.getByRole('button', { name: 'Stop recording' }));
+            await waitFor(() => expect(settings.queryByText(/No system audio detected/)).not.toBeInTheDocument());
+        } finally { privacy.mockRestore(); }
+    },
+};
+export const RecordingInWorkspace: Story = { parameters: { scenario: 'settings-recording' } };
+
+export const RecorderSetup: Story = { parameters: { scenario: 'settings-recording-error' } };

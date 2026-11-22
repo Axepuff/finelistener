@@ -5,6 +5,7 @@ import React, { useCallback, useState } from 'react';
 import { useAppStore } from '../../../../../AppContext';
 import { TranscribeAdvancedSettings } from '../TranscribeAdvancedSettings/TranscribeAdvancedSettings';
 import { SourceCard } from './SourceCard';
+import { RecordingSettings } from './RecordingSettings';
 import './Settings.css';
 import { WhisperModelSelect } from '../WhisperModelSelect/WhisperModelSelect';
 
@@ -92,6 +93,7 @@ const TranscribeControl: React.FC = observer(() => {
             <Stack gap={20} className="settings-panel__scroll">
                 <Text component="h2" size="lg" fw={600} m={0}>Settings</Text>
                 <SourceCard />
+                <RecordingSettings />
                 <Select
                     w="100%"
                     label="Language"

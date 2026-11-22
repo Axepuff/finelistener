@@ -9,7 +9,7 @@ import type { RendererAdapter } from '../stores/rendererAdapter';
 import { createFakeRendererAdapter } from '../stores/testing/fakeRendererAdapter';
 import { STORY_AUDIO_PATH } from './storyAudio';
 
-export type WorkspaceScenario = 'settings-models' | 'settings-downloading' | 'settings-failed' | 'empty' | 'ready' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error' | 'recording-start-error'
+export type WorkspaceScenario = 'settings-recording-error' | 'settings-recording-silence' | 'settings-recording' | 'settings-models' | 'settings-downloading' | 'settings-failed' | 'empty' | 'ready' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error' | 'recording-start-error'
     | 'summary-ready' | 'summary-install' | 'summary-downloading' | 'summary-download-error' | 'summary-generating'
     | 'summary-cancel' | 'summary-error' | 'summary-saved' | 'summary-partial'
     | 'nemotron' | 'nemotron-reading' | 'nemotron-downloading' | 'nemotron-analyzing' | 'nemotron-error'
@@ -172,6 +172,8 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         state: 'recoverable', sources: ['system'], sourceWarnings: [], canRecover: true,
     }] : [];
     let recordingState: RecordingState = scenario === 'recording' ? 'recording' : 'idle';
+    let recordingAttempt = 0;
+    let silenceTimer: ReturnType<typeof setTimeout> | undefined;
     let stateListener: ((state: RecordingState) => void) | null = null;
     let levelListener: ((level: RecordingLevel) => void) | null = null;
     let progressListener: ((progress: RecordingProgress) => void) | null = null;
@@ -183,12 +185,12 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         stateListener?.(recordingState);
         if (recordingState === 'recording') {
             levelListener?.({ source: 'system', rms: 0.12, peak: 0.4, clipped: false });
-            levelListener?.({ source: 'microphone', rms: 0.06, peak: 0.2, clipped: false });
+            if (scenario !== 'settings-recording-silence') levelListener?.({ source: 'microphone', rms: 0.06, peak: 0.2, clipped: false });
             progressListener?.({ durationMs: 42000, bytesWritten: 1344000 });
         }
     };
     const fake = createFakeRendererAdapter({
-        runtimePlatform: 'win32',
+        runtimePlatform: scenario === 'settings-recording-silence' ? 'darwin' : 'win32',
         ...(isNemotron ? { getSpeakerAssets: () => Promise.resolve({ gpuBackend: 'vulkan' as const,
             ready: scenario !== 'nemotron-downloading', gpuAvailable: scenario !== 'nemotron-error', downloadBytes: 123_671_929 }) } : {}),
         listSessions: () => Promise.resolve(sessions),
@@ -281,12 +283,20 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         onRecordingLevel: (callback) => { levelListener = callback; return () => { levelListener = null; }; },
         onRecordingProgress: (callback) => { progressListener = callback; return () => { progressListener = null; }; },
         startSystemRecording: () => {
+            recordingAttempt += 1;
+            if (scenario === 'settings-recording-error' && recordingAttempt === 1) return Promise.reject(new Error('Demo recording device unavailable'));
             if (scenario === 'recording-error' || scenario === 'recording-start-error') return Promise.reject(new Error('Demo recording device unavailable'));
             recordingState = 'recording';
             emitRecording();
+            if (scenario === 'settings-recording-silence') {
+                const silent = { source: 'system' as const, rms: 0, peak: 0, clipped: false };
+                levelListener?.(silent);
+                silenceTimer = setTimeout(() => levelListener?.(silent), 2100);
+            }
             return Promise.resolve({ recordingId: 'demo-recording', startedAt: Date.now() });
         },
         stopSystemRecording: () => {
+            clearTimeout(silenceTimer);
             recordingState = 'idle';
             emitRecording();
             session = { ...session, sourceKind: 'recorded' };
@@ -334,7 +344,8 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         else void run.catch((error: unknown) => { console.error('Story transcription setup failed', error); });
     }
     if (scenario === 'recording-error') await store.recording.startRecording();
-    if (scenario === 'recording') emitRecording();
+    if (scenario === 'settings-recording') recordingState = 'recording';
+    if (scenario === 'recording' || scenario === 'settings-recording') emitRecording();
     if (isNemotron) {
         await store.speakers.setEnabled(true);
         if (scenario === 'nemotron-downloading' || scenario === 'nemotron-analyzing') {
@@ -351,6 +362,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         store,
         adapter: fake.adapter,
         dispose: () => {
+            clearTimeout(silenceTimer);
             void store.whisperModels.cancelDownload();
             finishModelDownload?.();
             store.dispose();

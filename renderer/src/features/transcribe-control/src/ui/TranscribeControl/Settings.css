@@ -24,3 +24,5 @@
 
 .settings-source__icon { display: flex; align-items: center; justify-content: center; flex: 0 0 32px; height: 32px; border-radius: 4px; background: var(--brand-color-fill-tertiary); color: var(--brand-color-text-secondary); }
 .settings-panel .settings-source .settings-link { align-self: center; }
+.settings-recording summary { cursor: pointer; font-weight: 600; line-height: 32px; }
+.settings-recording summary:focus-visible { outline: 2px solid var(--brand-color-link-active); outline-offset: 2px; }
