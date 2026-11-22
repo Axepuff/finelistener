@@ -11,6 +11,8 @@ const url = `https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/
 const promptFileName = /^prompt-[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}\.txt$/u;
 const fileStamp = (info: BigIntStats): string => `${info.dev}/${info.ino}/${info.mtimeNs}/${info.ctimeNs}`;
 
+type ReportWrittenBytes = (bytes: number, notifyProgress?: boolean) => void;
+
 function status(state: SummaryModelStatus['state'], downloadedBytes = 0, error?: SummaryModelStatus['error']): SummaryModelStatus {
     return { state, model: artifact.name, totalBytes: artifact.bytes, downloadedBytes, ...(error && { error }) };
 }
@@ -89,8 +91,9 @@ export class SummaryModelService {
         const controller = new AbortController();
         let downloadedBytes = 0;
         let percent = 0;
-        const promise = this.install(controller.signal, (bytes) => {
+        const promise = this.install(controller.signal, (bytes, notifyProgress = true) => {
             downloadedBytes = bytes;
+            if (!notifyProgress) return;
             const next = Math.floor(bytes * 100 / artifact.bytes);
             if (percent !== next) {
                 percent = next;
@@ -126,7 +129,7 @@ export class SummaryModelService {
         await Promise.all([active?.promise, this.promptCleanup]);
     }
 
-    private async install(signal: AbortSignal, onWritten: (bytes: number) => void): Promise<void> {
+    private async install(signal: AbortSignal, onWritten: ReportWrittenBytes): Promise<void> {
         const partial = this.file + '.partial';
         try {
             const installed = await this.isInstalled(signal).catch((error: unknown) => {
@@ -151,7 +154,7 @@ export class SummaryModelService {
         }
     }
 
-    private async installVerifiedDownload(partial: string, signal: AbortSignal, onWritten: (bytes: number) => void): Promise<void> {
+    private async installVerifiedDownload(partial: string, signal: AbortSignal, onWritten: ReportWrittenBytes): Promise<void> {
         const output = await fs.open(partial, 'wx', 0o600);
         let published = false;
         try {
@@ -176,7 +179,7 @@ export class SummaryModelService {
         }
     }
 
-    private async writeVerifiedDownload(output: FileHandle, signal: AbortSignal, onWritten: (bytes: number) => void): Promise<void> {
+    private async writeVerifiedDownload(output: FileHandle, signal: AbortSignal, onWritten: ReportWrittenBytes): Promise<void> {
         signal.throwIfAborted();
         const response = await net.fetch(url, { signal, credentials: 'omit', cache: 'no-store' });
         if (!response.ok || !response.body) {
@@ -190,7 +193,17 @@ export class SummaryModelService {
                 received += chunk.byteLength;
                 if (received > artifact.bytes) throw new Error('Summary model exceeds its expected size');
                 hash.update(chunk);
-                await output.writeFile(chunk);
+                try {
+                    await output.writeFile(chunk);
+                } catch (error) {
+                    // writeFile can reject after writing part of a chunk.
+                    try {
+                        onWritten((await output.stat()).size, false);
+                    } catch (statError) {
+                        console.warn('Could not measure the interrupted summary model write', statError);
+                    }
+                    throw error;
+                }
                 onWritten(received);
             },
         }), { signal });
