@@ -327,46 +327,53 @@ export class SessionsService {
         const sessionDir = path.join(sessionsRoot, sessionId);
         const audioDir = path.join(sessionDir, ORIGINAL_AUDIO_DIR);
 
-        await fs.mkdir(audioDir, { recursive: true });
-
-        const sourceExt = path.extname(sourcePath) || '';
-        const safeExt = sourceExt && sourceExt.length <= 10 ? sourceExt : '';
-        const originalFileName = path.basename(sourcePath) || `audio${safeExt || ''}`;
-        const audioRelativePath = path.join(ORIGINAL_AUDIO_DIR, `original${safeExt || ''}`);
-        const targetAudioPath = path.join(sessionDir, audioRelativePath);
-
-        await fs.copyFile(sourcePath, targetAudioPath);
-
-        const targetWavPath = path.join(sessionDir, SESSION_WAV_RELATIVE_PATH);
-        const { path: tmpWavPath, cleanup } = await this.audioPreprocessor.convertAudio({
-            audioPath: targetAudioPath,
-            ...SESSION_WAV_CONVERT_OPTIONS,
-        });
-
         try {
-            await fs.mkdir(path.dirname(targetWavPath), { recursive: true });
-            await fs.copyFile(tmpWavPath, targetWavPath);
-        } finally {
-            await cleanup().catch(() => void 0);
+            await fs.mkdir(audioDir, { recursive: true });
+
+            const sourceExt = path.extname(sourcePath) || '';
+            const safeExt = sourceExt && sourceExt.length <= 10 ? sourceExt : '';
+            const originalFileName = path.basename(sourcePath) || `audio${safeExt || ''}`;
+            const audioRelativePath = path.join(ORIGINAL_AUDIO_DIR, `original${safeExt || ''}`);
+            const targetAudioPath = path.join(sessionDir, audioRelativePath);
+
+            await fs.copyFile(sourcePath, targetAudioPath);
+
+            const targetWavPath = path.join(sessionDir, SESSION_WAV_RELATIVE_PATH);
+            const { path: tmpWavPath, cleanup } = await this.audioPreprocessor.convertAudio({
+                audioPath: targetAudioPath,
+                ...SESSION_WAV_CONVERT_OPTIONS,
+            });
+
+            try {
+                await fs.mkdir(path.dirname(targetWavPath), { recursive: true });
+                await fs.copyFile(tmpWavPath, targetWavPath);
+            } finally {
+                await cleanup().catch(() => void 0);
+            }
+
+            const wavRelativePath = SESSION_WAV_RELATIVE_PATH;
+
+            const sessionFile: SessionFileV1 = {
+                version: SESSION_VERSION,
+                id: sessionId,
+                title: originalFileName,
+                createdAt,
+                updatedAt: createdAt,
+                sourceKind: 'imported',
+                audio: {
+                    originalFileName,
+                    originalPath: audioRelativePath,
+                    wavPath: wavRelativePath,
+                },
+            };
+
+            await writeJsonFile(path.join(sessionDir, SESSION_FILE_NAME), sessionFile);
+        } catch (error: unknown) {
+            await fs.rm(sessionDir, { recursive: true, force: true }).catch((cleanupError: unknown) => {
+                console.error('Failed to clean up the incomplete imported session', cleanupError);
+            });
+            throw error;
         }
-
-        const wavRelativePath = SESSION_WAV_RELATIVE_PATH;
-
-        const sessionFile: SessionFileV1 = {
-            version: SESSION_VERSION,
-            id: sessionId,
-            title: originalFileName,
-            createdAt,
-            updatedAt: createdAt,
-            sourceKind: 'imported',
-            audio: {
-                originalFileName,
-                originalPath: audioRelativePath,
-                wavPath: wavRelativePath,
-            },
-        };
-
-        await writeJsonFile(path.join(sessionDir, SESSION_FILE_NAME), sessionFile);
 
         return this.getSession(sessionId);
     }
