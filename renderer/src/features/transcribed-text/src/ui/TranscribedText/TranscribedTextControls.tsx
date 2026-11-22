@@ -100,8 +100,8 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
                     ]}
                 />
 
-                {view !== 'summary' && (
-                    <Group gap={8} align="center" wrap="nowrap" className={styles.actionsGroup}>
+                <Group gap={8} align="center" wrap="nowrap" className={view === 'summary' ? styles.summaryActions : styles.actionsGroup}>
+                    {view !== 'summary' && (
                         <div className={styles.searchField} role="search" aria-label="Transcript">
                             <IconSearch size={16} aria-hidden="true" />
                             <input
@@ -140,28 +140,28 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
                                 </>
                             ) : null}
                         </div>
-                        <ActionIcon
-                            variant="default"
-                            disabled={currentTextValue.length === 0}
-                            onClick={handleCopy}
-                            aria-label="Copy transcript"
-                            title="Copy transcript"
-                            size={32}
-                        >
-                            <IconCopy size={16} />
-                        </ActionIcon>
-                        <Button
-                            size="sm"
-                            variant="default"
-                            disabled={currentTextValue.length === 0}
-                            onClick={handleSave}
-                            leftSection={<IconDownload size={16} />}
-                            className={styles.exportButton}
-                        >
-                            Export
-                        </Button>
-                    </Group>
-                )}
+                    )}
+                    {(view !== 'summary' || currentTextValue) && <ActionIcon
+                        variant="default"
+                        disabled={currentTextValue.length === 0}
+                        onClick={handleCopy}
+                        aria-label={view === 'summary' ? 'Copy summary' : 'Copy transcript'}
+                        title={view === 'summary' ? 'Copy summary' : 'Copy transcript'}
+                        size={32}
+                    >
+                        <IconCopy size={16} />
+                    </ActionIcon>}
+                    <Button
+                        size="sm"
+                        variant="default"
+                        disabled={currentTextValue.length === 0}
+                        onClick={handleSave}
+                        leftSection={<IconDownload size={16} />}
+                        className={styles.exportButton}
+                    >
+                        {view === 'summary' ? 'Export summary' : 'Export'}
+                    </Button>
+                </Group>
             </div>
             {view !== 'summary' && store.transcription.duplicateFilterAvailable ? (
                 <Switch
