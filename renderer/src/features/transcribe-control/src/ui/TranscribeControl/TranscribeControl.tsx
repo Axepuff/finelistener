@@ -201,7 +201,7 @@ const TranscribeControl: React.FC = observer(() => {
                         disabled={loading || !canStart}
                         leftSection={loading ? <Loader size={12} /> : <IconHeadphones size={16} />}
                     >
-                        {'Transcribe'}
+                        {store.workspace.selectedSegment ? 'Transcribe segment' : 'Transcribe whole file'}
                     </Button>
                     <ActionIcon onClick={handleStop} color="red" size={36} disabled={!isTranscribing}>
                         <IconPlayerStopFilled size={20} />

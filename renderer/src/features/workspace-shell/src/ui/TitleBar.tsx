@@ -1,6 +1,6 @@
-import { Box, Button, Divider, Group, Text } from '@mantine/core';
+import { Box, Button, Divider, Group, Loader, Text } from '@mantine/core';
 import { IconPlayerStopFilled, IconUpload } from '@tabler/icons-react';
-import { useSystemAudioRecorder } from '@~/recorder';
+import { formatDuration, useSystemAudioRecorder } from '@~/recorder';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useAppStore } from 'renderer/src/AppContext';
@@ -10,6 +10,15 @@ import './TitleBar.css';
 // Room for the macOS traffic-light buttons drawn over the hidden-inset title bar.
 const MAC_WINDOW_CONTROLS_INSET = 84;
 
+const languageLabel = (language: string) => {
+    if (language === 'auto') return 'Auto';
+    try {
+        return new Intl.DisplayNames(['en'], { type: 'language' }).of(language) ?? language;
+    } catch {
+        return language;
+    }
+};
+
 const RecordingDot: React.FC = () => (
     <Box component="span" style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--brand-color-error)' }} />
 );
@@ -18,6 +27,8 @@ export const TitleBar: React.FC = observer(() => {
     const store = useAppStore();
     const session = store.workspace.activeSession;
     const { controls: recorder } = useSystemAudioRecorder();
+    const isRecording = store.operations.kind === 'recording';
+    const isTranscribing = store.operations.kind === 'transcribing';
 
     const handleImport = async () => {
         const result = await store.importAudio();
@@ -43,18 +54,30 @@ export const TitleBar: React.FC = observer(() => {
             }}
         >
             <Text size="sm" fw={600} style={{ flexShrink: 0 }}>{'FineListener'}</Text>
-            {session ? (
+            {session || isRecording ? (
                 <>
-                    <Divider orientation="vertical" my={14} />
-                    <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
-                        <Text size="sm" fw={600} truncate="end">{session.title}</Text>
-                        <Text size="xs" c="var(--brand-color-text-secondary)" style={{ flexShrink: 0 }}>
-                            {`Saved · ${new Date(session.updatedAt).toLocaleString()}`}
-                        </Text>
+                    <Divider orientation="vertical" my={16} />
+                    <Group className="workspace-title-bar__session" gap={8} wrap="nowrap">
+                        {session ? <Text size="sm" fw={600} truncate="end" title={session.title}>{session.title}</Text> : null}
+                        {isRecording || isTranscribing ? (
+                            <Box component="span" role="status" className="workspace-title-bar__status" data-recording={isRecording || undefined}>
+                                {isRecording ? <RecordingDot /> : <Loader size={12} />}
+                                {isRecording ? `Recording ${formatDuration(recorder.recordingDurationMs).padStart(5, '0')}` : `Transcribing… ${Math.round(store.transcription.progress)}%`}
+                            </Box>
+                        ) : session ? (
+                            <>
+                                <Box component="span" className="workspace-title-bar__language">
+                                    {languageLabel(session.transcription?.language ?? 'auto')}
+                                </Box>
+                                <Text className="workspace-title-bar__saved" size="xs" c="var(--brand-color-text-secondary)">
+                                    {`Saved · ${new Date(session.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}`}
+                                </Text>
+                            </>
+                        ) : null}
                     </Group>
                 </>
             ) : null}
-            <Box style={{ flex: 1 }} />
+            {!session && !isRecording ? <Box style={{ flex: 1 }} /> : null}
             <Button
                 variant="default"
                 leftSection={<IconUpload size={16} />}

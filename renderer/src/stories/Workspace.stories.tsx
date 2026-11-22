@@ -25,16 +25,27 @@ export const Transcript: Story = {
     play: async ({ canvas }) => {
         await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
         await userEvent.type(canvas.getByRole('textbox', { name: 'Search transcript' }), 'recording');
-        await expect(canvas.getByRole('status')).toHaveTextContent('1 of 2');
+        await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('1 of 2'));
         await userEvent.click(canvas.getByRole('button', { name: 'Clear search' }));
         await userEvent.click(canvas.getByRole('radio', { name: 'Timecodes' }));
         await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
-        await waitFor(() => expect(canvas.getByText('Current position: 00:04.00')).toBeVisible());
+        await waitFor(() => expect(canvas.getByLabelText('Current position: 00:04.00 / 00:12.00')).toBeVisible());
         await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
         await userEvent.click(canvas.getByText('[00:00:08 - 00:00:12]'));
         await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
-        await expect(canvas.getByText('Selected segment: 00:04.00 — 00:08.00')).toBeVisible();
-        await userEvent.click(canvas.getByRole('button', { name: 'Clear selection' }));
+        await expect(canvas.getByText('Segment 00:04.00 — 00:08.00')).toBeVisible();
+        await expect(canvas.getByRole('button', { name: 'Transcribe segment' })).toBeEnabled();
+        canvas.getByRole('button', { name: 'Clear segment' }).focus();
+        await userEvent.keyboard('{Enter}');
+        await expect(canvas.queryByText('Segment 00:04.00 — 00:08.00')).not.toBeInTheDocument();
+        await expect(canvas.getByRole('button', { name: 'Transcribe whole file' })).toBeEnabled();
+        await userEvent.click(canvas.getByRole('radio', { name: 'Original' }));
+        await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
+        await expect(canvas.getByRole('radio', { name: 'Original' })).toBeChecked();
+        canvas.getByRole('radio', { name: 'Original' }).focus();
+        await userEvent.keyboard('{ArrowRight}');
+        await waitFor(() => expect(canvas.getByRole('radio', { name: 'Optimized' })).toBeChecked());
+        await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
         await userEvent.click(canvas.getByText('[00:00:00 - 00:00:04]'));
         await userEvent.click(canvas.getByRole('radio', { name: 'Plain Text' }));
     },
@@ -50,7 +61,51 @@ export const RecordingStartError: Story = {
     },
 };
 export const AudioReady: Story = { parameters: { scenario: 'ready' } };
-export const Transcribing: Story = { parameters: { scenario: 'transcribing' } };
+export const Transcribing: Story = {
+    parameters: { scenario: 'transcribing' },
+    play: async ({ canvas }) => {
+        await expect(within(canvas.getByRole('banner')).getByRole('status')).toHaveTextContent('Transcribing… 42%');
+    },
+};
+export const Recording: Story = {
+    parameters: { scenario: 'recording' },
+    play: async ({ canvas }) => {
+        const header = within(canvas.getByRole('banner'));
+        await waitFor(() => expect(header.getByRole('status')).toHaveTextContent('Recording 00:42'));
+        await expect(header.getByRole('button', { name: 'Stop recording' })).toBeEnabled();
+        await userEvent.click(header.getByRole('button', { name: 'Stop recording' }));
+        await waitFor(() => expect(header.getByRole('button', { name: 'Start recording' })).toBeEnabled());
+        await expect(header.queryByRole('status')).not.toBeInTheDocument();
+    },
+};
+
+export const PlayerStripMinimumWidth: Story = {
+    render: () => <div style={{ width: 1024 }}><Home /></div>,
+    play: async ({ canvas, canvasElement }) => {
+        await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
+        await expect(within(canvas.getByRole('banner')).getByText('English')).toBeVisible();
+        await userEvent.click(canvas.getByRole('radio', { name: 'Timecodes' }));
+        await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
+        await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
+        await expect(canvas.getByRole('button', { name: 'Clear segment' })).toBeEnabled();
+        await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
+        await expect(canvas.getByText('Invalid segment: end must follow start')).toBeVisible();
+        await userEvent.click(canvas.getByText('[00:00:08 - 00:00:12]'));
+        await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
+        const player = canvas.getByRole('region', { name: 'Audio player' }).getBoundingClientRect();
+        const waveform = canvasElement.querySelector('.player-strip__waveform')!.getBoundingClientRect();
+        await expect(waveform.height).toBe(100);
+        for (const element of within(canvas.getByRole('region', { name: 'Audio player' })).getAllByRole('button')) {
+            const rect = element.getBoundingClientRect();
+            await expect(rect.left).toBeGreaterThanOrEqual(player.left);
+            await expect(rect.right).toBeLessThanOrEqual(player.right);
+            await expect(rect.bottom).toBeLessThanOrEqual(waveform.top);
+        }
+        const original = canvas.getByRole('radio', { name: 'Original' }).parentElement!.getBoundingClientRect();
+        await expect(original.right).toBeLessThanOrEqual(player.right);
+        await expect(original.bottom).toBeLessThanOrEqual(waveform.top);
+    },
+};
 export const TranscriptionError: Story = { parameters: { scenario: 'error', docs: { description: { story: 'An intentional adapter failure demonstrates the real transcription error state. The developer console contains the expected failure log.' } } } };
 export const LongTranscript: Story = { parameters: { scenario: 'long-transcript' } };
 export const Nemotron: Story = {
@@ -116,7 +171,7 @@ export const Speakers: Story = {
         await expect(canvas.queryByRole('button', { name: 'Assign speaker' })).not.toBeInTheDocument();
         await expect(canvas.queryByRole('button', { name: 'Analyze speakers again' })).not.toBeInTheDocument();
         await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
-        await waitFor(() => expect(canvas.getByText('Current position: 00:04.00')).toBeVisible());
+        await waitFor(() => expect(canvas.getByLabelText('Current position: 00:04.00 / 00:12.00')).toBeVisible());
         await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
         await expect(canvas.getAllByTitle('Alice · No word timestamp')[0]).toBeVisible();
         await userEvent.click(canvas.getByRole('radio', { name: 'Turns' }));
@@ -128,14 +183,14 @@ export const Speakers: Story = {
         await expect(canvas.queryByRole('button', { name: 'Rename speaker' })).not.toBeInTheDocument();
         await expect(canvas.queryByRole('button', { name: 'Merge speakers' })).not.toBeInTheDocument();
         await userEvent.click(bob);
-        await waitFor(() => expect(canvas.getByText('Current position: 00:08.00')).toBeVisible());
+        await waitFor(() => expect(canvas.getByLabelText('Current position: 00:08.00 / 00:12.00')).toBeVisible());
         alice.focus();
         await userEvent.keyboard('{Enter}');
-        await waitFor(() => expect(canvas.getByText('Current position: 00:00.00')).toBeVisible());
+        await waitFor(() => expect(canvas.getByLabelText('Current position: 00:00.00 / 00:12.00')).toBeVisible());
         await userEvent.click(canvas.getByText('Show original fragments'));
         await expect(canvas.queryByText(/^\d+\.\d+s$/)).not.toBeInTheDocument();
         await userEvent.click(canvas.getByRole('button', { name: 'The transcript should stay easy to read while we listen and compare details.' }));
-        await waitFor(() => expect(canvas.getByText('Current position: 00:04.00')).toBeVisible());
+        await waitFor(() => expect(canvas.getByLabelText('Current position: 00:04.00 / 00:12.00')).toBeVisible());
         await userEvent.click(canvas.getByText('Show original fragments'));
     },
 };

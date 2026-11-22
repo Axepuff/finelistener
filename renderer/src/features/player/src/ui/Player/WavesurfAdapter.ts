@@ -44,14 +44,20 @@ export class WaveSurferAdapter extends PlayerAdapter {
         this.onReadyChange = setIsLoading;
         this.onTimeUpdate = onTimeUpdate;
         const regions = RegionsPlugin.create();
-        const timeline = Timeline.create();
+        const timeline = Timeline.create({
+            height: 20,
+            style: { fontSize: '12px', fontFamily: 'var(--brand-font-family-code)', color: 'var(--brand-color-text-secondary)' },
+            secondaryLabelOpacity: 1,
+            formatTimeCallback: (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`,
+        });
 
         this.wavesurfer = WaveSurfer.create({
             container: containerRef,
-            height: 100,
+            height: 80,
             waveColor: 'rgba(224, 13, 13, 1)',
             progressColor: 'rgba(194, 72, 15, 1)',
-            cursorColor: '#05044dff',
+            cursorColor: 'var(--brand-color-info)',
+            cursorWidth: 1,
             normalize: true,
             dragToSeek: true,
             barWidth: 1,
@@ -71,6 +77,10 @@ export class WaveSurferAdapter extends PlayerAdapter {
 
     public get currentTime(): number {
         return this.wavesurfer.getCurrentTime();
+    }
+
+    public get duration(): number {
+        return this.hasLoadedSource ? this.wavesurfer.getDuration() : 0;
     }
 
     public get isPlaying(): boolean {
@@ -159,7 +169,7 @@ export class WaveSurferAdapter extends PlayerAdapter {
         this.regions.addRegion({
             start: regionStart,
             end: regionEnd,
-            color: 'rgba(231, 255, 20, 0.2)',
+            color: 'var(--brand-color-info-bg)',
             drag: false,
             resize: true,
             content: '',

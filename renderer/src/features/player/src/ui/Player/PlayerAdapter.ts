@@ -11,6 +11,7 @@ export abstract class PlayerAdapter {
     abstract clearRegions(): void;
     abstract destroy(): void;
     abstract currentTime: number;
+    abstract duration: number;
     abstract isPlaying: boolean;
 }
 

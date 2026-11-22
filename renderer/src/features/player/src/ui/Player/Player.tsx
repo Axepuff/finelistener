@@ -1,11 +1,12 @@
-import { ActionIcon, Box, Button, Group, Loader, Paper, SegmentedControl, Text } from '@mantine/core';
-import { IconPlayerPause, IconPlayerPlay } from '@tabler/icons-react';
+import { ActionIcon, Box, Button, Divider, Group, Loader, SegmentedControl, Text } from '@mantine/core';
+import { IconBracketsContainStart, IconBracketsContainEnd, IconPlayerPauseFilled, IconPlayerPlayFilled, IconX } from '@tabler/icons-react';
 import { WaveSurferAdapter } from '@~/player/src/ui/Player/WavesurfAdapter';
 import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useRef, type FC } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAppStore } from 'renderer/src/AppContext';
 import { PlayerAdapter } from './PlayerAdapter';
+import './Player.css';
 
 const formatPreciseTime = (seconds: number) => {
     if (!Number.isFinite(seconds) || seconds < 0) return '00:00.00';
@@ -21,11 +22,12 @@ const AUDIO_MODE_OPTIONS = [
     { label: 'Optimized', value: 'optimized' },
 ];
 
-export const Player: FC = observer(() => {
+export const Player: React.FC = observer(() => {
     const store = useAppStore();
     const { workspace } = store;
     const containerRef = useRef<HTMLDivElement | null>(null);
     const adapterRef = useRef<PlayerAdapter | null>(null);
+    const [duration, setDuration] = useState(0);
     const currentAudioPath = workspace.audioSourcePath ?? undefined;
     const activeSession = workspace.activeSession;
     const segmentSelection = workspace.segmentSelection;
@@ -34,7 +36,10 @@ export const Player: FC = observer(() => {
         const adapter = new WaveSurferAdapter(
             containerRef.current!,
             (isPlaying) => workspace.setPlaying(isPlaying),
-            (isLoading) => workspace.setPlayerLoading(isLoading),
+            (isLoading) => {
+                workspace.setPlayerLoading(isLoading);
+                if (!isLoading) setDuration(adapterRef.current?.duration ?? 0);
+            },
             (position) => workspace.setPlaybackPosition(position),
         );
 
@@ -52,6 +57,7 @@ export const Player: FC = observer(() => {
 
         workspace.clearSegment();
         workspace.setPlaybackPosition(0);
+        setDuration(0);
 
         if (!activeSession || !currentAudioPath) {
             workspace.setPlayerLoading(false);
@@ -111,79 +117,78 @@ export const Player: FC = observer(() => {
         }
     };
 
-    const selectedSegment = workspace.selectedSegment;
     const canMarkSegmentEnd = Boolean(
         currentAudioPath
         && segmentSelection?.start !== undefined
         && !store.operations.isBusy,
     );
-    const selectionText = selectedSegment ?
-        `Selected segment: ${formatPreciseTime(selectedSegment.start)} — ${formatPreciseTime(selectedSegment.end)}` :
-        workspace.hasIncompleteSegment ?
-            'Invalid selection range. End must be greater than start.' :
-            'No selection. The whole file will be transcribed.';
+    const hasInvalidSegment = segmentSelection?.end !== undefined && !workspace.selectedSegment;
+    const selectionText = segmentSelection ?
+        hasInvalidSegment ?
+            'Invalid segment: end must follow start' :
+            `Segment ${formatPreciseTime(segmentSelection.start ?? 0)} — ${segmentSelection.end === undefined ? '…' : formatPreciseTime(segmentSelection.end)}` : null;
 
     return (
-        <Paper style={{ padding: 18 }}>
-            <Box style={{ position: 'relative' }}>
-                {workspace.isPlayerLoading ? <Loader style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} /> : null}
-                <div ref={containerRef} />
-            </Box>
-            {workspace.activeSessionId !== null ? (
-                <Group gap={8} align="center" mt={12}>
-                    {store.operations.kind === 'optimizing-audio' ? (
-                        <Group gap={8} align="center">
-                            <Loader size={14} />
-                            <Text size="sm" c="dimmed">{'Optimizing audio...'}</Text>
-                        </Group>
-                    ) : (
-                        <SegmentedControl
-                            size="xs"
-                            value={workspace.audioMode}
-                            data={AUDIO_MODE_OPTIONS}
-                            onChange={(value) => void handleAudioModeChange(value)}
-                            disabled={store.operations.isBusy}
-                        />
-                    )}
-                </Group>
-            ) : null}
-            <Group gap={12} align="center" mt={12}>
-                <ActionIcon onClick={onPlayPause} variant="subtle" disabled={!currentAudioPath || workspace.isPlayerLoading} aria-label={workspace.isPlaying ? 'Pause audio' : 'Play audio'}>
-                    {workspace.isPlaying ? <IconPlayerPause size={16} /> : <IconPlayerPlay size={16} />}
+        <Box className="player-strip">
+            <Group className="player-strip__controls" gap={12} align="center" wrap="nowrap">
+                <ActionIcon onClick={onPlayPause} size={32} radius={32} variant="filled" disabled={!currentAudioPath || workspace.isPlayerLoading} aria-label={workspace.isPlaying ? 'Pause audio' : 'Play audio'}>
+                    {workspace.isPlaying ? <IconPlayerPauseFilled size={16} /> : <IconPlayerPlayFilled size={16} />}
                 </ActionIcon>
-                <Text size="sm">
-                    {'Current position: '}
-                    {formatPreciseTime(workspace.playbackPosition)}
+                <Text className="player-strip__time" size="sm" ff="var(--brand-font-family-code)" aria-label={`Current position: ${formatPreciseTime(workspace.playbackPosition)} / ${formatPreciseTime(duration)}`}>
+                    <span style={{ fontWeight: 600 }}>{formatPreciseTime(workspace.playbackPosition)}</span>
+                    <span style={{ color: 'var(--brand-color-text-secondary)' }}>{` / ${formatPreciseTime(duration)}`}</span>
                 </Text>
-            </Group>
-
-            <Group gap={8} mt={12} style={{ flexWrap: 'wrap' }}>
+                <Box style={{ flex: 1 }} />
+                {selectionText ? (
+                    <Box className="player-strip__segment" data-invalid={hasInvalidSegment || undefined}>
+                        <span>{selectionText}</span>
+                        <ActionIcon size={18} variant="subtle" color="gray" aria-label="Clear segment" onClick={handleClearRange} disabled={store.operations.isBusy}>
+                            <IconX size={14} />
+                        </ActionIcon>
+                    </Box>
+                ) : null}
                 <Button
-                    variant="outline"
+                    variant="default"
+                    size="xs"
+                    px={8}
+                    leftSection={<IconBracketsContainStart size={14} />}
                     onClick={handleMarkStart}
                     disabled={!currentAudioPath || store.operations.isBusy}
                 >
                     {'Mark start'}
                 </Button>
                 <Button
-                    variant="outline"
+                    variant="default"
+                    size="xs"
+                    px={8}
+                    leftSection={<IconBracketsContainEnd size={14} />}
                     onClick={handleMarkEnd}
                     disabled={!canMarkSegmentEnd}
                 >
                     {'Mark end'}
                 </Button>
-                <Button
-                    variant="subtle"
-                    onClick={handleClearRange}
-                    disabled={!segmentSelection || store.operations.isBusy}
-                >
-                    {'Clear selection'}
-                </Button>
+                <Divider orientation="vertical" my={8} />
+                {store.operations.kind === 'optimizing-audio' ? (
+                    <Group gap={8} wrap="nowrap">
+                        <Loader size={14} />
+                        <Text size="xs" c="dimmed">{'Optimizing audio…'}</Text>
+                    </Group>
+                ) : (
+                    <SegmentedControl
+                        className="player-strip__audio-mode"
+                        size="xs"
+                        aria-label="Audio version"
+                        value={workspace.audioMode}
+                        data={AUDIO_MODE_OPTIONS}
+                        onChange={(value) => void handleAudioModeChange(value)}
+                        disabled={store.operations.isBusy}
+                    />
+                )}
             </Group>
-
-            <Text size="sm" mt={8}>
-                {selectionText}
-            </Text>
-        </Paper>
+            <Box className="player-strip__waveform">
+                {workspace.isPlayerLoading ? <Loader size="sm" className="player-strip__loader" /> : null}
+                <div ref={containerRef} />
+            </Box>
+        </Box>
     );
 });

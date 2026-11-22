@@ -53,6 +53,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         updatedAt: 1791511800000,
         sourceKind: 'imported',
         hasTranscript,
+        transcription: { language: 'en' },
         audioMode: 'optimized',
         audioOriginalPath: STORY_AUDIO_PATH,
         audioWavPath: STORY_AUDIO_PATH,
