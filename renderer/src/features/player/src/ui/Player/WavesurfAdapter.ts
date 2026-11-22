@@ -18,6 +18,7 @@ const buildLocalFileUrl = (filePath: string): string => {
 export class WaveSurferAdapter extends PlayerAdapter {
     private readonly wavesurfer: WaveSurfer;
     private readonly regions: RegionsPlugin;
+    private readonly unsubscribeRegionUpdate: () => void;
     private loadingController: AbortController | null = null;
     private hasLoadedSource = false;
     private readonly onPlayingChange: (isPlaying: boolean) => void;
@@ -38,6 +39,7 @@ export class WaveSurferAdapter extends PlayerAdapter {
         onPlayingChange: (isPlaying: boolean) => void,
         setIsLoading: (isPlaying: boolean) => void,
         onTimeUpdate: (time: number) => void,
+        onRegionChange: (bounds: Required<RegionBounds>) => void,
     ) {
         super();
         this.onPlayingChange = onPlayingChange;
@@ -64,6 +66,9 @@ export class WaveSurferAdapter extends PlayerAdapter {
             plugins: [timeline, regions],
         });
         this.regions = regions;
+        this.unsubscribeRegionUpdate = regions.on('region-update', ({ start, end }) => {
+            onRegionChange({ start, end });
+        });
 
         this.wavesurfer.on('play', this.handlePlay);
         this.wavesurfer.on('pause', this.handlePause);
@@ -182,6 +187,7 @@ export class WaveSurferAdapter extends PlayerAdapter {
 
     destroy(): void {
         this.loadingController?.abort();
+        this.unsubscribeRegionUpdate();
         this.wavesurfer.un('play', this.handlePlay);
         this.wavesurfer.un('pause', this.handlePause);
         this.wavesurfer.un('finish', this.handlePause);

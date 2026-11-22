@@ -33,6 +33,10 @@ export const Player: React.FC = observer(() => {
                 if (!isLoading) setDuration(adapterRef.current?.duration ?? 0);
             },
             (position) => workspace.setPlaybackPosition(position),
+            ({ start, end }) => {
+                workspace.setSegmentStart(start);
+                workspace.setSegmentEnd(end);
+            },
         );
 
         adapterRef.current = adapter;
