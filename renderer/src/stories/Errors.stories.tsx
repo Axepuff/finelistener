@@ -134,3 +134,53 @@ export const SpeakerReplacementGuard: Story = {
         } finally { retry.mockRestore(); }
     },
 };
+
+
+const recoverActiveStop: NonNullable<Story['play']> = async ({ canvas, loaded }) => {
+    const { adapter, store } = loaded.workspace as StoryWorkspace;
+    const analyzing = store.operations.kind === 'analyzing-speakers';
+    const stop = spyOn(adapter, analyzing ? 'stopSpeakerAnalysis' : 'stopTranscription');
+    const operationId = store.operations.active?.id;
+    try {
+        const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
+        await userEvent.click(settings.getByRole('button', { name: analyzing ? 'Skip speaker analysis' : 'Stop transcription' }));
+        const alert = within(await settings.findByRole('alert'));
+        await expect(store.operations.active?.id).toBe(operationId);
+        const log = alert.getByRole('button', { name: 'Show in log' });
+        log.focus();
+        await userEvent.keyboard('{Enter}');
+        await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveFocus();
+        await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent(analyzing ? 'Speaker analysis could not be stopped.' : 'Failed to stop transcription.');
+        await userEvent.click(canvas.getByRole('button', { name: 'Log' }));
+        await userEvent.click(alert.getByRole('button', { name: analyzing ? 'Retry skipping' : 'Retry stop' }));
+        await waitFor(() => expect(store.operations.isBusy).toBe(false));
+        await expect(stop).toHaveBeenCalledTimes(2);
+        await expect(canvas.queryByRole('alert')).not.toBeInTheDocument();
+    } finally { stop.mockRestore(); }
+};
+
+export const ActiveTranscriptionStopFailure: Story = {
+    parameters: { errorScenario: 'stop-transcription' }, play: recoverActiveStop,
+};
+export const ActiveSpeakerSkipFailure: Story = {
+    parameters: { errorScenario: 'stop-speakers' }, play: recoverActiveStop,
+};
+export const LateStopFailure: Story = {
+    parameters: { errorScenario: 'stop-transcription' },
+    play: async ({ canvas, loaded }) => {
+        const { adapter, store } = loaded.workspace as StoryWorkspace;
+        let rejectStop!: (error: Error) => void;
+        const stop = spyOn(adapter, 'stopTranscription').mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectStop = reject; }));
+        try {
+            await userEvent.click(canvas.getByRole('button', { name: 'Stop transcription' }));
+            await waitFor(() => expect(stop).toHaveBeenCalledOnce());
+            const previous = store.operations.active!;
+            store.operations.finish(previous);
+            store.operations.begin('analyzing-speakers');
+            rejectStop(new Error('Synthetic late stop failure'));
+            await waitFor(() => expect(canvas.getByRole('button', { name: 'Skip speaker analysis' })).toBeEnabled());
+            await expect(canvas.queryByRole('alert')).not.toBeInTheDocument();
+            await expect(store.operations.kind).toBe('analyzing-speakers');
+        } finally { stop.mockRestore(); }
+    },
+};

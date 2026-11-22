@@ -1,10 +1,18 @@
 import type { SessionDetails } from 'electron/src/types/sessions';
 import { createStoryWorkspace } from './storyWorkspace';
 
-export type ErrorScenario = 'incomplete' | 'nothing' | 'previous' | 'speaker' | 'speaker-existing' | 'preparation' | 'permission' | 'storage' | 'source-stopped';
+export type ErrorScenario = 'incomplete' | 'nothing' | 'previous' | 'speaker' | 'speaker-existing' | 'preparation' | 'permission' | 'storage' | 'source-stopped' | 'stop-transcription' | 'stop-speakers';
 
 // Controlled IPC substitutes: these never record, download, infer, or open OS settings.
 export const createErrorWorkspace = async (scenario: ErrorScenario) => {
+    if (scenario === 'stop-transcription' || scenario === 'stop-speakers') {
+        const workspace = await createStoryWorkspace(scenario === 'stop-speakers' ? 'nemotron-analyzing' : 'transcribing');
+        const method = scenario === 'stop-speakers' ? 'stopSpeakerAnalysis' : 'stopTranscription';
+        const stop = workspace.adapter[method];
+        let attempts = 0;
+        workspace.adapter[method] = () => ++attempts === 1 ? Promise.reject(new Error('Synthetic stop failure')) : stop();
+        return workspace;
+    }
     const workspace = await createStoryWorkspace(scenario === 'storage' ? 'sessions-recovery' : scenario === 'permission' ? 'settings-recording-silence' : scenario === 'nothing' ? 'ready' : scenario === 'speaker-existing' ? 'speakers' : 'transcript');
     const { adapter, store } = workspace;
     let session: SessionDetails = structuredClone(await adapter.getSession('storybook-session'));
