@@ -5,6 +5,7 @@ import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
 import { defaultRecordingSummaryOptions, recordingSummaryGenerationVersion } from '../../../electron/src/types/summaryOptions';
 import { UI_PREFERENCE_DEFAULTS, type UiPreferenceKey, type UiPreferenceValueMap } from '../../../electron/src/types/uiPreferences';
 import { AppStore } from '../stores/appStore';
+import type { RendererAdapter } from '../stores/rendererAdapter';
 import { createFakeRendererAdapter } from '../stores/testing/fakeRendererAdapter';
 import { STORY_AUDIO_PATH } from './storyAudio';
 
@@ -16,6 +17,7 @@ export type WorkspaceScenario = 'empty' | 'ready' | 'transcript' | 'speakers' | 
 
 export interface StoryWorkspace {
     store: AppStore;
+    adapter: RendererAdapter;
     dispose: () => void;
 }
 
@@ -322,6 +324,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
 
     return {
         store,
+        adapter: fake.adapter,
         dispose: () => {
             store.dispose();
             finishTranscription?.('');

@@ -61,6 +61,68 @@ export const RecordingStartError: Story = {
     },
 };
 export const AudioReady: Story = { parameters: { scenario: 'ready' } };
+export const SegmentResizing: Story = {
+    play: async ({ canvas, canvasElement, loaded }) => {
+        const { adapter } = loaded.workspace as StoryWorkspace;
+        await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
+        await userEvent.click(canvas.getByRole('radio', { name: 'Timecodes' }));
+        await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
+        await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
+        await expect(canvas.getByText('Segment 00:04.00 — …')).toBeVisible();
+        await userEvent.click(canvas.getByText('[00:00:08 - 00:00:12]'));
+        await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
+        const waveform = Array.from(canvasElement.querySelectorAll('*'), element => element.shadowRoot)
+            .find(root => root?.querySelector('[part~="region"]'));
+        if (!waveform) throw new Error('The waveform has no selected region.');
+        const region = waveform.querySelector<HTMLElement>('[part~="region"]')!;
+        const timeline = waveform.querySelector<HTMLElement>('[part="regions-container"]')!.getBoundingClientRect();
+        for (const { side, delta, start, end } of [
+            { side: 'left', delta: 1, start: 5, end: 8 },
+            { side: 'right', delta: -1, start: 5, end: 7 },
+            { side: 'left', delta: -2, start: 3, end: 7 },
+            { side: 'right', delta: 2, start: 3, end: 9 },
+        ]) {
+            const handle = region.querySelector<HTMLElement>(`[part~="region-handle-${side}"]`)!;
+            const rect = handle.getBoundingClientRect();
+            const clientX = rect.left + rect.width / 2;
+            const clientY = rect.top + rect.height / 2;
+            const pointer = { pointerId: 1, pointerType: 'mouse', button: 0, clientY };
+            await fireEvent.pointerDown(handle, { ...pointer, clientX });
+            await fireEvent.pointerMove(canvasElement.ownerDocument, { ...pointer, clientX: clientX + delta * timeline.width / 12 });
+            await waitFor(() => expect(canvas.getByText(`Segment 00:0${start}.00 — 00:0${end}.00`)).toBeVisible());
+            await fireEvent.pointerUp(canvasElement.ownerDocument, pointer);
+            const bounds = region.getBoundingClientRect();
+            await expect((bounds.left - timeline.left) / timeline.width * 12).toBeCloseTo(start, 2);
+            await expect((bounds.right - timeline.left) / timeline.width * 12).toBeCloseTo(end, 2);
+        }
+        const transcribe = spyOn(adapter, 'transcribe');
+        try {
+            await userEvent.click(canvas.getByRole('button', { name: 'Transcribe segment' }));
+            await waitFor(() => expect(transcribe).toHaveBeenCalledTimes(1));
+            const segment = transcribe.mock.calls[0][1].segment;
+            await expect(segment?.start).toBeCloseTo(3, 2);
+            await expect(segment?.end).toBeCloseTo(9, 2);
+            await waitFor(() => expect(canvas.getByRole('button', { name: 'Transcribe segment' })).toBeEnabled());
+            await expect(canvas.getByText('Segment 00:03.00 — 00:09.00')).toBeVisible();
+            await userEvent.click(canvas.getByRole('button', { name: 'Clear segment' }));
+            await expect(waveform.querySelector('[part~="region"]')).toBeNull();
+            await userEvent.click(canvas.getByRole('button', { name: 'Transcribe whole file' }));
+            await waitFor(() => expect(transcribe).toHaveBeenCalledTimes(2));
+            await expect(transcribe.mock.calls[1][1].segment).toBeUndefined();
+            await waitFor(() => expect(canvas.getByRole('button', { name: 'Mark start' })).toBeEnabled());
+            await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
+            await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
+            await expect(canvas.getByText('Invalid segment: end must follow start')).toBeVisible();
+            await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
+            await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
+            await expect(canvas.getByText('Segment 00:04.00 — 00:08.00')).toBeVisible();
+            await userEvent.click(canvas.getByRole('button', { name: 'Clear segment' }));
+            await expect(waveform.querySelector('[part~="region"]')).toBeNull();
+        } finally {
+            transcribe.mockRestore();
+        }
+    },
+};
 export const TranscriptionMetadata: Story = {
     play: async ({ canvas }) => {
         await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
