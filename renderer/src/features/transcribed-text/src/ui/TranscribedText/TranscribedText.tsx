@@ -1,6 +1,6 @@
-import { ActionIcon, Alert, Button, Group, Paper, Progress, SegmentedControl, Stack, Text, ThemeIcon } from '@mantine/core';
+import { ActionIcon, Alert, Button, Center, Paper, SegmentedControl, Stack, Text, ThemeIcon } from '@mantine/core';
 import { InlineAlert } from 'renderer/src/shared/InlineAlert';
-import { IconHeadphones, IconPlus } from '@tabler/icons-react';
+import { IconHeadphones, IconMicrophone, IconPlus } from '@tabler/icons-react';
 import { computed } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import React, { useMemo, useState, type MouseEvent } from 'react';
@@ -12,7 +12,7 @@ import { useAppStore } from '../../../../../AppContext';
 import { RecordingSummary, type SummaryContinuation } from './RecordingSummary';
 import type { SummaryFormat } from './SummaryResult';
 import { TranscribedTextContent } from './TranscribedTextContent';
-import { TranscribedTextControls } from './TranscribedTextControls';
+import { TranscribedTextControls, TranscriptViewSwitch } from './TranscribedTextControls';
 import { SpeakerAnalysisStatus, SpeakerControls } from './SpeakerControls';
 import { findTranscriptMatches } from './search';
 import { escapeHtml, formatSecondsReadable } from 'renderer/src/shared/lib';
@@ -26,7 +26,17 @@ interface Props {
 export const TranscribedText: React.FC<Props> = observer(({ summaryContinuation }) => {
     const store = useAppStore();
     const { transcription } = store;
-    const [view, setView] = useState<TranscriptView | 'summary'>('plain');
+    const [selectedView, setView] = useState<TranscriptView | 'summary'>('plain');
+    const { recordingInProgress, exportBlockReason } = store;
+    const recordingViewReason = store.operations.kind === 'recording' ? 'Transcript views are available after you stop recording.' :
+        'Transcript views are available after the recording is saved.';
+    const viewLockReasons = recordingInProgress ? {
+        plain: recordingViewReason, timecodes: recordingViewReason, speakers: recordingViewReason, summary: recordingViewReason,
+    } : exportBlockReason ? {
+        speakers: transcription.savedTranscript?.speakers?.status === 'completed' ? undefined : 'Speakers is available once speaker labels are ready.',
+        summary: transcription.savedTranscript?.summary || transcription.savedTranscript?.summaryDraft ? undefined : 'Summary is available after processing finishes.',
+    } : {};
+    const view = viewLockReasons[selectedView] ? 'plain' : selectedView;
     const [summarySelection, setSummarySelection] = useState<{ sessionId: string | null; format: SummaryFormat }>();
     const [speakerLayout, setSpeakerLayout] = useState<'reading' | 'dialogue'>('reading');
     const transcriptView = view === 'summary' ? 'plain' : view;
@@ -40,8 +50,9 @@ export const TranscribedText: React.FC<Props> = observer(({ summaryContinuation 
         generation: string | undefined;
         span: SessionSpeakerAssignment;
     } | null>(null);
-    const needsSpeakerAnalysis = showSpeakers && transcription.visibleTranscript?.speakers?.status !== 'completed';
-    const displayedTranscript = needsSpeakerAnalysis || view === 'summary' ? null : transcription.visibleTranscript;
+    const transcriptForView = showSpeakers && exportBlockReason ? transcription.savedTranscript : transcription.visibleTranscript;
+    const needsSpeakerAnalysis = showSpeakers && transcriptForView?.speakers?.status !== 'completed';
+    const displayedTranscript = needsSpeakerAnalysis || view === 'summary' ? null : transcriptForView;
     const savedSummary = view === 'summary' ? transcription.savedTranscript?.summary : undefined;
     const { activeSessionId } = store.workspace;
     const summaryFormat = !savedSummary?.brief ? 'detailed' :
@@ -157,7 +168,18 @@ export const TranscribedText: React.FC<Props> = observer(({ summaryContinuation 
 
     return (
         <Stack gap={showSpeakers ? 10 : 16} align="stretch" style={{ width: '100%', minWidth: 0, minHeight: 0, height: '100%', padding: 16, overflow: 'hidden' }}>
-            {isInitialEmptyState ? (
+            {recordingInProgress ? (
+                <>
+                    <TranscriptViewSwitch view={view} onViewChange={setView} viewLockReasons={viewLockReasons} />
+                    <Center style={{ flex: 1 }}>
+                        <Stack gap={12} align="center" maw={370} ta="center">
+                            <ThemeIcon size={48} radius="xl" variant="light" color="red"><IconMicrophone size={22} /></ThemeIcon>
+                            <Text component="h2" size="lg" fw={600} m={0}>{store.operations.kind === 'recording' ? 'Recording in progress' : 'Saving recording…'}</Text>
+                            <Text size="sm" c="dimmed">The transcript appears after you stop recording and transcribe the audio.</Text>
+                        </Stack>
+                    </Center>
+                </>
+            ) : isInitialEmptyState ? (
                 <Paper
                     style={{
                         width: '100%',
@@ -194,6 +216,7 @@ export const TranscribedText: React.FC<Props> = observer(({ summaryContinuation 
                             return reading ? speakerReadingToHtml(reading, speakerLabels) : transcriptToHtml(displayedTranscript, transcriptView);
                         }}
                         view={view}
+                        viewLockReasons={viewLockReasons}
                         onViewChange={(value) => { setView(value); setSelectedSpan(null); setSelectedMatchIndex(0); }}
                         searchQuery={searchQuery}
                         onSearchChange={handleSearchChange}
@@ -207,15 +230,6 @@ export const TranscribedText: React.FC<Props> = observer(({ summaryContinuation 
                         <>
                             {needsSpeakerAnalysis || isReadyEmptyState ? speakerControls : null}
                             <SpeakerAnalysisStatus />
-
-                            {store.lifecycleState === 'transcribing' ? (
-                                <Group gap={8} align="center" wrap="nowrap" style={{ width: '100%' }}>
-                                    <Progress value={transcription.progress} size={4} style={{ flexGrow: 1 }} />
-                                    <Text size="sm" style={{ minWidth: 48, textAlign: 'right' }}>
-                                        {`${transcription.progress.toFixed(0)}%`}
-                                    </Text>
-                                </Group>
-                            ) : null}
 
                             {transcription.duplicateFilterFailed ? (
                                 <Alert color="yellow" title="Duplicate filtering unavailable">
@@ -271,7 +285,7 @@ export const TranscribedText: React.FC<Props> = observer(({ summaryContinuation 
                                     searchQuery={searchQuery}
                                     transcriptText={currentTextValue}
                                     onRegionClick={handleRegionClick}
-                                    onEditSpeaker={showSpeakers && transcription.savedTranscript?.speakers ? (span) => setSelectedSpan({
+                                    onEditSpeaker={showSpeakers && !store.operations.isBusy && transcription.savedTranscript?.speakers ? (span) => setSelectedSpan({
                                         sessionId: store.workspace.activeSessionId,
                                         generation: transcription.savedTranscript?.speakers?.generation,
                                         span,

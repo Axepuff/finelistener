@@ -5,7 +5,7 @@ import React, { useEffect, useRef } from 'react';
 import { useAppStore } from '../../../../../AppContext';
 
 export const RecordingSettings: React.FC = observer(() => {
-    const { recording } = useAppStore();
+    const { recording, recordingInProgress } = useAppStore();
     const disclosure = useRef<HTMLDetailsElement>(null);
     const { recordingState, recordingError, showSilenceWarning } = recording.session;
     const { deviceError } = recording.devices;
@@ -19,14 +19,17 @@ export const RecordingSettings: React.FC = observer(() => {
                 disclosure.current.lastElementChild?.scrollIntoView({ block: 'nearest' });
             }
         }
-    }, [recordingState, recordingError, showSilenceWarning, deviceError, isRecordingAvailable]);
+    }, [recordingInProgress, recordingState, recordingError, showSilenceWarning, deviceError, isRecordingAvailable]);
 
     return (
-        <details ref={disclosure} className="settings-recording">
-            <summary>Recording settings</summary>
-            <Box role="region" aria-label="Recording controls" pt={12}>
-                <SystemAudioRecorder />
-            </Box>
-        </details>
+        <>
+            {recordingInProgress ? <SystemAudioRecorder variant="sources" /> : null}
+            <details ref={disclosure} className="settings-recording" hidden={recordingInProgress}>
+                <summary>Recording settings</summary>
+                <Box role="region" aria-label="Recording controls" pt={12}>
+                    {recordingInProgress ? null : <SystemAudioRecorder />}
+                </Box>
+            </details>
+        </>
     );
 });

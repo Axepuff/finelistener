@@ -1,0 +1,29 @@
+.strip {
+    display: flex;
+    align-items: stretch;
+    gap: 20px;
+    padding: 16px;
+}
+
+.stats { flex: 0 1 250px; }
+.clock, .value { font-family: var(--brand-font-family-code); font-variant-numeric: tabular-nums; }
+.clock { font-size: 38px; line-height: 46px; font-weight: 600; }
+.meters { flex: 0 1 380px; min-width: 270px; display: grid; align-content: center; gap: 8px; }
+.source { display: grid; grid-template-columns: 78px minmax(0, 1fr) 75px; align-items: center; gap: 6px; }
+.source .value { text-align: right; color: var(--brand-color-text-secondary); }
+.meter { display: grid; grid-template-columns: repeat(30, minmax(0, 1fr)); gap: 2px; height: 12px; }
+.meter span { background: var(--brand-color-fill-secondary); border-radius: 1px; }
+.meter span[data-lit][data-zone="green"] { background: var(--brand-color-success); }
+.meter span[data-lit][data-zone="orange"] { background: var(--brand-color-warning); }
+.meter span[data-lit][data-zone="red"] { background: var(--brand-color-error); }
+.placeholder {
+    flex: 1 1 160px;
+    display: grid;
+    place-items: center;
+    padding: 8px 16px;
+    border: 1px dashed var(--brand-color-border);
+    border-radius: 6px;
+    background: var(--brand-color-fill-quaternary);
+    color: var(--brand-color-text-secondary);
+    text-align: center;
+}

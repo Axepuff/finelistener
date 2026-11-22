@@ -1,5 +1,5 @@
 import type { RecordingLevel, RecordingState } from 'electron/src/services/RecordingService';
-import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
+import type { RecordingDevice, RecordingSourceKind } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
 import type { RendererAdapter } from 'renderer/src/stores/rendererAdapter';
 
@@ -22,7 +22,8 @@ export interface RecordingSessionState {
     recordingDurationMs: number;
     recordingBytesWritten: number | null;
     recordingLevel: RecordingLevel | null;
-    sourceLevels: Partial<Record<'system' | 'microphone', RecordingLevel>>;
+    sourceLevels: Partial<Record<RecordingSourceKind, RecordingLevel>>;
+    recordingSources: RecordingSourceKind[];
     showSilenceWarning: boolean;
     recordingError: string | null;
     isProcessingRecording: boolean;
@@ -56,6 +57,7 @@ export const initialSessionState: RecordingSessionState = {
     recordingBytesWritten: null,
     recordingLevel: null,
     sourceLevels: {},
+    recordingSources: [],
     showSilenceWarning: false,
     recordingError: null,
     isProcessingRecording: false,

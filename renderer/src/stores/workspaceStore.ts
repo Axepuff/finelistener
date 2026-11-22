@@ -1,5 +1,6 @@
 import type { SessionDetails } from 'electron/src/types/sessions';
 import { makeAutoObservable } from 'mobx';
+import type { ForegroundOperationStore } from './foregroundOperationStore';
 import type { AudioMode, DeepReadonly, Segment, SegmentSelection } from './types';
 
 type WorkspaceSession = Omit<SessionDetails, 'transcript' | 'hasTranscript'>;
@@ -62,8 +63,8 @@ export class WorkspaceStore {
         return this.playbackRequestValue;
     }
 
-    constructor() {
-        makeAutoObservable(this, {}, { autoBind: true });
+    constructor(private readonly operations?: ForegroundOperationStore) {
+        makeAutoObservable<this, 'operations'>(this, { operations: false }, { autoBind: true });
     }
 
     get activeSession(): DeepReadonly<WorkspaceSession> | null {
@@ -135,6 +136,7 @@ export class WorkspaceStore {
     }
 
     setSegmentStart(start: number): void {
+        if (this.operations?.isBusy) return;
         const safeStart = Number.isFinite(start) ? Math.max(0, start) : 0;
 
         this.segmentSelectionValue = {
@@ -144,7 +146,7 @@ export class WorkspaceStore {
     }
 
     setSegmentEnd(end: number): void {
-        if (!Number.isFinite(end)) return;
+        if (this.operations?.isBusy || !Number.isFinite(end)) return;
 
         this.segmentSelectionValue = {
             start: this.segmentSelectionValue?.start,
@@ -153,6 +155,7 @@ export class WorkspaceStore {
     }
 
     clearSegment(): void {
+        if (this.operations?.isBusy) return;
         this.segmentSelectionValue = null;
     }
 

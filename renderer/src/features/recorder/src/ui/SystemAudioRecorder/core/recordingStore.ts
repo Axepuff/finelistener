@@ -33,7 +33,7 @@ export class SystemAudioRecorderStore {
 
     private readonly supportActionsStore: RecordingSupportActionsStore;
 
-    constructor(dependencies: SystemAudioRecorderStoreDependencies) {
+    constructor(private readonly dependencies: SystemAudioRecorderStoreDependencies) {
         const recordingDependencies = { adapter: dependencies.adapter };
 
         this.logService = new TranscriptionRecordingLogService(dependencies.activityLog);
@@ -78,13 +78,13 @@ export class SystemAudioRecorderStore {
     }
 
     selectDevice(deviceId: string): void {
-        if (this.session.recordingState !== 'idle' || this.session.isProcessingRecording) return;
+        if (this.dependencies.operations.isBusy || this.session.recordingState !== 'idle' || this.session.isProcessingRecording) return;
 
         this.devicesStore.selectDevice(deviceId);
     }
 
     selectSource(source: 'system' | 'microphone', deviceId: string | null): void {
-        if (this.session.recordingState !== 'idle' || this.session.isProcessingRecording) return;
+        if (this.dependencies.operations.isBusy || this.session.recordingState !== 'idle' || this.session.isProcessingRecording) return;
 
         this.devicesStore.selectSource(source, deviceId);
     }

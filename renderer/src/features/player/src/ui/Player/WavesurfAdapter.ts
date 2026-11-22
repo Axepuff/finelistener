@@ -21,6 +21,7 @@ export class WaveSurferAdapter extends PlayerAdapter {
     private readonly unsubscribeRegionUpdate: () => void;
     private loadingController: AbortController | null = null;
     private hasLoadedSource = false;
+    private regionEditing = true;
     private readonly onPlayingChange: (isPlaying: boolean) => void;
     private readonly onTimeUpdate: (time: number) => void;
     private readonly onReadyChange: (isPlaying: boolean) => void;
@@ -134,7 +135,13 @@ export class WaveSurferAdapter extends PlayerAdapter {
         this.onTimeUpdate(time);
     }
 
+    setRegionEditing(enabled: boolean): void {
+        this.regionEditing = enabled;
+        for (const region of this.regions.getRegions()) region.setOptions({ resize: enabled });
+    }
+
     setRegion(bounds: RegionBounds): void {
+        if (!this.regionEditing) return;
         const existedRegions = this.regions.getRegions();
 
         if (existedRegions.length > 0) {
@@ -176,7 +183,7 @@ export class WaveSurferAdapter extends PlayerAdapter {
             end: regionEnd,
             color: 'var(--brand-color-info-bg)',
             drag: false,
-            resize: true,
+            resize: this.regionEditing,
             content: '',
         });
     }

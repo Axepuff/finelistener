@@ -26,3 +26,29 @@
 .settings-panel .settings-source .settings-link { align-self: center; }
 .settings-recording summary { cursor: pointer; font-weight: 600; line-height: 32px; }
 .settings-recording summary:focus-visible { outline: 2px solid var(--brand-color-link-active); outline-offset: 2px; }
+
+.transcription-progress__steps { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.transcription-progress__step { display: flex; gap: 12px; padding: 10px; border: 1px solid transparent; border-radius: 6px; }
+.transcription-progress__step[data-status="current"] { background: var(--brand-color-bg-container); border-color: var(--brand-color-border); }
+.transcription-progress__step[data-status="pending"] { color: var(--brand-color-text-secondary); }
+.transcription-progress__number {
+    display: grid;
+    place-items: center;
+    flex: 0 0 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1px solid var(--brand-color-border);
+    font-size: 12px;
+    background: var(--brand-color-bg-container);
+}
+.transcription-progress__step[data-status="current"] .transcription-progress__number,
+.transcription-progress__step[data-status="done"] .transcription-progress__number { color: white; border-color: transparent; background: var(--brand-color-primary); }
+.transcription-progress__step[data-status="done"] .transcription-progress__number { background: var(--brand-color-success); }
+.transcription-progress__phases { margin: 0; padding-inline-start: 16px; font-size: 12px; color: var(--brand-color-text-secondary); }
+.transcription-progress__phases [aria-current] { color: var(--brand-color-text); font-weight: 600; }
+.transcription-progress__note { padding: 10px 12px; border-radius: 6px; border: 1px solid var(--brand-color-info-border); background: var(--brand-color-info-bg); }
+.transcription-progress__note svg { flex-shrink: 0; color: var(--brand-color-link-active); }
+.transcription-progress__settings { border-top: 1px solid var(--brand-color-border); padding-top: 16px; }
+.transcription-progress__settings dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 4px 12px; margin: 8px 0 0; font-size: 12px; }
+.transcription-progress__settings dt { color: var(--brand-color-text-secondary); }
+.transcription-progress__settings dd { margin: 0; overflow-wrap: anywhere; }

@@ -35,7 +35,7 @@ export const TranscriptionError: React.FC = observer(() => {
                             {source.source === 'system' ? 'System audio' : 'Microphone'}: {source.status === 'completed' ? 'Saved' : source.status === 'failed' ? 'Failed' : 'Not transcribed'}
                         </Text>)}
                     </Stack>
-                    <Button size="compact-sm" variant="light" disabled={store.operations.isBusy} onClick={() => {
+                    <Button size="compact-sm" variant="light" disabled={store.operations.isBusy} title={store.operationBlockReason} aria-description={store.operationBlockReason} onClick={() => {
                         if (transcription.savedTranscript?.speakers) setConfirmRetrySpeakers({
                             sessionId: store.workspace.activeSessionId,
                             speakers: transcription.savedTranscript.speakers,
@@ -48,7 +48,7 @@ export const TranscriptionError: React.FC = observer(() => {
             </InlineAlert>
         ) : null}
         {transcription.runOutcome === 'error' && !transcription.isIncomplete ? (
-            <InlineAlert title="Transcription failed" actions={<Button size="compact-sm" disabled={store.operations.isBusy} onClick={() => {
+            <InlineAlert title="Transcription failed" actions={<Button size="compact-sm" disabled={store.operations.isBusy} title={store.operationBlockReason} aria-description={store.operationBlockReason} onClick={() => {
                 if (transcription.savedTranscript?.speakers) setConfirmRetrySpeakers({ sessionId: store.workspace.activeSessionId, speakers: transcription.savedTranscript.speakers });
                 else void handleRetry();
             }}>Retry</Button>}>
@@ -61,7 +61,7 @@ export const TranscriptionError: React.FC = observer(() => {
                 <Text size="sm">A successful retry may replace speaker names, assignments, and merges in this session.</Text>
                 <Group justify="flex-end">
                     <Button variant="default" onClick={() => setConfirmRetrySpeakers(null)}>Cancel</Button>
-                    <Button color="red" disabled={store.operations.isBusy} onClick={() => {
+                    <Button color="red" disabled={store.operations.isBusy} title={store.operationBlockReason} aria-description={store.operationBlockReason} onClick={() => {
                         const isCurrent = confirmRetrySpeakers?.sessionId === store.workspace.activeSessionId
                             && confirmRetrySpeakers.speakers === transcription.savedTranscript?.speakers;
                         setConfirmRetrySpeakers(null);

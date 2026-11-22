@@ -77,6 +77,7 @@ export const EmptyRecording: Story = {
         const microphone = recorder.getByRole('textbox', { name: 'Microphone' });
         const start = recorder.getByRole('button', { name: 'Start recording' });
         const record = spyOn(adapter, 'startSystemRecording');
+        const importDrop = spyOn(adapter, 'importDroppedAudio');
         try {
             await waitFor(() => expect(start).toBeEnabled());
             await userEvent.click(systemAudio);
@@ -92,19 +93,31 @@ export const EmptyRecording: Story = {
             await userEvent.tab();
             await expect(start).toHaveFocus();
             await userEvent.keyboard('{Enter}');
-            const stop = await recorder.findByRole('button', { name: 'Stop recording' });
+            const header = within(canvas.getByRole('banner'));
+            const stop = await header.findByRole('button', { name: 'Stop recording' });
             await expect(stop).toBeEnabled();
             await expect(record).toHaveBeenCalledWith(expect.objectContaining({ sources: { system: '', microphone: '' } }));
-            await expect(recorder.getByText('Written: 1313 KB')).toBeVisible();
-            await expect(recorder.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
-            await expect(systemAudio).toBeDisabled();
-            await expect(microphone).toBeDisabled();
-            await expect(canvas.getByRole('button', { name: 'Choose audio file' })).toBeDisabled();
-            await userEvent.click(stop);
+            const monitor = within(canvas.getByRole('region', { name: 'Recording monitor' }));
+            await expect(monitor.getByText('1.3 MB')).toBeVisible();
+            await expect(monitor.getByRole('meter', { name: 'System audio peak level' })).toHaveAttribute('aria-valuetext', '-8 dB');
+            await expect(monitor.getByRole('meter', { name: 'Microphone peak level' })).toHaveAttribute('aria-valuetext', '-14 dB');
+            const sources = within(canvas.getByRole('group', { name: 'Recording sources' }));
+            await expect(sources.getByRole('textbox', { name: 'System audio' })).toBeDisabled();
+            await expect(sources.getByRole('textbox', { name: 'Microphone' })).toBeDisabled();
+            await expect(header.getByRole('button', { name: 'Import audio' })).toBeDisabled();
+            const transfer = new DataTransfer();
+            transfer.items.add(new File([], 'blocked.wav'));
+            const drop = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer });
+            canvas.getByRole('main').dispatchEvent(drop);
+            await expect(drop.defaultPrevented).toBe(true);
+            await expect(importDrop).not.toHaveBeenCalled();
+            await expect(stop).toHaveFocus();
+            await userEvent.keyboard('{Enter}');
             await expect(await canvas.findByRole('region', { name: 'Audio player' })).toBeVisible();
             await expect(canvas.getByRole('complementary', { name: 'Transcription settings' })).toBeVisible();
         } finally {
             record.mockRestore();
+            importDrop.mockRestore();
         }
     },
 };
@@ -254,14 +267,39 @@ export const TranscriptionMetadata: Story = {
 export const Transcribing: Story = {
     parameters: { scenario: 'transcribing' },
     play: async ({ canvas }) => {
-        await expect(within(canvas.getByRole('banner')).getByRole('status')).toHaveTextContent('Transcribing… 42%');
+        const header = within(canvas.getByRole('banner'));
+        await expect(header.getByRole('status')).toHaveTextContent('Transcribing… 42%');
+        await expect(header.getByRole('button', { name: 'Import audio' })).toBeDisabled();
+        await expect(header.getByRole('button', { name: 'Start recording' })).toBeDisabled();
+        const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
+        await expect(settings.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '42');
+        await expect(settings.getByText('Settings for this run')).toBeVisible();
+        await expect(settings.getByText('English')).toBeVisible();
+        await expect(canvas.getByRole('radio', { name: 'Speakers' })).toBeDisabled();
+        await expect(canvas.getByRole('radio', { name: 'Summary' })).toBeDisabled();
+        await expect(canvas.getByRole('button', { name: 'Export' })).toBeDisabled();
+        const playback = within(canvas.getByRole('region', { name: 'Audio player' }));
+        await expect(playback.getByRole('radio', { name: 'Original' })).toBeDisabled();
+        const markStart = playback.getByRole('button', { name: 'Mark start' });
+        await expect(markStart).toBeDisabled();
+        await expect(markStart).toHaveAccessibleDescription('Wait for transcription to finish, or stop it.');
+        const textView = canvas.getByRole('radio', { name: 'Text' });
+        textView.focus();
+        await userEvent.keyboard('{ArrowRight}');
+        await expect(canvas.getByRole('radio', { name: 'Timecodes' })).toBeChecked();
+        await expect(canvas.getByText('00:00:00 – 00:00:04')).toBeVisible();
+        await waitFor(() => expect(playback.getByRole('button', { name: 'Play audio' })).toBeEnabled());
+        await userEvent.click(settings.getByRole('button', { name: 'Stop transcription' }));
+        await waitFor(() => expect(header.getByRole('button', { name: 'Import audio' })).toBeEnabled());
+        await expect(markStart).toBeEnabled();
+        await expect(canvas.getByRole('radio', { name: 'Speakers' })).toBeEnabled();
     },
 };
 export const Recording: Story = {
     parameters: { scenario: 'recording' },
     play: async ({ canvas }) => {
         const header = within(canvas.getByRole('banner'));
-        await waitFor(() => expect(header.getByRole('status')).toHaveTextContent('Recording 00:42'));
+        await waitFor(() => expect(header.getByRole('status')).toHaveTextContent(/Recording \d\d:\d\d:\d\d/));
         await expect(header.getByRole('button', { name: 'Stop recording' })).toBeEnabled();
         await userEvent.click(header.getByRole('button', { name: 'Stop recording' }));
         await waitFor(() => expect(header.getByRole('button', { name: 'Start recording' })).toBeEnabled());
@@ -317,12 +355,57 @@ export const NemotronDownloading: Story = { parameters: { scenario: 'nemotron-do
 export const NemotronAnalyzing: Story = {
     parameters: { scenario: 'nemotron-analyzing' },
     play: async ({ canvas }) => {
-        await expect(canvas.getByText('Analyzing speakers', { exact: true })).toBeVisible();
-        await expect(canvas.queryByText(/Analyzing speakers \(/)).not.toBeInTheDocument();
-        await userEvent.click(canvas.getByRole('button', { name: 'Cancel' }));
-        await expect(canvas.queryByText('Analyzing speakers', { exact: true })).not.toBeInTheDocument();
+        const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
+        const phase = within(settings.getByRole('list', { name: 'Speaker analysis phases' }));
+        await expect(phase.getByText('Analyzing speakers')).toHaveAttribute('aria-current', 'step');
+        await expect(settings.queryByRole('progressbar')).not.toBeInTheDocument();
+        await expect(canvas.getByRole('radio', { name: 'Speakers' })).toBeDisabled();
+        await expect(canvas.getByRole('button', { name: 'Export' })).toBeDisabled();
+        await userEvent.click(canvas.getByRole('radio', { name: 'Timecodes' }));
+        await expect(canvas.getByText('00:00:04 – 00:00:08')).toBeVisible();
+        const skip = settings.getByRole('button', { name: 'Skip speaker analysis' });
+        skip.focus();
+        await userEvent.keyboard('{Enter}');
+        await waitFor(() => expect(settings.queryByRole('button', { name: 'Skip speaker analysis' })).not.toBeInTheDocument());
+        await expect(canvas.getByRole('radio', { name: 'Speakers' })).toBeEnabled();
+        await expect(canvas.getByRole('button', { name: 'Export' })).toBeEnabled();
     },
 };
+export const SavedSummaryDuringSpeakerAnalysis: Story = {
+    parameters: { scenario: 'summary-short' },
+    play: async ({ canvas, canvasElement, loaded }) => {
+        const { adapter } = loaded.workspace as StoryWorkspace;
+        const page = within(canvasElement.ownerDocument.body);
+        let complete = () => {};
+        const analyze = spyOn(adapter, 'analyzeSpeakers').mockImplementationOnce((id) =>
+            new Promise((resolve) => { complete = () => { resolve(adapter.getSession(id)); }; }));
+        const stop = spyOn(adapter, 'stopSpeakerAnalysis').mockImplementationOnce(() => {
+            complete();
+            return Promise.resolve(true);
+        });
+
+        try {
+            await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
+            await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
+            await userEvent.click(page.getByRole('button', { name: 'Analyze speakers again' }));
+            await userEvent.click(page.getByRole('button', { name: 'Analyze again' }));
+            await waitFor(() => expect(analyze).toHaveBeenCalledOnce());
+            await userEvent.click(canvas.getByRole('radio', { name: 'Summary' }));
+            const summary = within(canvas.getByRole('region', { name: 'Recording summary' }));
+            await expect(summary.getByText(/The team compared ways to find a particular answer/)).toBeVisible();
+            await expect(summary.getByRole('button', { name: 'Regenerate summary' })).toBeDisabled();
+            await expect(canvas.getByRole('button', { name: 'Export summary' })).toBeDisabled();
+            await userEvent.click(canvas.getByRole('button', { name: 'Skip speaker analysis' }));
+            await waitFor(() => expect(summary.getByRole('button', { name: 'Regenerate summary' })).toBeEnabled());
+            await expect(canvas.getByRole('button', { name: 'Export summary' })).toBeEnabled();
+        } finally {
+            complete();
+            analyze.mockRestore();
+            stop.mockRestore();
+        }
+    },
+};
+
 export const NemotronError: Story = { parameters: { scenario: 'nemotron-error' } };
 export const SpeakersBeforeAnalysis: Story = {
     play: async ({ canvas, canvasElement }) => {
@@ -435,8 +518,11 @@ export const SpeakerSettings: Story = {
         await waitFor(() => expect(page.queryByRole('dialog', { name: 'Rename speaker' })).not.toBeInTheDocument());
         await waitFor(() => expect(canvas.getByRole('button', { name: 'Rename speakers' })).toHaveFocus());
         await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
-        await userEvent.click(await page.findByRole('button', { name: 'Merge speakers' }));
-        await userEvent.click(page.getByRole('textbox', { name: 'Merge this speaker' }));
+        const mergeAction = await page.findByRole('button', { name: 'Merge speakers' });
+        await waitFor(() => expect(mergeAction).toBeVisible());
+        await userEvent.click(mergeAction);
+        const mergeDialog = within(await page.findByRole('dialog', { name: 'Merge speakers' }));
+        await userEvent.click(mergeDialog.getByRole('textbox', { name: 'Merge this speaker' }));
         await userEvent.click(page.getByRole('option', { name: 'Unknown speaker' }));
         await expect(page.getByRole('button', { name: 'Confirm merge' })).toBeEnabled();
         await userEvent.click(page.getByRole('textbox', { name: 'Into this speaker' }));

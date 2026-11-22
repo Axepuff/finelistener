@@ -19,6 +19,10 @@ export class SpeakerAnalysisStore {
 
     percent: number | null = null;
 
+    runCompute: SpeakerCompute | null = null;
+
+    phases: Array<SpeakerAnalysisProgressEvent['phase']> = [];
+
     status: 'idle' | 'running' | 'success' | 'error' | 'cancelled' = 'idle';
 
     errorMessage: string | null = null;
@@ -108,10 +112,12 @@ export class SpeakerAnalysisStore {
         this.assets = assets;
     }
 
-    begin(): void {
+    begin(compute?: SpeakerCompute): void {
+        this.runCompute = compute ?? null;
         this.percent = null;
         this.status = 'running';
         this.phase = 'preparing';
+        this.phases = ['preparing'];
         this.downloadedBytes = 0;
         this.totalBytes = 0;
         this.errorMessage = null;
@@ -120,6 +126,7 @@ export class SpeakerAnalysisStore {
     updateProgress(event: SpeakerAnalysisProgressEvent): void {
         if (this.status !== 'running') return;
         this.phase = event.phase;
+        if (!this.phases.includes(event.phase)) this.phases.push(event.phase);
         this.percent = event.percent !== undefined && Number.isFinite(event.percent) ?
             Math.max(0, Math.min(100, event.percent)) : null;
         this.downloadedBytes = event.downloadedBytes ?? 0;

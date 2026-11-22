@@ -1,8 +1,8 @@
 import { Box, Button, Divider, Group, Loader, Text } from '@mantine/core';
 import { IconPlayerStopFilled, IconUpload } from '@tabler/icons-react';
-import { formatDuration, useSystemAudioRecorder } from '@~/recorder';
+import { formatRecordingClock, useSystemAudioRecorder } from '@~/recorder';
 import { observer } from 'mobx-react-lite';
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { useAppStore } from 'renderer/src/AppContext';
 import { SHELL_SIZES } from '../model/shellSizes';
 import './TitleBar.css';
@@ -27,8 +27,21 @@ export const TitleBar: React.FC = observer(() => {
     const store = useAppStore();
     const session = store.workspace.activeSession;
     const { controls: recorder } = useSystemAudioRecorder();
-    const isRecording = store.operations.kind === 'recording';
+    const stopButton = useRef<HTMLButtonElement>(null);
+    const isRecording = store.recordingInProgress;
+    const isAnalyzing = store.operations.kind === 'analyzing-speakers';
+    const lockReason = store.operationBlockReason;
+    const importReason = store.operations.kind === 'recording' ? 'Stop recording to import audio.' : lockReason;
+    const recordingLabel = store.operations.kind === 'processing-recording' ? 'Saving recording…' :
+        recorder.isRecordingActive ? `Recording ${formatRecordingClock(recorder.recordingDurationMs)}` : 'Starting recording…';
     const isTranscribing = store.operations.kind === 'transcribing';
+    const progress = store.transcription.reportedProgress;
+    const transcriptionLabel = store.transcription.recognitionStarted ?
+        `Transcribing…${progress === null ? '' : ` ${Math.round(progress)}%`}` : 'Preparing audio…';
+
+    useLayoutEffect(() => {
+        if (recorder.canStopRecording && document.activeElement === document.body) stopButton.current?.focus();
+    }, [recorder.canStopRecording]);
 
     const handleImport = async () => {
         const result = await store.importAudio();
@@ -58,11 +71,11 @@ export const TitleBar: React.FC = observer(() => {
                 <>
                     <Divider orientation="vertical" my={16} />
                     <Group className="workspace-title-bar__session" gap={8} wrap="nowrap">
-                        {session ? <Text size="sm" fw={600} truncate="end" title={session.title}>{session.title}</Text> : null}
-                        {isRecording || isTranscribing ? (
+                        {session && !isRecording ? <Text size="sm" fw={600} truncate="end" title={session.title}>{session.title}</Text> : null}
+                        {isRecording || isTranscribing || isAnalyzing ? (
                             <Box component="span" role="status" className="workspace-title-bar__status" data-recording={isRecording || undefined}>
                                 {isRecording ? <RecordingDot /> : <Loader size={12} />}
-                                {isRecording ? `Recording ${formatDuration(recorder.recordingDurationMs).padStart(5, '0')}` : `Transcribing… ${Math.round(store.transcription.progress)}%`}
+                                {isRecording ? recordingLabel : isAnalyzing ? 'Identifying speakers…' : transcriptionLabel}
                             </Box>
                         ) : session ? (
                             <>
@@ -83,15 +96,20 @@ export const TitleBar: React.FC = observer(() => {
                 leftSection={<IconUpload size={16} />}
                 onClick={() => void handleImport()}
                 disabled={store.operations.isBusy}
+                title={importReason}
+                aria-description={importReason}
                 style={{ flexShrink: 0 }}
             >
                 {'Import audio'}
             </Button>
-            {recorder.isRecordingActive ? (
+            {isRecording || recorder.isRecordingActive ? (
                 <Button
                     leftSection={<IconPlayerStopFilled size={12} color="var(--brand-color-error)" />}
+                    ref={stopButton}
                     onClick={recorder.onStopRecording}
                     disabled={!recorder.canStopRecording}
+                    title={!recorder.canStopRecording ? recordingLabel : undefined}
+                    aria-description={!recorder.canStopRecording ? recordingLabel : undefined}
                     style={{ flexShrink: 0 }}
                 >
                     {'Stop recording'}
@@ -101,6 +119,8 @@ export const TitleBar: React.FC = observer(() => {
                     leftSection={<RecordingDot />}
                     onClick={recorder.onStartRecording}
                     disabled={!recorder.canStartRecording}
+                    title={lockReason}
+                    aria-description={lockReason}
                     style={{ flexShrink: 0 }}
                 >
                     {'Start recording'}

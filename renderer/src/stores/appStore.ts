@@ -32,12 +32,19 @@ import { RecordingRecoveryStore } from './recordingRecoveryStore';
 
 configure({ enforceActions: 'always' });
 
+interface ActiveTranscriptionSettings {
+    operationId: number;
+    request: TranscriptionRunRequest;
+    identifySpeakers: boolean;
+    speakerCompute: SpeakerAnalysisStore['compute'];
+}
+
 export class AppStore {
     readonly activityLog = new ActivityLogStore();
 
     readonly operations = new ForegroundOperationStore();
 
-    readonly workspace = new WorkspaceStore();
+    readonly workspace = new WorkspaceStore(this.operations);
 
     readonly sessions: SessionsStore;
 
@@ -62,6 +69,8 @@ export class AppStore {
     private disposed = false;
 
     private transcriptionRequestId = 0;
+
+    private transcriptionSettings: ActiveTranscriptionSettings | null = null;
 
     private speakerStopCompletion: Promise<void> | null = null;
 
@@ -110,6 +119,29 @@ export class AppStore {
 
     get runtimePlatform(): RendererAdapter['runtimePlatform'] | null {
         return this.adapter?.runtimePlatform ?? null;
+    }
+
+    get recordingInProgress(): boolean {
+        return this.operations.kind === 'recording' || this.operations.kind === 'processing-recording';
+    }
+
+    get activeTranscriptionSettings(): Readonly<ActiveTranscriptionSettings> | null {
+        const settings = this.transcriptionSettings;
+        return settings && settings.operationId === this.operations.active?.id ? settings : null;
+    }
+
+    get operationBlockReason(): string | undefined {
+        if (this.operations.kind === 'processing-recording') return 'Wait for the recording to finish saving.';
+        if (this.recordingInProgress) return 'Stop recording to use this action.';
+        if (this.operations.kind === 'transcribing') return 'Wait for transcription to finish, or stop it.';
+        if (this.operations.kind === 'analyzing-speakers') return 'Wait for speaker analysis to finish, or skip it.';
+        if (this.operations.isBusy) return 'Wait for the current operation to finish.';
+    }
+
+    get exportBlockReason(): string | undefined {
+        if (this.recordingInProgress || this.operations.kind === 'transcribing' || this.operations.kind === 'analyzing-speakers') {
+            return this.operationBlockReason;
+        }
     }
 
     get lifecycleState(): TranscriptionLifecycleState {
@@ -346,6 +378,7 @@ export class AppStore {
     }
 
     async retryIncompleteTranscription(replaceSpeakerLabels = false): Promise<CommandResult> {
+        if (this.operationBlockReason) return commandFailure(this.operationBlockReason);
         const run = this.transcription.savedTranscript?.sourceRun;
 
         if (!run || run.status !== 'incomplete') return commandFailure('No incomplete transcription is available.');
@@ -407,6 +440,7 @@ export class AppStore {
             optimized: retryFailed ? (this.transcription.savedTranscript?.sourceRun?.settings.optimized ?? true) : this.workspace.audioMode === 'optimized',
             hideDuplicateSpeech: this.transcription.preferredDuplicateFilterEnabled,
         };
+        this.transcriptionSettings = { operationId: operation.id, request, identifySpeakers: labelSpeakersRequested, speakerCompute: speakerComputeRequested };
         const startedAt = performance.now();
         const isCurrent = (): boolean => this.operations.owns(operation) && !this.disposed;
 
@@ -467,6 +501,7 @@ export class AppStore {
             return commandSuccess(undefined);
         } finally {
             runInAction(() => {
+                if (this.transcriptionSettings?.operationId === operation.id) this.transcriptionSettings = null;
                 this.operations.finish(operation);
             });
         }
@@ -525,7 +560,7 @@ export class AppStore {
     ): Promise<CommandResult> {
         if (!this.adapter) return commandFailure('Speaker analysis is not available.');
 
-        this.speakers.begin();
+        this.speakers.begin(options.compute);
 
         try {
             const active = await this.adapter.setActiveSession(sessionId);
@@ -765,6 +800,7 @@ export class AppStore {
     }
 
     async saveText(content: string): Promise<CommandResult> {
+        if (this.exportBlockReason) return commandFailure(this.exportBlockReason);
         if (!this.adapter) return commandFailure('Saving text is not available.');
 
         try {

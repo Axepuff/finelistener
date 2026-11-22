@@ -5,7 +5,7 @@ import { SystemAudioRecorderAlerts } from './SystemAudioRecorderAlerts';
 import { SystemAudioRecorderControls } from './SystemAudioRecorderControls';
 
 interface SystemAudioRecorderProps {
-    variant?: 'workspace';
+    variant?: 'workspace' | 'sources';
 }
 
 export const SystemAudioRecorder: React.FC<SystemAudioRecorderProps> = ({ variant }) => {
@@ -13,7 +13,7 @@ export const SystemAudioRecorder: React.FC<SystemAudioRecorderProps> = ({ varian
     return (
         <Stack gap={12}>
             <SystemAudioRecorderControls variant={variant} />
-            <SystemAudioRecorderLevelMeter />
+            {variant !== 'sources' ? <SystemAudioRecorderLevelMeter /> : null}
             <SystemAudioRecorderAlerts />
         </Stack>
     );

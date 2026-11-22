@@ -97,7 +97,9 @@ export const DiscardRecording: Story = { parameters: { scenario: 'sessions-recov
 export const Running: Story = { parameters: { scenario: 'sessions-transcribing' }, play: async ({ canvas }) => {
     const panel = within(canvas.getByRole('navigation', { name: 'Sessions' }));
     await expect(panel.getByText('Transcribing… 42%')).toBeVisible();
-    await expect(panel.getByRole('progressbar', { name: 'Transcription progress' })).toHaveAttribute('aria-valuenow', '42');
+    const otherSession = panel.getByRole('button', { name: 'Weekly sync' });
+    await expect(otherSession).toBeDisabled();
+    await expect(otherSession).toHaveAccessibleDescription(/Other sessions open after transcription finishes, or when you stop it/);
 } };
 export const Recovery: Story = { parameters: { scenario: 'sessions-recovery' }, play: async ({ canvas }) => {
     const panel = within(canvas.getByRole('navigation', { name: 'Sessions' }));

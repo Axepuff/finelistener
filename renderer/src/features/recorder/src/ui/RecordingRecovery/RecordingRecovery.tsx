@@ -12,7 +12,7 @@ const formatAge = (ageMs: number): string => {
 };
 
 export const RecordingRecovery: React.FC = observer(() => {
-    const { recordingRecovery } = useAppStore();
+    const { recordingRecovery, operationBlockReason } = useAppStore();
     const [discardId, setDiscardId] = useState<string | null>(null);
     const severity = recordingRecovery.items.some((item) => item.ageMs >= recordingRecovery.warningAgeMs) ? 'error' : 'warning';
     if (!recordingRecovery.hasItems && !recordingRecovery.error) return null;
@@ -34,10 +34,10 @@ export const RecordingRecovery: React.FC = observer(() => {
                                     <Text key={warning.source} size="xs" c="yellow.8">{`${warning.source === 'system' ? 'System audio' : 'Microphone'}: ${warning.message}`}</Text>
                                 ))}
                                 <Group gap={6}>
-                                    <Button size="xs" disabled={!item.canRecover || recordingRecovery.activeRecordingId !== null}
+                                    <Button size="xs" disabled={!item.canRecover || Boolean(operationBlockReason)} title={operationBlockReason} aria-description={operationBlockReason}
                                         loading={recordingRecovery.activeRecordingId === item.recordingId}
                                         onClick={() => void recordingRecovery.recover(item.recordingId)}>{'Recover'}</Button>
-                                    <Button size="xs" variant="default" disabled={recordingRecovery.activeRecordingId !== null}
+                                    <Button size="xs" variant="default" disabled={Boolean(operationBlockReason)} title={operationBlockReason} aria-description={operationBlockReason}
                                         onClick={() => setDiscardId(item.recordingId)}>{'Delete'}</Button>
                                 </Group>
                             </Stack>
@@ -52,7 +52,7 @@ export const RecordingRecovery: React.FC = observer(() => {
                     <Text size="sm">{'This permanently deletes the only known copy of this recording.'}</Text>
                     <Group justify="flex-end">
                         <Button variant="default" onClick={() => setDiscardId(null)}>{'Cancel'}</Button>
-                        <Button color="red" onClick={() => {
+                        <Button color="red" disabled={Boolean(operationBlockReason)} title={operationBlockReason} aria-description={operationBlockReason} onClick={() => {
                             if (discardId) void recordingRecovery.discard(discardId);
                             setDiscardId(null);
                         }}>{'Delete recording'}</Button>

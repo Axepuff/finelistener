@@ -34,6 +34,12 @@
     border-color: var(--brand-color-border);
 }
 
+.session-row--recording { padding: 8px 10px; }
+.session-row__recording-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand-color-error); }
+.sessions-panel__lock { padding: 8px 10px; border-radius: 4px; background: var(--brand-color-fill-secondary); }
+.sessions-panel__lock svg { flex-shrink: 0; margin-top: 1px; }
+.session-row__open:disabled { color: var(--brand-color-text-secondary); cursor: default; }
+
 .session-row__open {
     flex: 1;
     min-width: 0;

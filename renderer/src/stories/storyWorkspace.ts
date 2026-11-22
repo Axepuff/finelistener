@@ -1,5 +1,6 @@
 import type { RecordingLevel, RecordingProgress, RecordingState } from 'electron/src/services/RecordingService';
 import type { RecoverableRecording } from 'electron/src/types/recordingArchive';
+import type { SpeakerAnalysisProgressEvent } from 'electron/src/types/transcription';
 import type { SessionDetails, SessionListItem, SessionTranscriptV1 } from 'electron/src/types/sessions';
 import { UI_PREFERENCE_DEFAULTS, type UiPreferenceKey, type UiPreferenceValueMap } from '../../../electron/src/types/uiPreferences';
 import { AppStore } from '../stores/appStore';
@@ -75,7 +76,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
                 endSec: (index + 1) / 5,
                 text: `Passage ${index + 1}. ${transcript.segments[index % 3].text}`,
             })),
-        } : structuredClone(scenario === 'speakers' || isNemotron ? speakerTranscript : transcript) : undefined,
+        } : structuredClone(scenario === 'speakers' || (isNemotron && scenario !== 'nemotron-analyzing') ? speakerTranscript : transcript) : undefined,
     };
     if (isNemotron && session.transcript?.speakers) session.transcript.speakers.provenance = {
         version: 1, engine: 'nemotron-3', modelRevision: 'demo-model', runtimeRevision: 'demo-runtime',
@@ -136,19 +137,24 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         recordingId: 'unfinished-demo', createdAt: Date.now() - 7_200_000, ageMs: 7_200_000, sizeBytes: 1_344_000,
         state: 'recoverable', sources: ['system'], sourceWarnings: [], canRecover: true,
     }] : [];
-    let recordingState: RecordingState = scenario === 'recording' ? 'recording' : 'idle';
+    let recordingState: RecordingState = 'idle';
+    let activeRecordingSources = { system: true, microphone: false };
     let recordingAttempt = 0;
     let silenceTimer: ReturnType<typeof setTimeout> | undefined;
     let stateListener: ((state: RecordingState) => void) | null = null;
     let levelListener: ((level: RecordingLevel) => void) | null = null;
     let progressListener: ((progress: RecordingProgress) => void) | null = null;
     let finishTranscription: ((value: string) => void) | null = null;
+    let speakerProgress: ((event: SpeakerAnalysisProgressEvent) => void) | null = null;
+    let finishSpeakerAnalysis: ((value: SessionDetails) => void) | null = null;
+    let notifySpeakerStarted = () => {};
+    const speakerStarted = new Promise<void>((resolve) => { notifySpeakerStarted = resolve; });
     const preferences: UiPreferenceValueMap = { ...UI_PREFERENCE_DEFAULTS, speakerLabelsEnabled: false, homeSidebarWidth: 300, recordingSystemDevice: 'demo-system', recordingMicrophoneDevice: 'demo-microphone' };
     const emitRecording = () => {
         stateListener?.(recordingState);
         if (recordingState === 'recording') {
-            levelListener?.({ source: 'system', rms: 0.12, peak: 0.4, clipped: false });
-            if (scenario !== 'settings-recording-silence') levelListener?.({ source: 'microphone', rms: 0.06, peak: 0.2, clipped: false });
+            if (activeRecordingSources.system) levelListener?.({ source: 'system', rms: 0.12, peak: 0.4, clipped: false });
+            if (activeRecordingSources.microphone) levelListener?.({ source: 'microphone', rms: 0.06, peak: 0.2, clipped: false });
             progressListener?.({ durationMs: 42000, bytesWritten: 1344000 });
         }
     };
@@ -238,10 +244,11 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         onRecordingState: (callback) => { stateListener = callback; return () => { stateListener = null; }; },
         onRecordingLevel: (callback) => { levelListener = callback; return () => { levelListener = null; }; },
         onRecordingProgress: (callback) => { progressListener = callback; return () => { progressListener = null; }; },
-        startSystemRecording: () => {
+        startSystemRecording: (options) => {
             recordingAttempt += 1;
             if (scenario === 'settings-recording-error' && recordingAttempt === 1) return Promise.reject(new Error('Demo recording device unavailable'));
             if (scenario === 'recording-error' || scenario === 'recording-start-error') return Promise.reject(new Error('Demo recording device unavailable'));
+            activeRecordingSources = { system: options?.sources?.system !== null, microphone: typeof options?.sources?.microphone === 'string' };
             recordingState = 'recording';
             emitRecording();
             if (scenario === 'settings-recording-silence') {
@@ -259,6 +266,20 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
             sessions = [session];
             return Promise.resolve({ recordingId: 'demo-recording', sessionId: session.id, sourceWarnings: [] });
         },
+        ...(scenario === 'nemotron-analyzing' ? {
+            onSpeakerAnalysisProgress: (callback) => { speakerProgress = callback; return () => { speakerProgress = null; }; },
+            analyzeSpeakers: (sessionId) => new Promise<SessionDetails>((resolve) => {
+                finishSpeakerAnalysis = resolve;
+                speakerProgress?.({ sessionId, phase: 'converting' });
+                speakerProgress?.({ sessionId, phase: 'analyzing' });
+                notifySpeakerStarted();
+            }),
+            stopSpeakerAnalysis: () => {
+                finishSpeakerAnalysis?.(session);
+                finishSpeakerAnalysis = null;
+                return Promise.resolve(true);
+            },
+        } : {}),
         transcribe: (_path, options) => {
             if (scenario === 'error') return Promise.reject(new Error('Demo transcription failure'));
             if (scenario !== 'transcribing' && scenario !== 'sessions-transcribing') {
@@ -300,17 +321,20 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         if (scenario === 'error') await run;
         else void run.catch((error: unknown) => { console.error('Story transcription setup failed', error); });
     }
-    if (scenario === 'recording-error') await store.recording.startRecording();
-    if (scenario === 'settings-recording') recordingState = 'recording';
-    if (scenario === 'recording' || scenario === 'settings-recording') emitRecording();
+    if (scenario === 'recording' || scenario === 'settings-recording' || scenario === 'recording-error') {
+        const result = await store.recording.startRecording();
+        if (!result.ok && scenario !== 'recording-error') { store.dispose(); throw new Error(result.message); }
+    }
     if (isNemotron) {
         await store.speakers.setEnabled(true);
-        if (scenario === 'nemotron-downloading' || scenario === 'nemotron-analyzing') {
-            store.operations.begin(scenario === 'nemotron-downloading' ? 'preparing-speaker-assets' : 'analyzing-speakers');
+        if (scenario === 'nemotron-downloading') {
+            store.operations.begin('preparing-speaker-assets');
             store.speakers.begin();
-            store.speakers.updateProgress({ sessionId: session.id,
-                phase: scenario === 'nemotron-downloading' ? 'downloading' : 'analyzing',
-                ...(scenario === 'nemotron-downloading' ? { downloadedBytes: 61_835_965, totalBytes: 123_671_929 } : {}) });
+            store.speakers.updateProgress({ sessionId: session.id, phase: 'downloading', downloadedBytes: 61_835_965, totalBytes: 123_671_929 });
+        }
+        if (scenario === 'nemotron-analyzing') {
+            void store.analyzeSpeakers();
+            await speakerStarted;
         }
         if (scenario === 'nemotron-error') store.speakers.fail('GPU speaker analysis is unavailable. Select CPU or update your graphics driver.');
     }
@@ -326,6 +350,8 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
             store.dispose();
             finishTranscription?.('');
             finishTranscription = null;
+            finishSpeakerAnalysis?.(session);
+            finishSpeakerAnalysis = null;
         },
     };
 };

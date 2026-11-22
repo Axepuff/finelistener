@@ -33,6 +33,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
     const speakers = transcript?.speakers?.speakers ?? [];
     const hasSpeakers = Boolean(transcript?.speakers);
     const isBusy = store.operations.isBusy;
+    const lockReason = store.operationBlockReason;
     const [settingsOpened, setSettingsOpened] = useState(false);
     const [confirmRerun, setConfirmRerun] = useState(false);
     const [renameId, setRenameId] = useState<string | null>(null);
@@ -97,7 +98,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                 </ul>
             ) : null}
             {labels && speakers.length > 0 ? (
-                <UnstyledButton className={styles.renameSpeakers} disabled={isBusy} onClick={openRename}>Rename speakers</UnstyledButton>
+                <UnstyledButton className={styles.renameSpeakers} disabled={isBusy} title={lockReason} aria-description={lockReason} onClick={openRename}>Rename speakers</UnstyledButton>
             ) : null}
             <Popover opened={settingsOpened} onChange={setSettingsOpened} width={260} position="bottom-end" shadow="md" trapFocus={true}>
                 <Popover.Target>
@@ -111,17 +112,17 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                             <>
                                 <Select label="Speaker analysis device" size="xs" data={speakerState.computeOptions}
                                     value={speakerState.compute} onChange={(value) => { void speakerState.setCompute(value); }}
-                                    disabled={isBusy} description="Nemotron 3 counts speakers automatically. Auto uses CPU when no GPU is available." />
+                                    disabled={isBusy} aria-description={lockReason} description="Nemotron 3 counts speakers automatically. Auto uses CPU when no GPU is available." />
                                 <Divider />
                             </>
                         ) : null}
-                        <Button size="compact-sm" variant="light" leftSection={<IconRefresh size={15} />} disabled={isBusy} onClick={start}>
+                        <Button size="compact-sm" variant="light" leftSection={<IconRefresh size={15} />} disabled={isBusy} title={lockReason} aria-description={lockReason} onClick={start}>
                             {hasSpeakers ? 'Analyze speakers again' : speakerState.status === 'error' ? 'Retry speaker analysis' : 'Analyze speakers'}
                         </Button>
                         {hasSpeakers ? (
                             <>
-                                <Button size="compact-sm" variant="subtle" justify="flex-start" leftSection={<IconPencil size={15} />} disabled={isBusy || speakers.length === 0} onClick={openRename}>Rename speaker</Button>
-                                <Button size="compact-sm" variant="subtle" justify="flex-start" leftSection={<IconArrowMerge size={15} />} disabled={isBusy || speakers.length === 0} onClick={() => {
+                                <Button size="compact-sm" variant="subtle" justify="flex-start" leftSection={<IconPencil size={15} />} disabled={isBusy || speakers.length === 0} title={lockReason} aria-description={lockReason} onClick={openRename}>Rename speaker</Button>
+                                <Button size="compact-sm" variant="subtle" justify="flex-start" leftSection={<IconArrowMerge size={15} />} disabled={isBusy || speakers.length === 0} title={lockReason} aria-description={lockReason} onClick={() => {
                                     setSettingsOpened(false);
                                     setEditError(null);
                                     setMergeSourceId(speakers[0]?.id ?? null);
@@ -139,7 +140,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                     <Text size="sm">A successful analysis will replace speaker names, assignments, and merges. The current labels stay in place if analysis fails or is cancelled.</Text>
                     <Group justify="flex-end">
                         <Button variant="default" onClick={() => setConfirmRerun(false)}>Cancel</Button>
-                        <Button color="red" onClick={() => {
+                        <Button color="red" disabled={isBusy} title={lockReason} aria-description={lockReason} onClick={() => {
                             setConfirmRerun(false);
                             void execute(store.analyzeSpeakers(true));
                         }}>Analyze again</Button>
@@ -154,7 +155,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                     }} disabled={editPending !== null} />
                     <TextInput label="Name" value={renameValue} onChange={(event) => setRenameValue(event.currentTarget.value)} maxLength={80} disabled={editPending !== null} />
                     {editError ? <Alert color="red" title="Could not save">{editError}</Alert> : null}
-                    <Button loading={editPending === 'rename'} disabled={!renameId || !renameValue.trim() || isBusy} onClick={() => {
+                    <Button loading={editPending === 'rename'} disabled={!renameId || !renameValue.trim() || isBusy} title={lockReason} aria-description={lockReason} onClick={() => {
                         if (!renameId) return;
                         void saveEdit('rename', store.renameSpeaker(renameId, renameValue), () => setRenameId(null));
                     }}>Save name</Button>
@@ -170,7 +171,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                             'All unassigned passages will be assigned to the selected speaker. This cannot be undone.' :
                             'The target identity and name will survive. This merge cannot be undone.'}</Text>
                     {editError ? <Alert color="red" title="Could not save">{editError}</Alert> : null}
-                    <Button color="red" loading={editPending === 'merge'} disabled={!mergeSourceId || !mergeTargetId || mergeSourceId === mergeTargetId || isBusy} onClick={() => {
+                    <Button color="red" loading={editPending === 'merge'} disabled={!mergeSourceId || !mergeTargetId || mergeSourceId === mergeTargetId || isBusy} title={lockReason} aria-description={lockReason} onClick={() => {
                         if (!mergeSourceId || !mergeTargetId) return;
                         void saveEdit('merge', store.mergeSpeakers(
                             mergeSourceId === '__unknown__' ? null : mergeSourceId,
@@ -186,7 +187,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                     <Text size="sm" lineClamp={3}>{selectedSpan && selectedSpan.spans.length > 1 ? `${selectedSpan.spans.length} transcript fragments` : selectedSegment?.text}</Text>
                     <Select label="Speaker" data={assignmentOptions} value={assignId ?? selectedSegment?.speakerId ?? '__unknown__'} onChange={setAssignId} disabled={editPending !== null} />
                     {editError ? <Alert color="red" title="Could not save">{editError}</Alert> : null}
-                    <Button loading={editPending === 'assign'} disabled={!selectedSpan || isBusy} onClick={() => {
+                    <Button loading={editPending === 'assign'} disabled={!selectedSpan || isBusy} title={lockReason} aria-description={lockReason} onClick={() => {
                         if (!selectedSpan) return;
                         void saveEdit('assign', store.assignSpeaker(selectedSpan,
                             (assignId ?? selectedSegment?.speakerId ?? '__unknown__') === '__unknown__' ?
@@ -204,8 +205,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
 export const SpeakerAnalysisStatus: React.FC = observer(() => {
     const store = useAppStore();
     const speakerState = store.speakers;
-    const isRunning = store.operations.kind === 'analyzing-speakers'
-        || store.operations.kind === 'preparing-speaker-assets';
+    const isRunning = store.operations.kind === 'preparing-speaker-assets';
     const [confirmRetry, setConfirmRetry] = useState<{ sessionId: string | null; speakers: object } | null>(null);
     const hasError = speakerState.componentReady && speakerState.status === 'error' && speakerState.errorMessage;
 
