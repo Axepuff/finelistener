@@ -124,9 +124,9 @@ it.each([
             results.push(service.cancelDownload(), service.cancelDownload(), service.download());
         }
         releaseWrite();
-        const expected = outcome === 'cancelled'
-            ? { state: 'cancelled', downloadedBytes: partialBytes }
-            : { state: 'error', error: 'disk-space', downloadedBytes: partialBytes };
+        const expected = outcome === 'cancelled' ?
+            { state: 'cancelled', downloadedBytes: partialBytes } :
+            { state: 'error', error: 'disk-space', downloadedBytes: partialBytes };
         for (const result of await Promise.all(results)) expect(result).toMatchObject(expected);
         await expect(service.getStatus()).resolves.toMatchObject(expected);
         expect(fetch).toHaveBeenCalledOnce();
