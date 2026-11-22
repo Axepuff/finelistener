@@ -594,6 +594,7 @@ export class AppStore {
             this.activityLog.appendFailure(`Speaker analysis failed · session ${sessionId}`, error);
             const message = speakerErrorMessage(error) ?? 'Speaker analysis failed. The saved transcript is unchanged.';
             this.speakers.fail(message);
+            void this.speakers.refreshAssets();
 
             return commandFailure(message);
         } finally {

@@ -1,7 +1,7 @@
 import type { SessionDetails } from 'electron/src/types/sessions';
 import { createStoryWorkspace } from './storyWorkspace';
 
-export type ErrorScenario = 'incomplete' | 'nothing' | 'previous' | 'speaker' | 'speaker-existing' | 'preparation' | 'permission' | 'storage' | 'source-stopped' | 'stop-transcription' | 'stop-speakers';
+export type ErrorScenario = 'incomplete' | 'partial-preparation' | 'nothing' | 'previous' | 'speaker' | 'speaker-existing' | 'preparation' | 'permission' | 'storage' | 'source-stopped' | 'stop-transcription' | 'stop-speakers';
 
 // Controlled IPC substitutes: these never record, download, infer, or open OS settings.
 export const createErrorWorkspace = async (scenario: ErrorScenario) => {
@@ -17,18 +17,26 @@ export const createErrorWorkspace = async (scenario: ErrorScenario) => {
     const { adapter, store } = workspace;
     let session: SessionDetails = structuredClone(await adapter.getSession('storybook-session'));
     const options = { language: 'en', model: 'base' as const, splitOnWord: true, useVad: true };
-    if (scenario === 'incomplete' || scenario === 'nothing') {
+    if (scenario === 'incomplete' || scenario === 'nothing' || scenario === 'partial-preparation') {
         session.sourceKind = 'recorded';
         session.tracks = [{ source: 'system', filePath: '/synthetic/system.wav', startOffsetMs: 0 },
             { source: 'microphone', filePath: '/synthetic/microphone.wav', startOffsetMs: 0 }];
         const completed = { startSec: 0, endSec: 1, text: 'Saved system audio.', source: 'system' as const };
-        session.transcript = { version: 1, segments: scenario === 'incomplete' ? [completed] : [], sourceRun: {
+        session.transcript = { version: 1, segments: scenario !== 'nothing' ? [completed] : [], sourceRun: {
             status: 'incomplete', settings: options, sources: [
-                { source: 'system', status: scenario === 'incomplete' ? 'completed' : 'failed', segments: scenario === 'incomplete' ? [completed] : [] },
+                { source: 'system', status: scenario !== 'nothing' ? 'completed' : 'failed', segments: scenario !== 'nothing' ? [completed] : [] },
                 { source: 'microphone', status: 'failed', segments: [] },
             ],
         } };
-        adapter.transcribeSession = () => {
+        const incomplete = structuredClone(session.transcript);
+        if (scenario === 'partial-preparation') session.transcript = undefined;
+        adapter.transcribeSession = (_id, request) => {
+            if (scenario === 'partial-preparation' && !request.retryFailed) {
+                // Substitute for the native log event; main controller/runner delivery is tested separately.
+                store.activityLog.appendProcessOutput('\nSource transcription failed · session storybook-session · run 2 · microphone: Error: Synthetic microphone conversion failed; caused by Error (ENOSPC): Synthetic disk is full\n');
+                session = { ...session, transcript: incomplete };
+                return Promise.resolve(session);
+            }
             session = { ...session, transcript: { version: 1, segments: [completed, { ...completed, source: 'microphone', text: 'Recovered microphone.' }] } };
             return Promise.resolve(session);
         };
@@ -39,6 +47,10 @@ export const createErrorWorkspace = async (scenario: ErrorScenario) => {
         const opened = await store.openSession(session.id);
         if (!opened.ok) throw new Error(opened.message);
     }
+    if (scenario === 'partial-preparation') {
+        await store.speakers.setEnabled(false);
+        await store.startTranscription(options);
+    }
     if (scenario === 'previous') {
         const transcribe = adapter.transcribe;
         adapter.transcribe = () => Promise.reject(new Error('Synthetic transcription failure'));
@@ -47,9 +59,12 @@ export const createErrorWorkspace = async (scenario: ErrorScenario) => {
     }
     if (scenario === 'speaker' || scenario === 'speaker-existing' || scenario === 'preparation') {
         await store.speakers.setEnabled(true);
-        store.speakers.setAssets({ ready: scenario !== 'preparation', gpuBackend: 'vulkan', gpuAvailable: false, downloadBytes: 123_671_929 });
+        let ready = scenario === 'speaker-existing';
+        adapter.getSpeakerAssets = () => Promise.resolve({ ready, gpuBackend: 'vulkan', gpuAvailable: false, downloadBytes: 123_671_929 });
+        store.speakers.setAssets(await adapter.getSpeakerAssets());
         if (scenario !== 'preparation') {
-            adapter.analyzeSpeakers = () => Promise.reject(new Error('SPEAKER_GPU_UNAVAILABLE'));
+            if (scenario === 'speaker') await store.speakers.setCompute('gpu');
+            adapter.analyzeSpeakers = () => { ready = true; return Promise.reject(new Error('SPEAKER_GPU_UNAVAILABLE')); };
             await store.analyzeSpeakers(scenario === 'speaker-existing');
             adapter.analyzeSpeakers = () => Promise.resolve({ ...session, transcript: { ...session.transcript!, speakers: {
                 version: 1, recognitionRevision: 'synthetic', generation: 'synthetic', settings: {}, intervals: [], corrections: [], status: 'completed', speakers: [],

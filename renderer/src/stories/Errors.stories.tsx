@@ -45,6 +45,31 @@ export const NothingTranscribed: Story = {
         await waitFor(() => expect(canvas.queryByRole('alert')).not.toBeInTheDocument());
     },
 };
+export const PartialPreparationFailure: Story = {
+    parameters: { errorScenario: 'partial-preparation' },
+    play: async ({ canvas, loaded }) => {
+        const { store, adapter } = loaded.workspace as StoryWorkspace;
+        const retry = spyOn(adapter, 'transcribeSession');
+        try {
+            const alert = within(canvas.getByRole('alert'));
+            await expect(alert.getByText('Incomplete transcription')).toBeVisible();
+            await expect(alert.getByText('System audio: Saved')).toBeVisible();
+            await expect(alert.getByText('Microphone: Failed')).toBeVisible();
+            alert.getByRole('button', { name: 'Show in log' }).focus();
+            await userEvent.keyboard('{Enter}');
+            const log = canvas.getByRole('region', { name: 'Process log' });
+            await expect(log).toHaveFocus();
+            await expect(log).toHaveTextContent('microphone: Error: Synthetic microphone conversion failed; caused by Error (ENOSPC): Synthetic disk is full');
+            await userEvent.click(canvas.getByRole('button', { name: 'Log' }));
+            await userEvent.click(alert.getByRole('button', { name: 'Retry remaining sources' }));
+            await waitFor(() => expect(store.transcription.isIncomplete).toBe(false));
+            await expect(retry).toHaveBeenCalledWith('storybook-session', expect.objectContaining({ retryFailed: true, language: 'en', model: 'base' }));
+            await expect(canvas.getByText('Saved system audio.')).toBeVisible();
+            await expect(canvas.getByText('Recovered microphone.')).toBeVisible();
+            await expect(store.operations.isBusy).toBe(false);
+        } finally { retry.mockRestore(); }
+    },
+};
 export const PreviousKept: Story = {
     parameters: { errorScenario: 'previous' },
     play: async ({ canvas }) => {
@@ -60,7 +85,13 @@ export const SpeakerFailure: Story = {
         const { adapter, store } = loaded.workspace as StoryWorkspace;
         const retry = spyOn(adapter, 'analyzeSpeakers');
         try {
-            const alert = within(canvas.getByRole('alert'));
+            const alert = within((await canvas.findByText('Speaker analysis failed')).closest('[role="alert"]') as HTMLElement);
+            await expect(alert.getByRole('textbox', { name: 'Run on' })).toHaveValue('GPU (Vulkan)');
+            const busy = store.operations.begin('optimizing-audio')!;
+            await waitFor(() => expect(alert.getByRole('textbox', { name: 'Run on' })).toBeDisabled());
+            await expect(alert.getByRole('button', { name: 'Retry speaker analysis' })).toBeDisabled();
+            await expect(alert.getByRole('button', { name: 'Show in log' })).toBeEnabled();
+            store.operations.finish(busy);
             await expect(alert.getByText(/GPU unavailable. Select CPU/)).toBeVisible();
             await userEvent.click(alert.getByRole('button', { name: 'Show in log' }));
             await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent('SPEAKER_GPU_UNAVAILABLE');
@@ -71,6 +102,8 @@ export const SpeakerFailure: Story = {
             await userEvent.click(alert.getByRole('button', { name: 'Retry speaker analysis' }));
             await waitFor(() => expect(store.speakers.status).toBe('success'));
             await expect(retry).toHaveBeenCalledWith('storybook-session', expect.objectContaining({ compute: 'cpu' }));
+            await expect(store.speakers.compute).toBe('cpu');
+            await expect(store.transcription.savedTranscript?.speakers?.status).toBe('completed');
         } finally { retry.mockRestore(); }
     },
 };
