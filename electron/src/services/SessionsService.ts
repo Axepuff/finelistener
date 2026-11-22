@@ -81,14 +81,43 @@ const writeJsonFile = async (filePath: string, value: unknown, signal?: AbortSig
     }
 };
 
-const toListItem = (session: SessionFileV1): SessionListItem => ({
+const toListItem = (session: SessionFileV1, durationMs?: number, speakerCount?: number): SessionListItem => ({
     id: session.id,
     title: session.title,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     sourceKind: session.sourceKind,
     hasTranscript: Boolean(session.transcript?.path),
+    ...(durationMs !== undefined ? { durationMs } : {}),
+    ...(speakerCount !== undefined ? { speakerCount } : {}),
 });
+
+const readWavDurationMs = async (filePath: string): Promise<number | undefined> => {
+    let file;
+    try { file = await fs.open(filePath, 'r'); } catch { return undefined; }
+    try {
+        const header = Buffer.alloc(12);
+        if ((await file.read(header, 0, 12, 0)).bytesRead !== 12 || header.toString('ascii', 0, 4) !== 'RIFF' || header.toString('ascii', 8, 12) !== 'WAVE') return undefined;
+        const fileSize = (await file.stat()).size;
+        let offset = 12;
+        const chunk = Buffer.alloc(8);
+        let byteRate: number | undefined;
+        while (offset + 8 <= fileSize) {
+            if ((await file.read(chunk, 0, 8, offset)).bytesRead !== 8) break;
+            const size = chunk.readUInt32LE(4);
+            const dataOffset = offset + 8;
+            if (dataOffset + size > fileSize) return undefined;
+            if (chunk.toString('ascii', 0, 4) === 'fmt ' && size >= 16) {
+                const format = Buffer.alloc(16);
+                if ((await file.read(format, 0, 16, dataOffset)).bytesRead !== 16) break;
+                byteRate = format.readUInt32LE(8);
+            }
+            if (chunk.toString('ascii', 0, 4) === 'data' && byteRate) return Math.round(size / byteRate * 1000);
+            offset = dataOffset + size + (size & 1);
+        }
+        return undefined;
+    } catch { return undefined; } finally { await file.close(); }
+};
 
 export class SessionsService {
     private readonly audioPreprocessor = new AudioPreprocessor();
@@ -194,7 +223,31 @@ export class SessionsService {
 
                 if (!session || session.version !== SESSION_VERSION) continue;
 
-                sessions.push(toListItem(session));
+                const safeFile = (relativePath: string | undefined): string | undefined => {
+                    if (typeof relativePath !== 'string' || !relativePath || path.isAbsolute(relativePath)) return undefined;
+                    const resolved = path.resolve(sessionDir, relativePath);
+                    if (!resolved.startsWith(`${path.resolve(sessionDir)}${path.sep}`)) return undefined;
+                    return resolved;
+                };
+                let durationMs: number | undefined;
+                for (const relativePath of [session.audio?.wavPath, session.audio?.originalPath]) {
+                    const audioPath = safeFile(relativePath);
+                    const audioDuration = audioPath ? await readWavDurationMs(audioPath) : undefined;
+                    if (audioDuration !== undefined) { durationMs = audioDuration; break; }
+                }
+                if (durationMs === undefined && Array.isArray(session.tracks) && session.tracks.length && session.tracks.every((track) =>
+                    track && Number.isFinite(track.startOffsetMs) && track.startOffsetMs >= 0 && Number.isFinite(track.durationMs) && track.durationMs! >= 0)) {
+                    durationMs = Math.max(...session.tracks.map((track) => track.startOffsetMs + track.durationMs!));
+                }
+                let speakerCount: number | undefined;
+                const transcriptPath = safeFile(session.transcript?.path);
+                if (transcriptPath) {
+                    try {
+                        const transcript = await readJsonFile<SessionTranscriptV1>(transcriptPath);
+                        if (Array.isArray(transcript.speakers?.speakers)) speakerCount = transcript.speakers.speakers.length;
+                    } catch { /* Missing or invalid transcripts do not hide the session. */ }
+                }
+                sessions.push(toListItem(session, durationMs, speakerCount));
             } catch {
                 // ignore invalid session entries
             }

@@ -1,6 +1,6 @@
 import { Button, Paper, SegmentedControl, Stack, Text } from '@mantine/core';
 import { IconFileMusic } from '@tabler/icons-react';
-import { RecordingRecovery, SystemAudioRecorder } from '@~/recorder';
+import { SystemAudioRecorder } from '@~/recorder';
 import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useState, type FC } from 'react';
@@ -56,7 +56,6 @@ export const FileSelect: FC = observer(() => {
             }}
         >
             <Stack gap={12}>
-                <RecordingRecovery />
                 <SegmentedControl
                     fullWidth={true}
                     value={sourceMode}

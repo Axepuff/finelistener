@@ -39,6 +39,54 @@ afterEach(async () => {
     await fs.rm(environment.root, { recursive: true, force: true });
 });
 
+it('lists WAV duration and persisted speaker count while retaining legacy sessions without metadata', async () => {
+    const sessionsDir = path.join(environment.root, 'sessions');
+    const metadataDir = path.join(sessionsDir, 'metadata');
+    const legacyDir = path.join(sessionsDir, 'legacy');
+    await fs.mkdir(path.join(metadataDir, 'audio'), { recursive: true });
+    await fs.mkdir(path.join(metadataDir, 'transcript'), { recursive: true });
+    await fs.mkdir(legacyDir, { recursive: true });
+    const audio = wav(1000);
+    const extraChunk = Buffer.alloc(10);
+    extraChunk.write('JUNK');
+    extraChunk.writeUInt32LE(1, 4);
+    const withExtraChunk = Buffer.concat([audio.subarray(0, 12), extraChunk, audio.subarray(12)]);
+    withExtraChunk.writeUInt32LE(withExtraChunk.length - 8, 4);
+    await fs.writeFile(path.join(metadataDir, 'audio', 'source.wav'), withExtraChunk);
+    await fs.writeFile(path.join(metadataDir, 'audio', 'original.mp3'), 'Non-WAV original');
+    await fs.writeFile(path.join(metadataDir, 'session.json'), JSON.stringify({ version: 1, id: 'metadata', title: 'Audio', createdAt: 1, updatedAt: 2,
+        sourceKind: 'imported', audio: { originalPath: 'audio/original.mp3', wavPath: 'audio/source.wav' }, transcript: { path: 'transcript/transcript.json' } }));
+    await fs.writeFile(path.join(metadataDir, 'transcript', 'transcript.json'), JSON.stringify({ version: 1, segments: [], speakers: {
+        version: 1, recognitionRevision: 'r', generation: 'g', settings: {}, speakers: [{ id: 'a', name: 'Alice' }, { id: 'b', name: 'Bob' }],
+        intervals: [], corrections: [], status: 'completed',
+    } }));
+    await fs.writeFile(path.join(legacyDir, 'session.json'), JSON.stringify({ version: 1, id: 'legacy', title: 'Legacy', createdAt: 1, updatedAt: 1, sourceKind: 'imported' }));
+    for (const [id, tracks] of [
+        ['tracks', [{ source: 'system', startOffsetMs: 1000, durationMs: 3000 }, { source: 'microphone', startOffsetMs: 0, durationMs: 5000 }]],
+        ['unknown-duration', [{ source: 'system', startOffsetMs: 1000 }]],
+    ] as const) {
+        const dir = path.join(sessionsDir, id);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(path.join(dir, 'session.json'), JSON.stringify({ version: 1, id, title: id, createdAt: 1, updatedAt: 1, sourceKind: 'recorded', tracks }));
+    }
+
+    const items = await new SessionsService().listSessions();
+    expect(items).toContainEqual(expect.objectContaining({ id: 'metadata', durationMs: 1000, speakerCount: 2 }));
+    expect(items).toContainEqual(expect.objectContaining({ id: 'legacy' }));
+    expect(items.find(({ id }) => id === 'legacy')).not.toHaveProperty('durationMs');
+    expect(items.find(({ id }) => id === 'legacy')).not.toHaveProperty('speakerCount');
+    expect(items.find(({ id }) => id === 'tracks')).toHaveProperty('durationMs', 5000);
+    expect(items.find(({ id }) => id === 'unknown-duration')).not.toHaveProperty('durationMs');
+    await fs.unlink(path.join(metadataDir, 'audio', 'source.wav'));
+    await fs.unlink(path.join(metadataDir, 'transcript', 'transcript.json'));
+    const missing = (await new SessionsService().listSessions()).find(({ id }) => id === 'metadata');
+    expect(missing).toBeDefined();
+    expect(missing).not.toHaveProperty('durationMs');
+    expect(missing).not.toHaveProperty('speakerCount');
+    await fs.writeFile(path.join(metadataDir, 'audio', 'source.wav'), withExtraChunk.subarray(0, withExtraChunk.length - 1));
+    expect((await new SessionsService().listSessions()).find(({ id }) => id === 'metadata')).not.toHaveProperty('durationMs');
+});
+
 it('persists source originals and reopens a real FFmpeg mix with aligned duration and bounded samples', async () => {
     const systemPath = path.join(environment.root, 'recordings', 'system.wav');
     const microphonePath = path.join(environment.root, 'recordings', 'microphone.wav');

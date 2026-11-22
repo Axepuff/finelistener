@@ -1,4 +1,5 @@
-import { Alert, Button, Group, Modal, Paper, Stack, Text } from '@mantine/core';
+import { Alert, Box, Button, Group, Modal, Stack, Text } from '@mantine/core';
+import { IconAlertTriangle } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState } from 'react';
 import { useAppStore } from 'renderer/src/AppContext';
@@ -12,16 +13,19 @@ const formatAge = (ageMs: number): string => {
 export const RecordingRecovery: React.FC = observer(() => {
     const { recordingRecovery } = useAppStore();
     const [discardId, setDiscardId] = useState<string | null>(null);
+    const severity = recordingRecovery.items.some((item) => item.ageMs >= recordingRecovery.warningAgeMs) ? 'error' : 'warning';
     if (!recordingRecovery.hasItems && !recordingRecovery.error) return null;
     return (
         <>
-            <Alert color={recordingRecovery.items.some((item) => item.ageMs >= recordingRecovery.warningAgeMs) ? 'red' : 'yellow'} title="Unfinished recordings">
+            <Alert icon={<IconAlertTriangle size={16} />} color={severity === 'error' ? 'red' : 'yellow'}
+                title={recordingRecovery.items.length === 1 ? 'Unfinished recording' : 'Unfinished recordings'} p={12}
+                styles={{ root: { border: `1px solid var(--brand-color-${severity}-border)`, background: `var(--brand-color-${severity}-bg)`, color: 'var(--brand-color-text)' }, title: { fontSize: 14 }, message: { color: 'var(--brand-color-text)' } }}>
                 <Stack gap={10}>
-                    <Text size="sm">{'Audio from an interrupted recording is available.'}</Text>
+                    <Text size="xs">{'Audio from an interrupted recording is available.'}</Text>
                     {recordingRecovery.items.map((item) => (
-                        <Paper key={item.recordingId} withBorder={true} p="sm">
+                        <Box key={item.recordingId}>
                             <Stack gap={6}>
-                                <Text size="sm">{`${formatAge(item.ageMs)} · ${formatSize(item.sizeBytes)}`}</Text>
+                                <Text size="xs">{`${formatAge(item.ageMs)} · ${formatSize(item.sizeBytes)}`}</Text>
                                 <Text size="xs" c="dimmed">
                                     {item.state === 'unknown' ? 'Unknown recovery data' : item.sources.map((source) => source === 'system' ? 'System audio' : 'Microphone').join(', ')}
                                 </Text>
@@ -29,14 +33,14 @@ export const RecordingRecovery: React.FC = observer(() => {
                                     <Text key={warning.source} size="xs" c="yellow.8">{`${warning.source === 'system' ? 'System audio' : 'Microphone'}: ${warning.message}`}</Text>
                                 ))}
                                 <Group gap={6}>
-                                    <Button size="compact-xs" disabled={!item.canRecover || recordingRecovery.activeRecordingId !== null}
+                                    <Button size="xs" disabled={!item.canRecover || recordingRecovery.activeRecordingId !== null}
                                         loading={recordingRecovery.activeRecordingId === item.recordingId}
                                         onClick={() => void recordingRecovery.recover(item.recordingId)}>{'Recover'}</Button>
-                                    <Button size="compact-xs" variant="outline" color="red" disabled={recordingRecovery.activeRecordingId !== null}
+                                    <Button size="xs" variant="default" disabled={recordingRecovery.activeRecordingId !== null}
                                         onClick={() => setDiscardId(item.recordingId)}>{'Delete'}</Button>
                                 </Group>
                             </Stack>
-                        </Paper>
+                        </Box>
                     ))}
                     {recordingRecovery.error ? <Text size="sm" c="red">{recordingRecovery.error}</Text> : null}
                 </Stack>

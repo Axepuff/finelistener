@@ -1,4 +1,5 @@
 import type { RecordingLevel, RecordingProgress, RecordingState } from 'electron/src/services/RecordingService';
+import type { RecoverableRecording } from 'electron/src/types/recordingArchive';
 import type { SessionDetails, SessionListItem, SessionSummary, SessionTranscriptV1, SummaryGenerationResult } from 'electron/src/types/sessions';
 import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
 import { defaultRecordingSummaryOptions, recordingSummaryGenerationVersion } from '../../../electron/src/types/summaryOptions';
@@ -10,7 +11,8 @@ import { STORY_AUDIO_PATH } from './storyAudio';
 export type WorkspaceScenario = 'empty' | 'ready' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error' | 'recording-start-error'
     | 'summary-ready' | 'summary-install' | 'summary-downloading' | 'summary-download-error' | 'summary-generating'
     | 'summary-cancel' | 'summary-error' | 'summary-saved' | 'summary-partial'
-    | 'nemotron' | 'nemotron-reading' | 'nemotron-downloading' | 'nemotron-analyzing' | 'nemotron-error';
+    | 'nemotron' | 'nemotron-reading' | 'nemotron-downloading' | 'nemotron-analyzing' | 'nemotron-error'
+    | 'sessions' | 'sessions-empty' | 'sessions-recovery' | 'sessions-recovery-error' | 'sessions-transcribing' | 'sessions-speaker-edit';
 
 export interface StoryWorkspace {
     store: AppStore;
@@ -45,7 +47,7 @@ const transcriptSource = transcript.segments.map((segment) => (
 
 export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise<StoryWorkspace> => {
     const isNemotron = scenario.startsWith('nemotron');
-    const hasTranscript = scenario === 'transcript' || scenario === 'long-transcript' || scenario === 'speakers' || isNemotron || scenario.startsWith('summary-');
+    const hasTranscript = scenario === 'transcript' || scenario === 'long-transcript' || scenario === 'speakers' || isNemotron || scenario.startsWith('summary-') || scenario.startsWith('sessions');
     let session: SessionDetails = {
         id: 'storybook-session',
         title: 'Design discussion.wav',
@@ -141,6 +143,26 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
     };
     const isRecorder = scenario.startsWith('recording');
     let sessions: SessionListItem[] = scenario === 'empty' || isRecorder ? [] : [session];
+    if (scenario.startsWith('sessions')) {
+        const now = new Date();
+        const date = (days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, 10).getTime();
+        session = { ...session, updatedAt: date(0), createdAt: date(0), durationMs: 12000, speakerCount: 2 };
+        if (scenario === 'sessions-speaker-edit') {
+            const labeled = structuredClone(speakerTranscript);
+            labeled.speakers!.speakers.push({ id: 'carol', name: 'Carol' });
+            session = { ...session, updatedAt: date(1), createdAt: date(1), speakerCount: 3, transcript: labeled };
+        }
+        sessions = scenario === 'sessions-empty' ? [] : [session,
+            { ...session, id: 'weekly', title: 'Weekly sync', updatedAt: date(0) - 1000, sourceKind: 'recorded' },
+            { ...session, id: 'interview', title: 'Customer interview', updatedAt: date(1), speakerCount: 1 },
+            { ...session, id: 'long-title', title: 'A very long session title that must stay on one line without hiding the overflow menu or expanding the Sessions panel.wav', updatedAt: date(1) - 1000 },
+            { ...session, id: 'note', title: 'Voice note', updatedAt: date(8), speakerCount: undefined, hasTranscript: false },
+        ];
+    }
+    let recoverables: RecoverableRecording[] = scenario.startsWith('sessions-recovery') ? [{
+        recordingId: 'unfinished-demo', createdAt: Date.now() - 7_200_000, ageMs: 7_200_000, sizeBytes: 1_344_000,
+        state: 'recoverable', sources: ['system'], sourceWarnings: [], canRecover: true,
+    }] : [];
     let recordingState: RecordingState = scenario === 'recording' ? 'recording' : 'idle';
     let stateListener: ((state: RecordingState) => void) | null = null;
     let levelListener: ((level: RecordingLevel) => void) | null = null;
@@ -162,7 +184,17 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         ...(isNemotron ? { getSpeakerAssets: () => Promise.resolve({ gpuBackend: 'vulkan' as const,
             ready: scenario !== 'nemotron-downloading', gpuAvailable: scenario !== 'nemotron-error', downloadBytes: 123_671_929 }) } : {}),
         listSessions: () => Promise.resolve(sessions),
-        getSession: () => Promise.resolve(session),
+        getSession: (id) => {
+            const item = sessions.find((candidate) => candidate.id === id);
+            return Promise.resolve(id === session.id || !item ? session : { ...session, ...item, transcript: item.hasTranscript ? session.transcript : undefined });
+        },
+        listRecoverableRecordings: () => Promise.resolve(recoverables),
+        recoverRecording: () => {
+            if (scenario === 'sessions-recovery-error') return Promise.reject(new Error('Demo recovery failure'));
+            recoverables = [];
+            return Promise.resolve({ recordingId: 'unfinished-demo', sessionId: session.id, sourceWarnings: [] });
+        },
+        discardRecording: (id) => { recoverables = recoverables.filter((item) => item.recordingId !== id); return Promise.resolve(true); },
         getSummaryModelStatus: () => Promise.resolve(modelStatus),
         onSummaryModelChanged: (callback) => { modelListener = callback; return () => { modelListener = undefined; }; },
         downloadSummaryModel: async () => {
@@ -195,6 +227,17 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         deleteSession: (id) => {
             sessions = sessions.filter((item) => item.id !== id);
             return Promise.resolve(true);
+        },
+        mergeSpeakers: (_id, sourceId, targetId) => {
+            const saved = session.transcript;
+            if (!saved?.speakers) return Promise.reject(new Error('Demo speaker metadata is unavailable'));
+            const speakers = saved.speakers.speakers.filter(({ id }) => id !== sourceId);
+            session = { ...session, updatedAt: Date.now(), speakerCount: speakers.length, transcript: {
+                ...saved, segments: saved.segments.map((segment) => segment.speakerId === sourceId ? { ...segment, speakerId: targetId } : segment),
+                speakers: { ...saved.speakers, speakers },
+            } };
+            sessions = sessions.map((item) => item.id === session.id ? session : item);
+            return Promise.resolve(session);
         },
         optimizeAudio: (_id, mode) => {
             session = { ...session, audioMode: mode ?? 'optimized' };
@@ -233,7 +276,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         },
         transcribe: (_path, options) => {
             if (scenario === 'error') return Promise.reject(new Error('Demo transcription failure'));
-            if (scenario !== 'transcribing') {
+            if (scenario !== 'transcribing' && scenario !== 'sessions-transcribing') {
                 session = { ...session, updatedAt: session.updatedAt + 60_000, transcription: { language: options.language }, hasTranscript: true, transcript: structuredClone(transcript) };
                 sessions = [session];
                 return Promise.resolve(transcriptSource);
@@ -254,11 +297,11 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
     const store = new AppStore(fake.adapter);
     store.initialize();
     await store.whisperModels.refresh();
-    if (scenario !== 'empty' && !isRecorder) {
+    if (scenario !== 'empty' && scenario !== 'sessions-empty' && !scenario.startsWith('sessions-recovery') && !isRecorder) {
         const result = await store.openSession(session.id);
         if (!result.ok) { store.dispose(); throw new Error(result.message); }
     }
-    if (scenario === 'transcribing' || scenario === 'error') {
+    if (scenario === 'transcribing' || scenario === 'sessions-transcribing' || scenario === 'error') {
         const run = store.startTranscription({ language: 'en', model: 'base', splitOnWord: true, useVad: true });
         if (scenario === 'error') await run;
         else void run.catch((error: unknown) => { console.error('Story transcription setup failed', error); });
