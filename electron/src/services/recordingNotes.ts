@@ -38,6 +38,19 @@ const promptFor = (instruction: string, source: string, task: SummaryTask): stri
 const timedLine = (row: SummarySourceRow): string =>
     `[${row.startSec.toFixed(2)}–${row.endSec.toFixed(2)}] ${row.speaker ? row.speaker + ': ' : ''}${row.text}`;
 
+const sliceRow = (row: SummarySourceRow, start: number, end = row.text.length): SummarySourceRow => {
+    if (!row.sourceRef) return { ...row, text: row.text.slice(start, end) };
+    const sourcePosition = (offset: number): number => {
+        const boundary = row.sourceOffsets?.findLast((item) => item.offset <= offset);
+        return boundary ? boundary.sourceOffset + offset - boundary.offset : row.sourceRef!.startChar + offset;
+    };
+    return { ...row, text: row.text.slice(start, end),
+        sourceRef: { ...row.sourceRef, startChar: sourcePosition(start), endChar: sourcePosition(end) },
+        sourceOffsets: row.sourceOffsets?.filter((item) => item.offset > start && item.offset <= end)
+            .map((item) => ({ ...item, offset: item.offset - start })),
+    };
+};
+
 const groupRows = (rows: SummarySourceRow[], requested: number): SummarySourceRow[][] => {
     if (requested <= 1) return [rows];
     if (requested > rows.length) {
@@ -60,7 +73,7 @@ const groupRows = (rows: SummarySourceRow[], requested: number): SummarySourceRo
             let start = 0;
             return Array.from({ length: parts }, (_, index) => {
                 const end = index === parts - 1 ? row.text.length : starts[Math.floor((index + 1) * starts.length / parts)];
-                const group = [{ ...row, text: row.text.slice(start, end) }];
+                const group = [sliceRow(row, start, end)];
                 start = end;
                 return group;
             });
@@ -146,7 +159,7 @@ const nextPassage = async (rows: SummarySourceRow[], first: number, budget: numb
     if (nearEnd >= 0) end = Math.floor(end * 0.75) + nearEnd + 1;
     const text = characters.slice(0, end).join('');
     const remainder = row.text.slice(text.length);
-    if (remainder) rows.splice(first, 1, { ...row, text }, { ...row, text: remainder });
+    if (remainder) rows.splice(first, 1, sliceRow(row, 0, text.length), sliceRow(row, text.length));
     return [rows[first]];
 };
 
@@ -254,7 +267,12 @@ export const generateRecordingNotes = async (
                     progress(`Checking chunk ${chunks.length + 1} against the transcript…`);
                     const text = await generate(model, reviewInstruction, `DRAFT\n${draft}\n\n${overlap}ORIGINAL LINES\n${lines}`, paragraphLimit, task);
                     if (!text) continue;
-                    chunks.push({ startSec: passage[0].startSec, endSec: Math.max(...passage.map((row) => row.endSec)), text });
+                    const sourceRefs = passage.flatMap((row) => row.sourceRef ? [row.sourceRef] : []);
+                    const speakers = passage.flatMap((row) => row.speakerSnapshot ? [row.speakerSnapshot] : [])
+                        .filter((speaker, index, all) => all.findIndex((item) => item.id === speaker.id && item.name === speaker.name) === index);
+                    chunks.push({ startSec: passage[0].startSec, endSec: Math.max(...passage.map((row) => row.endSec)), text,
+                        ...(sourceRefs.length ? { sourceRefs } : {}), ...(speakers.length ? { speakers } : {}),
+                    });
                     previous = passage;
                     first += passage.length;
                     accepted = true;

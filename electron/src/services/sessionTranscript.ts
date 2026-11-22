@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 import { assignedSpeaker, completeWordTimings, fallbackSpeaker } from '../utils/speakerAssignment';
 import type {
-    SessionSpeakerInterval, SessionSpeakerMetadataV1, SessionTranscriptSegmentV1, SessionTranscriptV1, SummarySourceRow,
+    SessionSpeakerInterval, SessionSpeakerMetadataV1, SessionSummary, SessionTranscriptSegmentV1, SessionTranscriptV1, SummarySourceRow,
 } from '../types/sessions';
 import type { StructuredTranscriptionResult } from './whisperServer/utils';
 import { deriveSourceTranscript } from './transcriptDuplicateFilter';
@@ -9,21 +9,60 @@ import { deriveSourceTranscript } from './transcriptDuplicateFilter';
 const TRANSCRIPT_LINE_REGEX =
     /^\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s+-->\s+(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]\s*(.*)$/;
 
-export const getSummaryInput = (transcript: SessionTranscriptV1): { rows: SummarySourceRow[]; inputHash: string } | null => {
+const getSummarySourceRevision = (transcript: SessionTranscriptV1): string => createHash('sha256').update(JSON.stringify([
+    transcript.recognitionRevision,
+    transcript.segments.map((segment) => [segment.id, segment.source, segment.startSec, segment.endSec,
+        segment.text, segment.speakerId, segment.rawSpan]),
+    transcript.speakers?.speakers,
+])).digest('hex');
+
+// Readers must not expose offsets against a different source, even when the normalized inputHash still matches.
+export const getReadableSummary = (transcript: SessionTranscriptV1): SessionSummary | undefined => {
+    const summary = transcript.summary;
+    if (!summary) return undefined;
+    const input = getSummaryInput(transcript);
+    if (summary.inputHash !== input?.inputHash) return undefined;
+    if (summary.sourceRevision && summary.sourceRevision === input?.sourceRevision) return summary;
+    const { sourceRevision: _revision, ...readable } = summary;
+    return { ...readable, ...(summary.reviewedChunks ? { reviewedChunks: summary.reviewedChunks.map((chunk) => {
+        const { sourceRefs: _refs, ...paragraph } = chunk;
+        return paragraph;
+    }) } : {}) };
+};
+
+export const getSummaryInput = (transcript: SessionTranscriptV1): { rows: SummarySourceRow[]; inputHash: string; sourceRevision: string } | null => {
     if (transcript.sourceRun?.status === 'incomplete') return null;
 
     // Saved segments already reflect the duplicate filter and speaker corrections.
     const names = new Map(transcript.speakers?.speakers.map(({ id, name }) => [id, name.trim()]));
     const rows: SummarySourceRow[] = [];
-    for (const segment of [...transcript.segments].sort((a, b) => a.startSec - b.startSec)) {
+    for (const { segment, segmentIndex } of transcript.segments.map((item, index) => ({ segment: item, segmentIndex: index }))
+        .sort((a, b) => a.segment.startSec - b.segment.startSec)) {
         const fragment = segment.text.trim().replace(/\s+/gu, ' ');
         if (!fragment) continue;
         const speaker = names.size ? names.get(segment.speakerId ?? '') || 'Unknown speaker' : undefined;
-        rows.push({ startSec: segment.startSec, endSec: segment.endSec ?? segment.startSec, text: fragment, speaker });
+        const startChar = segment.text.length - segment.text.trimStart().length;
+        const endChar = segment.text.trimEnd().length;
+        // Only collapsed whitespace needs a boundary map. Unicode is preserved without NFC/NFKC conversion.
+        const sourceOffsets: NonNullable<SummarySourceRow['sourceOffsets']> = [];
+        let removed = 0;
+        for (const match of segment.text.slice(startChar, endChar).matchAll(/\s+/gu)) {
+            if (match[0].length === 1) continue;
+            const offset = match.index - removed + 1;
+            removed += match[0].length - 1;
+            sourceOffsets.push({ offset, sourceOffset: startChar + match.index + match[0].length });
+        }
+        rows.push({ startSec: segment.startSec, endSec: segment.endSec ?? segment.startSec, text: fragment, speaker,
+            sourceRef: { segmentIndex, segmentId: segment.id, source: segment.source, startChar, endChar },
+            speakerSnapshot: { id: segment.speakerId ?? null, name: names.get(segment.speakerId ?? '') || null },
+            sourceOffsets,
+        });
     }
     if (!rows.length) return null;
-    const inputHash = createHash('sha256').update(JSON.stringify([transcript.recognitionRevision, rows])).digest('hex');
-    return { rows, inputHash };
+    // Preserve the pre-metadata hash byte-for-byte so saved results and legacy brief caches stay readable.
+    const legacyRows = rows.map(({ startSec, endSec, text, speaker }) => ({ startSec, endSec, text, speaker }));
+    const inputHash = createHash('sha256').update(JSON.stringify([transcript.recognitionRevision, legacyRows])).digest('hex');
+    return { rows, inputHash, sourceRevision: getSummarySourceRevision(transcript) };
 };
 
 const parseTimestampToSeconds = (match: RegExpMatchArray, offset: number): number => {

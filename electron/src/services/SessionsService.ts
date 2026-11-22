@@ -14,7 +14,7 @@ import type {
 import { AudioPreprocessor } from './AudioPreprocessor';
 import type { RecordingResult } from './RecordingService';
 import { deriveSourceTranscript } from './transcriptDuplicateFilter';
-import { deriveSpeakerTranscript, getSummaryInput, materializeRecognitionTranscript } from './sessionTranscript';
+import { deriveSpeakerTranscript, getReadableSummary, getSummaryInput, materializeRecognitionTranscript } from './sessionTranscript';
 
 const SESSION_FILE_NAME = 'session.json';
 const SESSION_VERSION = 1 as const;
@@ -289,6 +289,7 @@ export class SessionsService {
 
             try {
                 transcript = await readJsonFile<SessionTranscriptV1>(transcriptPath);
+                if (transcript.summary) transcript.summary = getReadableSummary(transcript);
             } catch {
                 transcript = undefined;
             }
@@ -581,7 +582,7 @@ export class SessionsService {
         const { transcript, session } = await this.readStoredTranscript(sessionId);
         const input = getSummaryInput(transcript);
         if (!input) throw new Error('A complete transcript with speech is required.');
-        const saved = transcript.summary?.inputHash === input.inputHash ? transcript.summary : undefined;
+        const saved = getReadableSummary(transcript);
         const setting = transcript.sourceRun?.settings.language ?? session.transcription?.language;
         const languageHint = typeof setting === 'string' ? setting.trim() : '';
         return { ...input, saved, ...(languageHint && languageHint.toLowerCase() !== 'auto' ? { languageHint } : {}) };
@@ -591,12 +592,15 @@ export class SessionsService {
         return this.withTranscriptWrite(sessionId, async () => {
             signal.throwIfAborted();
             const { transcript, transcriptPath } = await this.readStoredTranscript(sessionId);
-            if (getSummaryInput(transcript)?.inputHash !== summary.inputHash) {
+            const input = getSummaryInput(transcript);
+            if (input?.inputHash !== summary.inputHash
+                || (summary.sourceRevision !== undefined && summary.sourceRevision !== input?.sourceRevision)) {
                 throw new Error('The transcript changed during summarization.');
             }
             // This rename commits the summary. Cancellation after it must return the saved result.
-            await writeJsonFile(transcriptPath, { ...transcript, summary }, signal);
-            return summary;
+            const readable = getReadableSummary({ ...transcript, summary })!;
+            await writeJsonFile(transcriptPath, { ...transcript, summary: readable }, signal);
+            return readable;
         });
     }
 
@@ -666,8 +670,7 @@ export class SessionsService {
 
         const transcriptPath = path.join(sessionDir, TRANSCRIPT_FILE_RELATIVE_PATH);
 
-        const summaryIsStale = transcript.summary && transcript.summary.inputHash !== getSummaryInput(transcript)?.inputHash;
-        await writeJsonFile(transcriptPath, summaryIsStale ? { ...transcript, summary: undefined } : transcript, signal);
+        await writeJsonFile(transcriptPath, { ...transcript, summary: getReadableSummary(transcript) }, signal);
         await writeJsonFile(sessionFilePath, session);
     }
 

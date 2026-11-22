@@ -83,13 +83,16 @@ it('resumes interrupted notes only for matching settings and preserves a complet
         for (const [index, request] of [options, changedPrompt, changedCount, changedOverlap].entries()) {
             await expect(generate(undefined, 'session', request)).resolves.toEqual({ ok: false, reason: 'failed' });
             expect(saved).toMatchObject({ brief: '', detailed: `${request.prompt} (run ${index + 1})`, options: request });
+            expect(saved).not.toHaveProperty('generatedAt');
         }
         finishBrief = true;
+        const completedAt = Date.now();
         const text = 'Summarize in a sentence. (run 4)';
         await expect(generate(undefined, 'session', changedOverlap)).resolves.toMatchObject({
             ok: true, summary: { brief: 'Brief', detailed: text, options: changedOverlap, reviewedChunks: [{ ...row, text }] },
         });
         const completed = saved;
+        expect(completed?.generatedAt).toBeGreaterThanOrEqual(completedAt);
         finishBrief = false;
         await expect(generate(undefined, 'session', options)).resolves.toEqual({ ok: false, reason: 'failed' });
         expect(saved).toBe(completed);
