@@ -398,6 +398,28 @@ describe('speaker analysis in the renderer', () => {
         expect(store.speakers.status).toBe('cancelled');
     });
 
+    it('does not publish an analysis failure after its session is replaced during readiness refresh', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        let finishStatus: (value: { ready: boolean; gpuBackend: null }) => void = () => undefined;
+        const getSpeakerAssets = vi.fn(() => new Promise<{ ready: boolean; gpuBackend: null }>((resolve) => { finishStatus = resolve; }));
+        const fake = createFakeRendererAdapter({ getSpeakerAssets, analyzeSpeakers: () => Promise.reject(new Error('Synthetic analysis failure')) });
+        const store = new AppStore(fake.adapter);
+        store.workspace.replaceWorkspace(session(transcript));
+        store.transcription.replaceSavedTranscript(transcript);
+        const pending = store.analyzeSpeakers();
+        await vi.waitFor(() => expect(getSpeakerAssets).toHaveBeenCalledOnce());
+        store.operations.cancelActive();
+        store.workspace.replaceWorkspace({ ...session(transcript), id: 'replacement' });
+        store.speakers.reset();
+        const replacement = store.operations.begin('importing');
+        finishStatus({ ready: true, gpuBackend: null });
+        await pending;
+        expect(store.workspace.activeSessionId).toBe('replacement');
+        expect(store.speakers.status).toBe('idle');
+        expect(store.speakers.errorMessage).toBeNull();
+        expect(store.operations.active).toEqual(replacement);
+    });
+
     it('uses the same speaker and source labels for Speakers export', () => {
         expect(formatTranscriptPrefix(labeledTranscript.segments[0], labeledTranscript)).toBe('Microphone · Microphone speaker: ');
         expect(transcriptToText(labeledTranscript, 'speakers')).toContain('Microphone · Microphone speaker: Hello');

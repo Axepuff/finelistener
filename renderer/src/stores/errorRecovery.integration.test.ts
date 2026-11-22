@@ -83,7 +83,7 @@ it('keeps first-use analysis recovery visible and retries the chosen device thro
         expect(ready).toBe(true);
         const render = () => renderToStaticMarkup(createElement(MantineProvider, null,
             createElement(AppContext.Provider, { value: store }, createElement(SpeakerAnalysisStatus))));
-        await vi.waitFor(() => expect(render()).toContain('Retry speaker analysis'));
+        expect(render()).toContain('Retry speaker analysis');
         expect(render()).toContain('Run on');
         expect(store.speakers.compute).toBe('gpu');
         expect(store.speakers.errorMessage).toContain('GPU');
