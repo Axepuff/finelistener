@@ -709,6 +709,11 @@ export class AppStore {
                 this.transcription.setSummary(summary);
                 transcript = this.transcription.savedTranscript;
             }
+        }, (draft) => {
+            if (!this.disposed && this.workspace.activeSessionId === sessionId && this.transcription.savedTranscript === transcript) {
+                this.transcription.setSummaryDraft(draft);
+                transcript = this.transcription.savedTranscript;
+            }
         });
     }
 

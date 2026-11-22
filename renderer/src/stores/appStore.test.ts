@@ -1,5 +1,6 @@
+import { defaultRecordingSummaryOptions, recordingSummaryGenerationVersion } from '../../../electron/src/types/summaryOptions';
 import type { RecordingState } from 'electron/src/services/RecordingService';
-import type { SessionDetails, SessionTranscriptV1 } from 'electron/src/types/sessions';
+import type { SessionDetails, SessionTranscriptV1, SessionSummaryDraft, SummaryProgressEvent, SummaryGenerationResult } from 'electron/src/types/sessions';
 import type { TranscribeOpts } from 'electron/src/types/transcription';
 import { describe, expect, it, vi } from 'vitest';
 import { AppStore } from './appStore';
@@ -545,5 +546,45 @@ it('reports an unsuccessful file-manager launch as a safe command failure', asyn
     const fake = createFakeRendererAdapter({ revealSessionFolder: () => Promise.resolve(false) });
     const store = new AppStore(fake.adapter);
     expect(await store.revealSessionFolder('session-1')).toEqual({ ok: false, message: 'Failed to open the session folder.' });
+    store.dispose();
+});
+
+it.each(['none', 'session', 'transcript', 'dispose'])('keeps Summary drafts separate and ignores stale delivery after %s', async (invalidate) => {
+    const previous = { brief: 'Previous brief.', detailed: 'Previous detailed.', inputHash: 'hash', model: 'model' };
+    const transcript: SessionTranscriptV1 = { version: 1, segments: [{ startSec: 0, endSec: 1, text: 'Speech.' }], summary: previous };
+    const draft: SessionSummaryDraft = { inputHash: 'hash', sourceRevision: 'exact', model: 'model',
+        generationVersion: recordingSummaryGenerationVersion, options: { ...defaultRecordingSummaryOptions }, detailed: 'Reviewed.',
+        reviewedChunks: [{ startSec: 0, endSec: 1, text: 'Reviewed.' }],
+        progress: { version: 1, phase: 'brief', cursors: [{ groupIndex: 0, startChar: 0, endChar: 7 }] } };
+    const result = createDeferred<SummaryGenerationResult>();
+    let emit!: (event: SummaryProgressEvent) => void;
+    const fake = createFakeRendererAdapter({
+        getSession: () => Promise.resolve(createSession({ hasTranscript: true, transcript })),
+        getSummaryModelStatus: () => Promise.resolve({ state: 'ready', model: 'model', totalBytes: 1, downloadedBytes: 1 }),
+        onSummaryProgress: (callback) => { emit = callback; return () => {}; },
+        generateSummary: () => result.promise,
+    });
+    const store = new AppStore(fake.adapter);
+    store.initialize();
+    await store.summary.refreshModelStatus();
+    await store.openSession('session-1');
+    const running = store.generateSummary();
+    emit({ sessionId: 'other', message: 'Wrong session', draft });
+    expect(store.transcription.savedTranscript?.summaryDraft).toBeUndefined();
+    emit({ sessionId: 'session-1', message: 'Saved', draft });
+    expect(store.transcription.savedTranscript?.summary).toEqual(previous);
+    expect(store.transcription.savedTranscript?.summaryDraft).toEqual(draft);
+    if (invalidate === 'session') store.workspace.replaceWorkspace(createSession({ id: 'other' }));
+    if (invalidate === 'transcript') store.transcription.replaceSavedTranscript({ ...transcript, summary: undefined });
+    if (invalidate === 'dispose') store.dispose();
+    const current = store.transcription.savedTranscript;
+    emit({ sessionId: 'session-1', message: 'Late', draft: { ...draft, detailed: 'Late' } });
+    const completed = { ...previous, brief: 'New brief.', detailed: 'New detailed.' };
+    result.resolve({ ok: true, summary: completed });
+    await running;
+    if (invalidate === 'none') {
+        expect(store.transcription.savedTranscript?.summary).toEqual(completed);
+        expect(store.transcription.savedTranscript?.summaryDraft).toBeUndefined();
+    } else expect(store.transcription.savedTranscript).toBe(current);
     store.dispose();
 });
