@@ -99,6 +99,7 @@ export const createFakeRendererAdapter = (
         revealDevAppInFinder: () => Promise.resolve(false),
         getWhisperModels: () => Promise.resolve([]),
         downloadWhisperModel: () => Promise.resolve(),
+        cancelWhisperModelDownload: () => Promise.resolve(),
         importWhisperModelFromFile: () => Promise.resolve(null),
         openDevTools: () => Promise.resolve(true),
         getUiPreference: <K extends UiPreferenceKey>(key: K) => (

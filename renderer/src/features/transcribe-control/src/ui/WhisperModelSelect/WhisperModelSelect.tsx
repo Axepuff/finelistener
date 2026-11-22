@@ -1,151 +1,70 @@
-import { Button, Group, Loader, Modal, RingProgress, Select, Stack, Text } from '@mantine/core';
-import { IconCircleCheck, IconCloudDownload } from '@tabler/icons-react';
+import { Button, Group, Progress, Stack, Text } from '@mantine/core';
+import { IconCheck, IconAlertCircle } from '@tabler/icons-react';
 import type { WhisperModelName } from 'electron/src/types/whisper';
 import { observer } from 'mobx-react-lite';
-import React, { useMemo, useState } from 'react';
+import React, { useId } from 'react';
 import { useAppStore } from '../../../../../AppContext';
 
 interface Props {
-    value: WhisperModelName;
+    value: WhisperModelName | null;
     onChange: (value: WhisperModelName) => void;
-    onDownloadError?: (message: string) => void;
     disabled?: boolean;
 }
+const descriptions = { base: 'Fastest', small: 'Balanced', large: 'Best quality · v3 turbo' };
+const names: WhisperModelName[] = ['base', 'small', 'large'];
+const mb = (bytes: number) => Math.round(bytes / 1_000_000);
 
-export const WhisperModelSelect: React.FC<Props> = observer(({
-    value,
-    onChange,
-    onDownloadError,
-    disabled = false,
-}) => {
+export const WhisperModelSelect: React.FC<Props> = observer(({ value, onChange, disabled = false }) => {
     const store = useAppStore();
     const { whisperModels } = store;
-    const [pendingModel, setPendingModel] = useState<WhisperModelName | null>(null);
-    const control = store.transcriptionControl;
-    const requestedModel = control.isDownloadingPendingModel ? null : control.pendingDownloadModel;
-    const confirmationModel = requestedModel ?? pendingModel;
-    const isConfirmOpen = confirmationModel !== null;
-    const pendingModelInfo = confirmationModel ? whisperModels.getModel(confirmationModel) : undefined;
-    const isDownloadActive = whisperModels.isDownloadActive;
-
-    const pendingModelLabel = confirmationModel ?? 'selected';
-    const confirmText = pendingModelInfo?.sizeLabel ?
-        `Download the ${pendingModelLabel} model (${pendingModelInfo.sizeLabel})?` :
-        `Download the ${pendingModelLabel} model?`;
-
-    const modelData = useMemo(
-        () => whisperModels.models.map((item) => ({
-            value: item.name,
-            label: item.name,
-            disabled: isDownloadActive ? whisperModels.downloadProgress?.name !== item.name : false,
-        })),
-        [isDownloadActive, whisperModels.downloadProgress?.name, whisperModels.models],
-    );
-
-    const handleModelChange = (nextModel: string | null) => {
-        if (!nextModel) return;
-
-        const nextModelName = nextModel as WhisperModelName;
-        const nextModelInfo = whisperModels.getModel(nextModelName);
-
-        if (!nextModelInfo || nextModelInfo.isDownloaded) {
-            onChange(nextModelName);
-
-            return;
-        }
-
-        setPendingModel(nextModelName);
-    };
-
-    const handleConfirmDownload = async () => {
-        if (!confirmationModel || isDownloadActive) return;
-
-        const modelToDownload = confirmationModel;
-        setPendingModel(null);
-        const result = requestedModel ?
-            await store.confirmPendingTranscriptionDownload() :
-            await downloadSelectedModel(modelToDownload);
-
-        if (!result.ok) onDownloadError?.(result.message);
-    };
-
-    const downloadSelectedModel = async (modelName: WhisperModelName) => {
-        onChange(modelName);
-        return store.downloadWhisperModel(modelName);
-    };
-
-    const handleCancelDownload = () => {
-        setPendingModel(null);
-        control.cancelPendingDownload();
-    };
-
-    const getModelStatusNode = (modelName: WhisperModelName) => {
-        const modelInfo = whisperModels.getModel(modelName);
-        const isDownloading = whisperModels.downloadProgress?.name === modelName;
-        const progressValue = isDownloading ? whisperModels.downloadProgress?.percent ?? null : null;
-
-        if (isDownloading) {
-            if (progressValue === null) {
-                return <Loader size={14} />;
-            }
-
-            return (
-                <RingProgress
-                    size={14}
-                    thickness={2}
-                    sections={[{ value: progressValue, color: 'gray' }]}
-                />
-            );
-        }
-
-        if (modelInfo?.isDownloaded) {
-            return <IconCircleCheck color="var(--brand-color-success)" size={14} />;
-        }
-
-        return <IconCloudDownload color="var(--brand-color-text-secondary)" size={14} />;
-    };
-
+    const id = useId();
     return (
-        <>
-            <Select
-                label="Model"
-                value={value}
-                onChange={handleModelChange}
-                data={modelData}
-                rightSection={getModelStatusNode(value)}
-                disabled={disabled || isDownloadActive}
-                renderOption={({ option }) => {
-                    const optionName = option.value as WhisperModelName;
-                    const info = whisperModels.getModel(optionName);
-
-                    return (
-                        <Group gap={8} justify="space-between" wrap="nowrap">
-                            <Stack gap={0} style={{ flexGrow: 1 }}>
-                                <Text size="sm" style={{ textTransform: 'lowercase' }}>
-                                    {optionName}
-                                </Text>
-                                {info?.sizeLabel ? (
-                                    <Text size="xs" c="dimmed">
-                                        {info.sizeLabel}
-                                    </Text>
-                                ) : null}
-                            </Stack>
-                            {getModelStatusNode(optionName)}
-                        </Group>
-                    );
-                }}
-            />
-            <Modal opened={isConfirmOpen} onClose={handleCancelDownload} title="Download model" centered={true}>
-                <Stack gap={12}>
-                    <Text size="sm">{confirmText}</Text>
-                    <Group justify="flex-end" gap={8}>
-                        <Button variant="outline" onClick={handleCancelDownload}>{'Cancel'}</Button>
-                        <Button onClick={handleConfirmDownload} disabled={isDownloadActive}>
-                            {'Download'}
-                        </Button>
-                    </Group>
-                </Stack>
-            </Modal>
-        </>
+        <fieldset className="settings-models">
+            <legend>Model</legend>
+            {names.map((name) => {
+                const model = whisperModels.getModel(name);
+                const progress = whisperModels.downloadProgress?.name === name ? whisperModels.downloadProgress : null;
+                const blocked = whisperModels.isDownloadActive && !progress && !model?.isDownloaded;
+                const error = whisperModels.getDownloadError(name);
+                const title = name.charAt(0).toUpperCase() + name.slice(1);
+                return (
+                    <div key={name} className="settings-model" data-selected={!disabled && value === name}>
+                        <label className="settings-model__choice">
+                            <input type="radio" name={id} value={name} checked={!disabled && value === name}
+                                disabled={disabled || blocked || !model} onChange={() => onChange(name)}
+                                aria-label={title} aria-describedby={`${id}-${name}`} />
+                            <span className="settings-model__title"><strong>{title}</strong>
+                                <span>{descriptions[name]}{name === 'base' && model?.isBundled ? ' · included' : ''}</span>
+                            </span>
+                        </label>
+                        <Stack gap={6} className="settings-model__state" id={`${id}-${name}`}>
+                            {error ? <Group gap={4} wrap="nowrap" role="alert"><IconAlertCircle size={14} aria-hidden="true" /><Text size="xs">{error}</Text></Group> : null}
+                            {progress ? (
+                                <>
+                                    <Group gap={4} justify="space-between" role="status">
+                                        <Text size="xs">Downloading…{progress.percent !== null ? ` ${progress.percent}%` : ''}</Text>
+                                        <Text size="xs" ff="var(--brand-font-family-code)">{mb(progress.downloadedBytes)}{progress.totalBytes ? ` / ${mb(progress.totalBytes)}` : ''} MB</Text>
+                                    </Group>
+                                    <Progress value={progress.percent ?? 0} animated={progress.percent === null} size={4}
+                                        aria-label={`${title} download progress`} aria-valuetext={progress.percent === null ? 'Size unknown' : `${progress.percent}%`} />
+                                    <Button variant="subtle" size="compact-xs" className="settings-link" disabled={whisperModels.isCancelling}
+                                        onClick={() => { void whisperModels.cancelDownload(); }}>Cancel download</Button>
+                                </>
+                            ) : model?.isDownloaded ? (
+                                <Group gap={4}><IconCheck size={12} color="var(--brand-color-success)" aria-hidden="true" /><Text size="xs">Ready · {model.sizeLabel}</Text></Group>
+                            ) : (
+                                <Group gap={6} justify="space-between">
+                                    <Text size="xs">{model?.sizeLabel ?? 'Checking availability…'}{blocked ? ' · available after the current download' : ''}</Text>
+                                    {!blocked && model ? <Button variant="default" size="compact-xs" disabled={disabled}
+                                        aria-label={`${error ? 'Retry download' : 'Download'} ${title}`}
+                                        onClick={() => { void store.downloadWhisperModel(name); }}>{error ? 'Retry download' : 'Download'}</Button> : null}
+                                </Group>
+                            )}
+                        </Stack>
+                    </div>
+                );
+            })}
+            <Text size="xs" c="dimmed">Models are downloaded once and then work offline. One download at a time.</Text>
+        </fieldset>
     );
 });

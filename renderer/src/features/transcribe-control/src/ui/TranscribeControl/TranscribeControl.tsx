@@ -1,9 +1,11 @@
-import { ActionIcon, Alert, Box, Button, Checkbox, Group, Loader, Modal, Progress, Select, Stack, Switch, Text } from '@mantine/core';
-import { IconHeadphones, IconPlayerStopFilled, IconBackspaceFilled } from '@tabler/icons-react';
+import { ActionIcon, Alert, Box, Button, Group, Loader, Modal, Progress, Select, Stack, Switch, Text } from '@mantine/core';
+import { IconHeadphones, IconPlayerStopFilled, IconTrash } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useState } from 'react';
 import { useAppStore } from '../../../../../AppContext';
 import { TranscribeAdvancedSettings } from '../TranscribeAdvancedSettings/TranscribeAdvancedSettings';
+import { SourceCard } from './SourceCard';
+import './Settings.css';
 import { WhisperModelSelect } from '../WhisperModelSelect/WhisperModelSelect';
 
 const LANGS = [
@@ -37,6 +39,7 @@ const TranscribeControl: React.FC = observer(() => {
                 appendLog(result.message);
             } else if (result.value) {
                 control.setCustomModelFile(result.value);
+                control.setUseCustomModelFile(true);
                 appendLog(`Imported model file: ${result.value.fileName}`);
             }
         } finally {
@@ -70,19 +73,25 @@ const TranscribeControl: React.FC = observer(() => {
     };
 
     const isTranscribing = store.operations.kind === 'transcribing';
-    const loading = isTranscribing || control.isDownloadingPendingModel;
-    const canStart = !control.pendingDownloadModel
-        && !store.operations.isBusy
-        && (!store.whisperModels.isDownloadActive || useCustomModelFile || store.whisperModels.isDownloaded(model))
-        && (!useCustomModelFile || Boolean(customModelFile));
+    const modelReady = useCustomModelFile ? Boolean(customModelFile) : store.whisperModels.isDownloaded(model);
+    const blockReason = store.operations.isBusy ? (isTranscribing ? 'Transcription in progress.' : 'Wait for the current operation to finish.') :
+        !store.workspace.hasAudioSource ? 'Choose an audio source to transcribe.' :
+        store.workspace.hasIncompleteSegment ? 'Complete or clear the selected segment.' :
+        !modelReady ? (useCustomModelFile ? 'Choose a local model file to transcribe.' :
+            store.whisperModels.downloadProgress?.name === model ? 'The selected model is downloading.' :
+            'Download the selected model to transcribe.') : null;
+    const canStart = blockReason === null;
+    const loading = isTranscribing;
     const hasSystemAudio = store.workspace.activeSession?.sourceKind === 'imported'
         || store.workspace.activeSession?.tracks?.some((track) => track.source === 'system');
     const preparingSpeakerAssets = store.operations.kind === 'preparing-speaker-assets';
     const canPrepareSpeakerComponent = store.speakers.enabled && hasSystemAudio && !store.speakers.componentReady;
 
     return (
-        <Stack gap={12} justify="space-between" h="100%">
-            <Stack gap={12}>
+        <Box className="settings-panel">
+            <Stack gap={20} className="settings-panel__scroll">
+                <Text component="h2" size="lg" fw={600} m={0}>Settings</Text>
+                <SourceCard />
                 <Select
                     w="100%"
                     label="Language"
@@ -95,20 +104,16 @@ const TranscribeControl: React.FC = observer(() => {
                 />
 
                 <WhisperModelSelect
-                    value={model}
-                    onChange={(value) => control.setModel(value)}
-                    onDownloadError={appendLog}
-                    disabled={useCustomModelFile}
+                    value={useCustomModelFile ? null : model}
+                    onChange={(value) => { control.setModel(value); control.setUseCustomModelFile(false); }}
                 />
 
                 <Stack gap={8}>
-                    <Checkbox
-                        checked={useCustomModelFile}
-                        onChange={(event) => control.setUseCustomModelFile(event.currentTarget.checked)}
-                        label="Use a local model file"
-                    />
+                    <Button variant="subtle" className="settings-link" size="compact-xs" onClick={() => { void handleImportCustomModel(); }} disabled={loading || isCustomModelImporting}>
+                        Use a local model file instead
+                    </Button>
                     {useCustomModelFile ? (
-                        <Group gap={8} align="center" wrap="nowrap">
+                        <Group gap={8} align="center">
                             <Button
                                 variant="outline"
                                 onClick={handleImportCustomModel}
@@ -119,7 +124,7 @@ const TranscribeControl: React.FC = observer(() => {
                             <Text
                                 size="xs"
                                 c={customModelFile ? 'dimmed' : 'red'}
-                                style={{ flexGrow: 1 }}
+                                style={{ flexGrow: 1, minWidth: 0, overflowWrap: 'anywhere' }}
                             >
                                 {customModelFile?.fileName ?? 'No file selected'}
                             </Text>
@@ -136,26 +141,15 @@ const TranscribeControl: React.FC = observer(() => {
                     ) : null}
                 </Stack>
 
-                <TranscribeAdvancedSettings
-                    maxContext={maxContext}
-                    onChangeMaxContext={(value) => control.setMaxContext(value)}
-                    maxLen={maxLen}
-                    onChangeMaxLen={(value) => control.setMaxLen(value)}
-                    splitOnWord={splitOnWord}
-                    onChangeSplitOnWord={(value) => control.setSplitOnWord(value)}
-                    useVad={useVad}
-                    onChangeUseVad={(value) => control.setUseVad(value)}
-                    microphoneGateEnabled={microphoneGateEnabled}
-                    onChangeMicrophoneGateEnabled={(value) => control.setMicrophoneGateEnabled(value)}
-                />
                 <Switch
                     checked={store.speakers.enabled}
                     disabled={store.operations.isBusy}
                     onChange={(event) => { void store.speakers.setEnabled(event.currentTarget.checked); }}
-                    label="Add speaker labels after transcription"
-                    description="Recognition is saved first. Speaker analysis can be retried separately."
+                    label="Identify speakers"
+                    description="Runs after transcription. The transcript is saved first."
+                    className="settings-speakers"
                 />
-                {store.speakers.enabled && hasSystemAudio ? (
+                {store.speakers.enabled ? (
                     <Select label="Speaker analysis device" data={store.speakers.computeOptions}
                         value={store.speakers.compute} onChange={(value) => { void store.speakers.setCompute(value); }}
                         disabled={store.operations.isBusy}
@@ -189,8 +183,21 @@ const TranscribeControl: React.FC = observer(() => {
                         ) : null}
                     </Stack>
                 ) : null}
+                <TranscribeAdvancedSettings
+                    maxContext={maxContext}
+                    onChangeMaxContext={(value) => control.setMaxContext(value)}
+                    maxLen={maxLen}
+                    onChangeMaxLen={(value) => control.setMaxLen(value)}
+                    splitOnWord={splitOnWord}
+                    onChangeSplitOnWord={(value) => control.setSplitOnWord(value)}
+                    useVad={useVad}
+                    onChangeUseVad={(value) => control.setUseVad(value)}
+                    microphoneGateEnabled={microphoneGateEnabled}
+                    onChangeMicrophoneGateEnabled={(value) => control.setMicrophoneGateEnabled(value)}
+                />
             </Stack>
-            <Box>
+            <Box className="settings-panel__footer">
+                <Text id="settings-transcription-status" size="xs" c="dimmed" aria-live="polite">{blockReason ?? 'Ready to transcribe.'}</Text>
                 <Group gap={8} wrap="nowrap">
                     <Button
                         fullWidth={true}
@@ -198,16 +205,17 @@ const TranscribeControl: React.FC = observer(() => {
                             if (store.transcription.savedTranscript?.speakers) setConfirmReplaceSpeakers(true);
                             else void handleStart();
                         }}
-                        disabled={loading || !canStart}
+                        disabled={!canStart}
+                        aria-describedby="settings-transcription-status"
                         leftSection={loading ? <Loader size={12} /> : <IconHeadphones size={16} />}
                     >
-                        {store.workspace.selectedSegment ? 'Transcribe segment' : 'Transcribe whole file'}
+                        {store.workspace.selectedSegment ? 'Transcribe segment' : 'Transcribe'}
                     </Button>
-                    <ActionIcon onClick={handleStop} color="red" size={36} disabled={!isTranscribing}>
-                        <IconPlayerStopFilled size={20} />
-                    </ActionIcon>
-                    <ActionIcon onClick={handleClear} variant="light" size={36} disabled={store.lifecycleState !== 'ready'}>
-                        <IconBackspaceFilled size={20} />
+                    {isTranscribing ? <ActionIcon onClick={handleStop} aria-label="Stop transcription" color="red" size={32}>
+                        <IconPlayerStopFilled size={16} />
+                    </ActionIcon> : null}
+                    <ActionIcon onClick={handleClear} aria-label="Clear workspace" title="Clear workspace" variant="default" size={32} disabled={store.lifecycleState !== 'ready'}>
+                        <IconTrash size={20} />
                     </ActionIcon>
                 </Group>
             </Box>
@@ -223,7 +231,7 @@ const TranscribeControl: React.FC = observer(() => {
                     </Group>
                 </Stack>
             </Modal>
-        </Stack>
+        </Box>
     );
 });
 

@@ -17,6 +17,8 @@ const toWorkspaceSession = (session: DeepReadonly<WorkspaceSession>): WorkspaceS
     sourceKind: session.sourceKind,
     audioMode: session.audioMode,
     audioOriginalPath: session.audioOriginalPath,
+    sourceFileName: session.sourceFileName,
+    sourceMetadata: session.sourceMetadata ? { ...session.sourceMetadata } : undefined,
     audioWavPath: session.audioWavPath,
     audioOptimizedWavPath: session.audioOptimizedWavPath,
     transcription: session.transcription ? { ...session.transcription } : undefined,

@@ -3,9 +3,9 @@ import {
     Collapse,
     NumberInput,
     Stack,
-    Switch,
 } from '@mantine/core';
-import React, { useState } from 'react';
+import { IconChevronDown } from '@tabler/icons-react';
+import React, { useId, useState } from 'react';
 
 interface Props {
     maxContext: number | null;
@@ -39,16 +39,15 @@ export const TranscribeAdvancedSettings: React.FC<Props> = ({
     microphoneGateEnabled,
     onChangeMicrophoneGateEnabled,
 }) => {
+    const id = useId();
     const [isOpen, setIsOpen] = useState(false);
 
     return (
         <>
-            <Switch
-                checked={isOpen}
-                onChange={() => setIsOpen((prev) => !prev)}
-                label="Advanced settings"
-            />
-            <Collapse in={isOpen}>
+            <button type="button" className="settings-advanced" aria-expanded={isOpen} aria-controls={id} onClick={() => setIsOpen((prev) => !prev)}>
+                Advanced settings <IconChevronDown size={16} style={{ transform: isOpen ? 'rotate(180deg)' : undefined }} aria-hidden="true" />
+            </button>
+            <Collapse in={isOpen} id={id}>
                 <Stack gap={8}>
                     <NumberInput
                         label="Max context"

@@ -38,7 +38,7 @@ export const Transcript: Story = {
         canvas.getByRole('button', { name: 'Clear segment' }).focus();
         await userEvent.keyboard('{Enter}');
         await expect(canvas.queryByText('Segment 00:04.00 — 00:08.00')).not.toBeInTheDocument();
-        await expect(canvas.getByRole('button', { name: 'Transcribe whole file' })).toBeEnabled();
+        await expect(canvas.getByRole('button', { name: 'Transcribe' })).toBeEnabled();
         await userEvent.click(canvas.getByRole('radio', { name: 'Original' }));
         await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
         await expect(canvas.getByRole('radio', { name: 'Original' })).toBeChecked();
@@ -106,7 +106,7 @@ export const SegmentResizing: Story = {
             await expect(canvas.getByText('Segment 00:03.00 — 00:09.00')).toBeVisible();
             await userEvent.click(canvas.getByRole('button', { name: 'Clear segment' }));
             await expect(waveform.querySelector('[part~="region"]')).toBeNull();
-            await userEvent.click(canvas.getByRole('button', { name: 'Transcribe whole file' }));
+            await userEvent.click(canvas.getByRole('button', { name: 'Transcribe' }));
             await waitFor(() => expect(transcribe).toHaveBeenCalledTimes(2));
             await expect(transcribe.mock.calls[1][1].segment).toBeUndefined();
             await waitFor(() => expect(canvas.getByRole('button', { name: 'Mark start' })).toBeEnabled());

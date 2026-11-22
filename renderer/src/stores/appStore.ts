@@ -62,8 +62,6 @@ export class AppStore {
 
     private transcriptionRequestId = 0;
 
-    private pendingTranscriptionReplacementConsent: { sessionId: string | null; speakers: object | null } | null = null;
-
     private speakerStopCompletion: Promise<void> | null = null;
 
     private speakerStoppingOperationId: number | null = null;
@@ -84,7 +82,7 @@ export class AppStore {
             onRecoveryChanged: () => { void this.recordingRecovery.refresh(); },
         });
         this.recordingRecovery = new RecordingRecoveryStore(adapter, this.operations, (session) => this.acceptSession(session));
-        makeAutoObservable<this, 'adapter' | 'unsubscribeFunctions' | 'transcriptionRequestId' | 'pendingTranscriptionReplacementConsent' | 'speakerStopCompletion' | 'speakerStoppingOperationId' | 'speakerAnalysisRequestStartedOperationId'>(this, {
+        makeAutoObservable<this, 'adapter' | 'unsubscribeFunctions' | 'transcriptionRequestId' | 'speakerStopCompletion' | 'speakerStoppingOperationId' | 'speakerAnalysisRequestStartedOperationId'>(this, {
             adapter: false,
             activityLog: false,
             operations: false,
@@ -95,7 +93,6 @@ export class AppStore {
             summary: false,
             transcriptionControl: false,
             transcriptionRequestId: false,
-            pendingTranscriptionReplacementConsent: false,
             speakerStopCompletion: false,
             speakerStoppingOperationId: false,
             speakerAnalysisRequestStartedOperationId: false,
@@ -162,7 +159,6 @@ export class AppStore {
         this.initialized = false;
         this.disposed = true;
         this.transcriptionRequestId += 1;
-        this.transcriptionControl.dispose();
         this.unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
         this.unsubscribeFunctions = [];
         this.transcription.dispose();
@@ -262,7 +258,6 @@ export class AppStore {
                 this.sessions.remove(sessionId);
 
                 if (this.workspace.activeSessionId === sessionId) {
-                    this.transcriptionControl.cancelPendingDownload();
                     this.workspace.clearWorkspace();
                     this.transcription.clear();
                 }
@@ -326,51 +321,10 @@ export class AppStore {
             return commandFailure('Confirm replacing the existing speaker labels before transcribing again.');
         }
 
-        this.pendingTranscriptionReplacementConsent = replaceSpeakerLabels ? {
-            sessionId: this.workspace.activeSessionId,
-            speakers: this.transcription.savedTranscript?.speakers ?? null,
-        } : null;
-
         const control = this.transcriptionControl;
         const preparation = control.requestStart(this.whisperModels.isDownloaded(control.model));
 
-        if (preparation.status === 'failed') {
-            this.pendingTranscriptionReplacementConsent = null;
-            return commandFailure(preparation.message);
-        }
-        if (preparation.status === 'awaiting-download') return commandSuccess(undefined);
-
-        this.pendingTranscriptionReplacementConsent = null;
-        return this.startPreparedTranscription(preparation.options, false, replaceSpeakerLabels);
-    }
-
-    async confirmPendingTranscriptionDownload(): Promise<CommandResult> {
-        if (this.disposed) return commandFailure('Model download is not available.');
-        if (this.whisperModels.isDownloadActive) return commandFailure('Model download is already in progress.');
-
-        const intent = this.transcriptionControl.beginPendingDownload();
-
-        if (!intent) return commandFailure('No model download is pending.');
-
-        const result = await this.whisperModels.download(intent.model);
-        const preparation = this.transcriptionControl.completePendingDownload(intent, result);
-
-        if (!preparation) {
-            this.pendingTranscriptionReplacementConsent = null;
-            return commandSuccess(undefined);
-        }
-        if (preparation.status === 'failed') {
-            this.pendingTranscriptionReplacementConsent = null;
-            return commandFailure(preparation.message);
-        }
-        if (preparation.status === 'awaiting-download') return commandSuccess(undefined);
-
-        const consent = this.pendingTranscriptionReplacementConsent;
-        this.pendingTranscriptionReplacementConsent = null;
-        const replaceSpeakerLabels = Boolean(consent
-            && consent.sessionId === this.workspace.activeSessionId
-            && consent.speakers === (this.transcription.savedTranscript?.speakers ?? null));
-
+        if (preparation.status === 'failed') return commandFailure(preparation.message);
         return this.startPreparedTranscription(preparation.options, false, replaceSpeakerLabels);
     }
 
@@ -730,8 +684,6 @@ export class AppStore {
         if (this.operations.isBusy) return commandFailure('Another workspace operation is already running.');
 
         this.transcriptionRequestId += 1;
-        this.transcriptionControl.cancelPendingDownload();
-        this.pendingTranscriptionReplacementConsent = null;
         this.speakers.reset();
         void this.adapter?.setActiveSession(null).catch((error: unknown) => {
             console.error('Failed to clear the active session', error);

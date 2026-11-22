@@ -9,7 +9,7 @@ import type { RendererAdapter } from '../stores/rendererAdapter';
 import { createFakeRendererAdapter } from '../stores/testing/fakeRendererAdapter';
 import { STORY_AUDIO_PATH } from './storyAudio';
 
-export type WorkspaceScenario = 'empty' | 'ready' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error' | 'recording-start-error'
+export type WorkspaceScenario = 'settings-models' | 'settings-downloading' | 'settings-failed' | 'empty' | 'ready' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error' | 'recording-start-error'
     | 'summary-ready' | 'summary-install' | 'summary-downloading' | 'summary-download-error' | 'summary-generating'
     | 'summary-cancel' | 'summary-error' | 'summary-saved' | 'summary-partial'
     | 'nemotron' | 'nemotron-reading' | 'nemotron-downloading' | 'nemotron-analyzing' | 'nemotron-error'
@@ -48,6 +48,10 @@ const transcriptSource = transcript.segments.map((segment) => (
 )).join('\n');
 
 export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise<StoryWorkspace> => {
+    const isSettings = scenario.startsWith('settings-');
+    const downloadedModels = new Set(['base']);
+    let finishModelDownload: (() => void) | null = null;
+    let modelAttempt = 0;
     const isNemotron = scenario.startsWith('nemotron');
     const hasTranscript = scenario === 'transcript' || scenario === 'long-transcript' || scenario === 'speakers' || isNemotron || scenario.startsWith('summary-') || scenario.startsWith('sessions');
     let session: SessionDetails = {
@@ -60,6 +64,8 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         transcription: { language: 'en' },
         audioMode: 'optimized',
         audioOriginalPath: STORY_AUDIO_PATH,
+        sourceFileName: 'Design discussion.wav',
+        sourceMetadata: { durationMs: 12000, sampleRate: 16000, channels: 1 },
         audioWavPath: STORY_AUDIO_PATH,
         audioOptimizedWavPath: STORY_AUDIO_PATH,
         transcript: hasTranscript ? scenario === 'long-transcript' ? {
@@ -246,8 +252,19 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
             return Promise.resolve(session);
         },
         getWhisperModels: () => Promise.resolve(['large', 'base', 'small'].map((name) => ({
-            name: name as 'large' | 'base' | 'small', sizeLabel: 'Demo', isDownloaded: true, isBundled: true,
+            name: name as 'large' | 'base' | 'small', sizeLabel: name === 'base' ? '148 MB' : name === 'small' ? '264 MB' : '874 MB', isDownloaded: !isSettings || downloadedModels.has(name), isBundled: name === 'base',
         }))),
+        downloadWhisperModel: (name) => {
+            modelAttempt += 1;
+            if (modelAttempt === 1 && scenario !== 'settings-downloading') return Promise.reject(new Error('Illustrative download failure'));
+            if (modelAttempt > 1) { downloadedModels.add(name); return Promise.resolve(); }
+            return new Promise<void>((_resolve, reject) => {
+                finishModelDownload = () => { finishModelDownload = null; reject(new Error('Cancelled')); };
+                queueMicrotask(() => fake.emitModelDownloadProgress({ name, percent: 38, downloadedBytes: 332_000_000, totalBytes: 874_000_000 }));
+            });
+        },
+        cancelWhisperModelDownload: () => { finishModelDownload?.(); return Promise.resolve(); },
+        importWhisperModelFromFile: () => Promise.resolve({ ok: true, path: '/storybook/custom.bin', fileName: 'custom.bin' }),
         getUiPreference: <K extends UiPreferenceKey>(key: K) => Promise.resolve(preferences[key]),
         setUiPreference: <K extends UiPreferenceKey>(key: K, value: UiPreferenceValueMap[K]) => {
             preferences[key] = value;
@@ -303,6 +320,14 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         const result = await store.openSession(session.id);
         if (!result.ok) { store.dispose(); throw new Error(result.message); }
     }
+    if (isSettings) {
+        store.transcriptionControl.setModel('base');
+        if (scenario === 'settings-downloading') {
+            store.transcriptionControl.setModel('large');
+            void store.whisperModels.download('large');
+        }
+        if (scenario === 'settings-failed') await store.whisperModels.download('large');
+    }
     if (scenario === 'transcribing' || scenario === 'sessions-transcribing' || scenario === 'error') {
         const run = store.startTranscription({ language: 'en', model: 'base', splitOnWord: true, useVad: true });
         if (scenario === 'error') await run;
@@ -326,6 +351,8 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         store,
         adapter: fake.adapter,
         dispose: () => {
+            void store.whisperModels.cancelDownload();
+            finishModelDownload?.();
             store.dispose();
             finishTranscription?.('');
             finishTranscription = null;
