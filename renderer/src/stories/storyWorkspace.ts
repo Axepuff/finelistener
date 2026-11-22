@@ -1,17 +1,15 @@
 import type { RecordingLevel, RecordingProgress, RecordingState } from 'electron/src/services/RecordingService';
 import type { RecoverableRecording } from 'electron/src/types/recordingArchive';
-import type { SessionDetails, SessionListItem, SessionSummary, SessionTranscriptV1, SummaryGenerationResult } from 'electron/src/types/sessions';
-import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
-import { defaultRecordingSummaryOptions, recordingSummaryGenerationVersion } from '../../../electron/src/types/summaryOptions';
+import type { SessionDetails, SessionListItem, SessionTranscriptV1 } from 'electron/src/types/sessions';
 import { UI_PREFERENCE_DEFAULTS, type UiPreferenceKey, type UiPreferenceValueMap } from '../../../electron/src/types/uiPreferences';
 import { AppStore } from '../stores/appStore';
 import type { RendererAdapter } from '../stores/rendererAdapter';
 import { createFakeRendererAdapter } from '../stores/testing/fakeRendererAdapter';
-import { STORY_AUDIO_PATH } from './storyAudio';
+import { STORY_AUDIO_PATH, STORY_LONG_AUDIO_PATH } from './storyAudio';
+import { createStorySummary, type SummaryScenario } from './storySummary';
 
 export type WorkspaceScenario = 'settings-recording-error' | 'settings-recording-silence' | 'settings-recording' | 'settings-models' | 'settings-downloading' | 'settings-failed' | 'empty' | 'ready' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error' | 'recording-start-error'
-    | 'summary-ready' | 'summary-install' | 'summary-downloading' | 'summary-download-error' | 'summary-generating'
-    | 'summary-cancel' | 'summary-error' | 'summary-saved' | 'summary-partial'
+    | SummaryScenario
     | 'nemotron' | 'nemotron-reading' | 'nemotron-downloading' | 'nemotron-analyzing' | 'nemotron-error'
     | 'sessions' | 'sessions-empty' | 'sessions-recovery' | 'sessions-recovery-error' | 'sessions-transcribing' | 'sessions-speaker-edit';
 
@@ -54,6 +52,8 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
     let modelAttempt = 0;
     const isNemotron = scenario.startsWith('nemotron');
     const hasTranscript = scenario === 'transcript' || scenario === 'long-transcript' || scenario === 'speakers' || isNemotron || scenario.startsWith('summary-') || scenario.startsWith('sessions');
+    const longSummary = scenario === 'summary-long';
+    const audioPath = longSummary ? STORY_LONG_AUDIO_PATH : STORY_AUDIO_PATH;
     let session: SessionDetails = {
         id: 'storybook-session',
         title: 'Design discussion.wav',
@@ -63,11 +63,11 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         hasTranscript,
         transcription: { language: 'en' },
         audioMode: 'optimized',
-        audioOriginalPath: STORY_AUDIO_PATH,
+        audioOriginalPath: audioPath,
         sourceFileName: 'Design discussion.wav',
-        sourceMetadata: { durationMs: 12000, sampleRate: 16000, channels: 1 },
-        audioWavPath: STORY_AUDIO_PATH,
-        audioOptimizedWavPath: STORY_AUDIO_PATH,
+        sourceMetadata: { durationMs: longSummary ? 96_000 : 12_000, sampleRate: 16000, channels: 1 },
+        audioWavPath: audioPath,
+        audioOptimizedWavPath: audioPath,
         transcript: hasTranscript ? scenario === 'long-transcript' ? {
             version: 1,
             segments: Array.from({ length: 60 }, (_, index) => ({
@@ -110,45 +110,10 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
             { speakerId: 'alice', startSec: 10, endSec: 12 },
         ];
     }
-    const demoSummary: SessionSummary = {
-        detailed: 'The team reviewed how listeners find a passage after a recording. Opening a saved session should restore its transcript and the audio it belongs to.\n\nListeners can search for a word to locate a passage. In the timecoded view, selecting a time takes playback to that point so the listener can hear what was said in context.',
-        brief: 'The team reviewed how listeners reopen a recording, search its transcript and jump to the passage they want to hear.',
-        model: 'Qwen3-4B-Instruct', inputHash: 'demo', generationVersion: 2,
-    };
-    if (scenario === 'summary-saved' && session.transcript) {
-        session.transcript.segments.push(
-            { startSec: 12, endSec: 38, text: 'In a long interview I often come back to the same word. Show the surrounding lines so I can tell which match I want. I can check by playing the answer from there.' },
-            { startSec: 38, endSec: 67, text: 'I tried that with the delivery date. The first mention was a question. I had to keep listening until the other speaker confirmed Friday. Seeing who spoke would help.' },
-            { startSec: 67, endSec: 95, text: 'Let us try two versions, one that shows the speaker beside each match and one that shows just the time. We can compare them next week before picking one.' },
-        );
-        session.transcript.summary = {
-            ...demoSummary,
-            generationVersion: 3,
-            options: { prompt: 'Describe how the speakers compare ways to find a passage.', chunkCount: 12, overlapPercent: 25 },
-            brief: 'The team compared ways to find a particular answer in a saved interview. Next week they will test whether showing the speaker alongside each search result makes that easier.',
-            detailed: [
-                demoSummary.detailed,
-                'In a long interview, the same word can lead to several different answers. The team wanted each match to show enough of the surrounding conversation to decide which passage to play.',
-                'One listener searched for a delivery date. The first mention was a question. It took a later reply to establish that delivery was due on Friday, and the listener wanted to see who had confirmed it.',
-                'The team will try two versions the following week. One will show the speaker beside each match and the other will show only the time. They will compare the two before deciding which to keep.',
-            ].join('\n\n'),
-        };
-    }
-    const reviewedChunks = demoSummary.detailed.split('\n\n').map((text, i) => ({ startSec: 6 * i, endSec: 6 * (i + 1), text }));
-    if (scenario === 'summary-partial' && session.transcript) session.transcript.summary = {
-        ...demoSummary, brief: '', generationVersion: recordingSummaryGenerationVersion, options: defaultRecordingSummaryOptions, reviewedChunks,
-    };
-    let modelStatus: SummaryModelStatus = {
-        model: 'Qwen3-4B-Instruct', totalBytes: 2_497_281_120, downloadedBytes: 0, state: 'ready',
-    };
-    if (scenario === 'summary-install' || scenario === 'summary-saved') modelStatus.state = 'missing';
-    if (scenario === 'summary-downloading') modelStatus = { ...modelStatus, state: 'downloading', downloadedBytes: 874_048_392 };
-    if (scenario === 'summary-download-error') modelStatus = { ...modelStatus, state: 'error', error: 'download' };
-    let modelListener: ((status: SummaryModelStatus) => void) | undefined;
-    const setModelStatus = (state: SummaryModelStatus['state'], downloadedBytes: number) => {
-        modelStatus = { model: modelStatus.model, totalBytes: modelStatus.totalBytes, state, downloadedBytes };
-        modelListener?.(modelStatus);
-    };
+    const summaryStory = createStorySummary(scenario, (summary) => {
+        if (session.transcript) session = { ...session, transcript: { ...session.transcript, summary } };
+    });
+    if (scenario.startsWith('summary-')) session.transcript = summaryStory.transcript;
     const isRecorder = scenario.startsWith('recording');
     let sessions: SessionListItem[] = scenario === 'empty' || isRecorder ? [] : [session];
     if (scenario.startsWith('sessions')) {
@@ -178,8 +143,6 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
     let levelListener: ((level: RecordingLevel) => void) | null = null;
     let progressListener: ((progress: RecordingProgress) => void) | null = null;
     let finishTranscription: ((value: string) => void) | null = null;
-    let summaryAttempt = 0;
-    let cancelSummary: (() => void) | undefined;
     const preferences: UiPreferenceValueMap = { ...UI_PREFERENCE_DEFAULTS, speakerLabelsEnabled: false, homeSidebarWidth: 300, recordingSystemDevice: 'demo-system', recordingMicrophoneDevice: 'demo-microphone' };
     const emitRecording = () => {
         stateListener?.(recordingState);
@@ -205,31 +168,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
             return Promise.resolve({ recordingId: 'unfinished-demo', sessionId: session.id, sourceWarnings: [] });
         },
         discardRecording: (id) => { recoverables = recoverables.filter((item) => item.recordingId !== id); return Promise.resolve(true); },
-        getSummaryModelStatus: () => Promise.resolve(modelStatus),
-        onSummaryModelChanged: (callback) => { modelListener = callback; return () => { modelListener = undefined; }; },
-        downloadSummaryModel: async () => {
-            setModelStatus('downloading', Math.floor(modelStatus.totalBytes / 2));
-            await new Promise((resolve) => setTimeout(resolve, 250));
-            setModelStatus('ready', modelStatus.totalBytes);
-            return modelStatus;
-        },
-        generateSummary: (_sessionId, options = defaultRecordingSummaryOptions) => {
-            summaryAttempt += 1;
-            if (scenario === 'summary-error' && summaryAttempt === 1) return Promise.resolve({ ok: false as const, reason: 'failed' as const });
-            if ((scenario === 'summary-cancel' || scenario === 'summary-generating') && summaryAttempt === 1) {
-                return new Promise<SummaryGenerationResult>((resolve) => {
-                    cancelSummary = () => resolve({ ok: false, reason: 'cancelled' });
-                });
-            }
-            const summary = { ...demoSummary, generationVersion: recordingSummaryGenerationVersion, options, reviewedChunks };
-            if (session.transcript) session = { ...session, transcript: { ...session.transcript, summary } };
-            return Promise.resolve({ ok: true as const, summary });
-        },
-        stopSummary: () => {
-            cancelSummary?.();
-            cancelSummary = undefined;
-            return Promise.resolve(true);
-        },
+        ...summaryStory.adapter,
         importAudio: () => {
             sessions = [session];
             return Promise.resolve(session);
@@ -337,6 +276,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
     });
     const store = new AppStore(fake.adapter);
     store.initialize();
+    if (scenario.startsWith('summary-')) store.transcriptionControl.setLanguage('en');
     await store.whisperModels.refresh();
     if (scenario !== 'empty' && scenario !== 'sessions-empty' && !scenario.startsWith('sessions-recovery') && !isRecorder) {
         const result = await store.openSession(session.id);
@@ -375,6 +315,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         adapter: fake.adapter,
         dispose: () => {
             clearTimeout(silenceTimer);
+            summaryStory.dispose();
             void store.whisperModels.cancelDownload();
             finishModelDownload?.();
             store.dispose();

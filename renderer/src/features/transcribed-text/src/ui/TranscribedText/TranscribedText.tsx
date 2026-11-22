@@ -8,19 +8,25 @@ import { formatTranscriptSourcePrefix, projectTranscript, transcriptToHtml, tran
 import { projectSpeakerReading } from 'renderer/src/stores/speakerReading';
 import { speakerLabelsFor, speakerReadingToHtml, unknownSpeaker } from 'renderer/src/stores/speakerReadingFormat';
 import { useAppStore } from '../../../../../AppContext';
-import { RecordingSummary } from './RecordingSummary';
+import { RecordingSummary, type SummaryContinuation } from './RecordingSummary';
+import type { SummaryFormat } from './SummaryResult';
 import { TranscribedTextContent } from './TranscribedTextContent';
 import { TranscribedTextControls } from './TranscribedTextControls';
 import { SpeakerAnalysisStatus, SpeakerControls } from './SpeakerControls';
 import { findTranscriptMatches } from './search';
-import { formatSecondsReadable } from 'renderer/src/shared/lib';
+import { escapeHtml, formatSecondsReadable } from 'renderer/src/shared/lib';
 import { projectTextSentences } from './plainText';
 import styles from './TranscribedText.module.css';
 
-export const TranscribedText: React.FC = observer(() => {
+interface Props {
+    summaryContinuation?: SummaryContinuation;
+}
+
+export const TranscribedText: React.FC<Props> = observer(({ summaryContinuation }) => {
     const store = useAppStore();
     const { transcription } = store;
     const [view, setView] = useState<TranscriptView | 'summary'>('plain');
+    const [summarySelection, setSummarySelection] = useState<{ sessionId: string | null; format: SummaryFormat }>();
     const [speakerLayout, setSpeakerLayout] = useState<'reading' | 'dialogue'>('reading');
     const transcriptView = view === 'summary' ? 'plain' : view;
     const showRegions = transcriptView !== 'plain';
@@ -39,6 +45,10 @@ export const TranscribedText: React.FC = observer(() => {
     } | null>(null);
     const needsSpeakerAnalysis = showSpeakers && transcription.visibleTranscript?.speakers?.status !== 'completed';
     const displayedTranscript = needsSpeakerAnalysis || view === 'summary' ? null : transcription.visibleTranscript;
+    const savedSummary = view === 'summary' ? transcription.savedTranscript?.summary : undefined;
+    const { activeSessionId } = store.workspace;
+    const summaryFormat = !savedSummary?.brief ? 'detailed' :
+        summarySelection?.sessionId === activeSessionId ? summarySelection.format : 'brief';
     const reading = useMemo(() => showReading ? projectSpeakerReading(displayedTranscript) : undefined, [showReading, displayedTranscript]);
     const currentTextValue = useMemo(() => reading ? reading.map((paragraph) => paragraph.text.trim()).join('\n\n') :
         transcriptToText(displayedTranscript, transcriptView), [reading, displayedTranscript, transcriptView]);
@@ -185,8 +195,11 @@ export const TranscribedText: React.FC = observer(() => {
             ) : (
                 <>
                     <TranscribedTextControls
-                        currentTextValue={currentTextValue}
-                        getClipboardHtml={() => reading ? speakerReadingToHtml(reading, speakerLabels) : transcriptToHtml(displayedTranscript, transcriptView)}
+                        currentTextValue={view === 'summary' ? savedSummary?.[summaryFormat] ?? '' : currentTextValue}
+                        getClipboardHtml={() => {
+                            if (view === 'summary') return `<div style="white-space: pre-wrap">${escapeHtml(savedSummary?.[summaryFormat] ?? '')}</div>`;
+                            return reading ? speakerReadingToHtml(reading, speakerLabels) : transcriptToHtml(displayedTranscript, transcriptView);
+                        }}
                         view={view}
                         onViewChange={(value) => { setView(value); setSelectedSpan(null); setSelectedMatchIndex(0); }}
                         searchQuery={searchQuery}
@@ -196,7 +209,8 @@ export const TranscribedText: React.FC = observer(() => {
                         onPreviousMatch={() => moveToMatch(-1)}
                         onNextMatch={() => moveToMatch(1)}
                     />
-                    {view === 'summary' ? <RecordingSummary key={store.workspace.activeSessionId} /> : (
+                    {view === 'summary' ? <RecordingSummary key={activeSessionId} format={summaryFormat} continuation={summaryContinuation}
+                        onFormatChange={(format) => setSummarySelection({ sessionId: activeSessionId, format })} /> : (
                         <>
                             {needsSpeakerAnalysis || isReadyEmptyState ? speakerControls : null}
                             <SpeakerAnalysisStatus />
