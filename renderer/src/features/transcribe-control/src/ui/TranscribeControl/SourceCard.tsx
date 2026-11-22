@@ -22,7 +22,7 @@ export const SourceCard: React.FC = observer(() => {
                 <Text size="sm" fw={600} truncate="end" title={fileName}>{fileName ?? 'No source selected'}</Text>
                 <Text size="xs" c="dimmed" ff="var(--brand-font-family-code)">{metadata || 'Source details unavailable'}</Text>
             </Stack>
-            <Button variant="subtle" size="compact-xs" className="settings-link" disabled={store.operations.isBusy}
+            <Button variant="subtle" size="compact-xs" className="settings-link" disabled={store.operations.isBusy} title={store.operationBlockReason} aria-description={store.operationBlockReason}
                 onClick={() => { void store.importAudio().then((result) => { if (!result.ok) store.activityLog.appendEvent(result.message); }); }}>Replace</Button>
         </Group>
     );

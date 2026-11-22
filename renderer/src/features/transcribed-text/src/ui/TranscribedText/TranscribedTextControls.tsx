@@ -1,4 +1,4 @@
-import { ActionIcon, Box, Button, Group, Notification, SegmentedControl, Switch } from '@mantine/core';
+import { ActionIcon, Box, Button, Group, Notification, SegmentedControl, Switch, Text } from '@mantine/core';
 import { IconChevronDown, IconChevronUp, IconCopy, IconDownload, IconSearch, IconX } from '@tabler/icons-react';
 import React, { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
@@ -6,11 +6,46 @@ import { useAppStore } from 'renderer/src/AppContext';
 import styles from './TranscribedText.module.css';
 import type { TranscriptView } from 'renderer/src/stores/transcriptFormat';
 
-interface Props {
+type WorkspaceView = TranscriptView | 'summary';
+
+const transcriptViews = [
+    { value: 'plain', label: 'Text' },
+    { value: 'timecodes', label: 'Timecodes' },
+    { value: 'speakers', label: 'Speakers' },
+    { value: 'summary', label: 'Summary' },
+] as const;
+
+interface ViewSwitchProps {
+    view: WorkspaceView;
+    onViewChange: (view: WorkspaceView) => void;
+    viewLockReasons: Partial<Record<WorkspaceView, string>>;
+}
+
+export const TranscriptViewSwitch: React.FC<ViewSwitchProps> = ({ view, onViewChange, viewLockReasons }) => {
+    const reasons = Array.from(new Set(Object.values(viewLockReasons)));
+    return (
+        <Box className={styles.viewOptions}>
+            <SegmentedControl
+                aria-label="Transcript view"
+                aria-describedby={reasons.length ? 'transcript-view-lock' : undefined}
+                value={view}
+                onChange={(value) => {
+                    const next = transcriptViews.find((option) => option.value === value)?.value;
+                    if (next && !viewLockReasons[next]) onViewChange(next);
+                }}
+                classNames={{ root: styles.viewToggle, label: styles.toggleLabel }}
+                data={transcriptViews.map(({ value, label }) => ({
+                    value, label: <span title={viewLockReasons[value]}>{label}</span>, disabled: Boolean(viewLockReasons[value]),
+                }))}
+            />
+            {reasons.length ? <Text id="transcript-view-lock" size="xs" c="dimmed">{reasons.join(' ')}</Text> : null}
+        </Box>
+    );
+};
+
+interface Props extends ViewSwitchProps {
     currentTextValue: string;
     getClipboardHtml: () => string;
-    view: TranscriptView | 'summary';
-    onViewChange: (view: TranscriptView | 'summary') => void;
     searchQuery: string;
     onSearchChange: (value: string) => void;
     matchCount: number;
@@ -24,6 +59,7 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
     getClipboardHtml,
     view,
     onViewChange,
+    viewLockReasons,
     searchQuery,
     onSearchChange,
     matchCount,
@@ -85,20 +121,7 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
     return (
         <>
             <div className={styles.controlsRow}>
-                <SegmentedControl
-                    aria-label="Transcript view"
-                    value={view}
-                    onChange={(value) => {
-                        if (value === 'plain' || value === 'timecodes' || value === 'speakers' || value === 'summary') onViewChange(value);
-                    }}
-                    classNames={{ root: styles.viewToggle, label: styles.toggleLabel }}
-                    data={[
-                        { value: 'plain', label: 'Text' },
-                        { value: 'timecodes', label: 'Timecodes' },
-                        { value: 'speakers', label: 'Speakers' },
-                        { value: 'summary', label: 'Summary' },
-                    ]}
-                />
+                <TranscriptViewSwitch view={view} onViewChange={onViewChange} viewLockReasons={viewLockReasons} />
 
                 <Group gap={8} align="center" wrap="nowrap" className={view === 'summary' ? styles.summaryActions : styles.actionsGroup}>
                     {view !== 'summary' && (
@@ -154,7 +177,9 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
                     <Button
                         size="sm"
                         variant="default"
-                        disabled={currentTextValue.length === 0}
+                        disabled={currentTextValue.length === 0 || Boolean(store.exportBlockReason)}
+                        title={store.exportBlockReason}
+                        aria-description={store.exportBlockReason}
                         onClick={handleSave}
                         leftSection={<IconDownload size={16} />}
                         className={styles.exportButton}
@@ -167,6 +192,8 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
                 <Switch
                     checked={store.transcription.duplicateFilterEnabled}
                     disabled={store.operations.isBusy}
+                    title={store.operationBlockReason}
+                    aria-description={store.operationBlockReason}
                     label="Hide duplicate speech"
                     className={styles.duplicateFilter}
                     onChange={(event) => {

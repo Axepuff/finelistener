@@ -66,7 +66,7 @@ export class TranscriptionStore {
 
     private unsubscribeFunctions: Array<() => void> = [];
 
-    private progressValue = 0;
+    private progressValue: number | null = null;
 
     private runOutcomeValue: TranscriptionRunOutcome = 'none';
 
@@ -87,7 +87,15 @@ export class TranscriptionStore {
     }
 
     get progress(): number {
+        return this.progressValue ?? 0;
+    }
+
+    get reportedProgress(): number | null {
         return this.progressValue;
+    }
+
+    get recognitionStarted(): boolean {
+        return this.progressValue !== null || Boolean(this.draftSource || Object.keys(this.sourceDrafts).length);
     }
 
     get isRunning(): boolean {
@@ -260,7 +268,7 @@ export class TranscriptionStore {
                     microphoneGateEnabled: request.options.microphoneGateEnabled,
                 });
 
-                if (request.sourceAware && this.stoppingRunId === runId && this.stopCompletion) await this.stopCompletion;
+                if (this.stoppingRunId === runId && this.stopCompletion) await this.stopCompletion;
                 if (!this.isRunCurrent(runId, lifecycleId, isCurrent)) return { status: 'replaced' };
 
                 runInAction(() => {
@@ -279,7 +287,7 @@ export class TranscriptionStore {
 
             const transcriptSource = await this.adapter.transcribe(request.audioPath, transcribeOptions);
 
-            if (request.sourceAware && this.stoppingRunId === runId && this.stopCompletion) await this.stopCompletion;
+            if (this.stoppingRunId === runId && this.stopCompletion) await this.stopCompletion;
             if (!this.isRunCurrent(runId, lifecycleId, isCurrent)) return { status: 'replaced' };
 
             runInAction(() => {
@@ -288,7 +296,7 @@ export class TranscriptionStore {
 
             return { status: 'success' };
         } catch (error: unknown) {
-            if (request.sourceAware && this.stoppingRunId === runId && this.stopCompletion) await this.stopCompletion;
+            if (this.stoppingRunId === runId && this.stopCompletion) await this.stopCompletion;
             if (!this.isRunCurrent(runId, lifecycleId, isCurrent)) return { status: 'replaced' };
 
             console.error('Whisper transcription failed', error);
@@ -374,7 +382,7 @@ export class TranscriptionStore {
         this.draftSource = '';
         this.sourceDrafts = {};
         this.draftOffsetSeconds = 0;
-        this.progressValue = 0;
+        this.progressValue = null;
         this.runOutcomeValue = this.isIncomplete ? 'error' : transcript ? 'success' : 'none';
         this.runErrorMessageValue = this.allSourcesFailed ? 'Transcription failed for all recording sources.' :
             this.isIncomplete ? 'Transcription is incomplete. Retry the remaining sources.' : null;
@@ -396,7 +404,7 @@ export class TranscriptionStore {
         this.draftSource = '';
         this.sourceDrafts = {};
         this.draftOffsetSeconds = segment?.start ?? 0;
-        this.progressValue = 0;
+        this.progressValue = null;
         this.runOutcomeValue = 'none';
         this.runErrorMessageValue = null;
 
@@ -419,7 +427,7 @@ export class TranscriptionStore {
     private failRun(runId: number, message: string): void {
         if (this.activeRunId !== runId) return;
 
-        this.progressValue = 0;
+        this.progressValue = null;
         this.runOutcomeValue = 'error';
         this.runErrorMessageValue = message;
         this.activeRunId = null;
@@ -467,9 +475,9 @@ export class TranscriptionStore {
     }
 
     private handleTranscribeProgress(event: TranscriptionProgressEvent): void {
-        if (!event || !this.isEventCurrent(event.runId)) return;
+        if (!event || !Number.isFinite(event.value) || !this.isEventCurrent(event.runId)) return;
 
-        this.progressValue = Number.isFinite(event.value) ? Math.min(100, Math.max(0, event.value)) : 0;
+        this.progressValue = Math.min(100, Math.max(0, event.value));
     }
 
     private isEventCurrent(runId: number): boolean {

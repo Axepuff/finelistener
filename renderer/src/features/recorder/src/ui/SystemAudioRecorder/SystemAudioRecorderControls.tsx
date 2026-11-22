@@ -11,7 +11,7 @@ const formatDeviceLabel = (device: RecordingDevice): string => {
 };
 
 interface SystemAudioRecorderControlsProps {
-    variant?: 'workspace';
+    variant?: 'workspace' | 'sources';
 }
 
 export const SystemAudioRecorderControls: React.FC<SystemAudioRecorderControlsProps> = observer(({ variant }) => {
@@ -73,6 +73,7 @@ export const SystemAudioRecorderControls: React.FC<SystemAudioRecorderControlsPr
                 value={systemDeviceId ?? '__off__'}
                 onChange={(value) => onSourceChange('system', value === '__off__' ? null : value)}
                 disabled={sourceSelectionDisabled}
+                aria-description={variant === 'sources' ? 'Recording sources are locked until the recording ends.' : undefined}
             />
             <Select
                 label="Microphone"
@@ -80,6 +81,7 @@ export const SystemAudioRecorderControls: React.FC<SystemAudioRecorderControlsPr
                 value={microphoneDeviceId ?? '__off__'}
                 onChange={(value) => onSourceChange('microphone', value === '__off__' ? null : value)}
                 disabled={sourceSelectionDisabled}
+                aria-description={variant === 'sources' ? 'Recording sources are locked until the recording ends.' : undefined}
             />
             {systemDeviceId === null && microphoneDeviceId === null ? (
                 <Text size="sm" c="dimmed">{'Enable at least one recording source.'}</Text>
@@ -96,8 +98,18 @@ export const SystemAudioRecorderControls: React.FC<SystemAudioRecorderControlsPr
             }}
             maw={variant === 'workspace' ? undefined : 240}
             disabled={isRecordingActive || sourceSelectionDisabled}
+            aria-description={variant === 'sources' ? 'Recording sources are locked until the recording ends.' : undefined}
         />
     ) : null;
+
+    if (variant === 'sources') {
+        return (
+            <Stack role="group" aria-label="Recording sources" aria-describedby="recording-sources-locked" gap={8}>
+                <Text id="recording-sources-locked" size="xs" c="dimmed">Recording sources are locked until the recording ends.</Text>
+                {sources ?? <Text size="sm">System audio</Text>}
+            </Stack>
+        );
+    }
 
     const buttonLabel = isRecordingActive ? 'Stop recording' : 'Start recording';
     const buttonAction = isRecordingActive ? onStopRecording : onStartRecording;

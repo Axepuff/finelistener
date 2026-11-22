@@ -11,6 +11,12 @@ export const formatDuration = (ms: number): string => {
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
 };
 
+export const formatRecordingClock = (ms: number): string => {
+    const seconds = Number.isFinite(ms) ? Math.max(0, Math.floor(ms / 1000)) : 0;
+    return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
+        .map((part) => String(part).padStart(2, '0')).join(':');
+};
+
 export const formatLevel = (level: RecordingLevel | null): string => {
     if (!level) return 'N/A';
 

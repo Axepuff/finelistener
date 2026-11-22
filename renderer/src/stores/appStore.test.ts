@@ -55,6 +55,118 @@ const sourceTranscript: SessionTranscriptV1 = {
 };
 
 describe('AppStore', () => {
+    it('blocks conflicting public commands through recording and saving while retaining the workspace', async () => {
+        const oldSession = createSession({ transcript: sourceTranscript });
+        const recorded = createSession({ id: 'recorded', sourceKind: 'recorded' });
+        const saving = createDeferred<ReturnType<typeof finalizeResult>>();
+        let recordingState: (state: RecordingState) => void = () => undefined;
+        const fake = createFakeRendererAdapter({
+            getSession: vi.fn((id) => Promise.resolve(id === recorded.id ? recorded : oldSession)),
+            importAudio: vi.fn(() => Promise.resolve(oldSession)),
+            importDroppedAudio: vi.fn(() => Promise.resolve(oldSession)),
+            saveText: vi.fn(() => Promise.resolve({ ok: true })),
+            transcribe: vi.fn(() => Promise.resolve('')),
+            onRecordingState: (callback) => { recordingState = callback; return () => { recordingState = () => undefined; }; },
+            isRecordingAvailable: () => Promise.resolve(true),
+            startSystemRecording: vi.fn(() => {
+                recordingState('recording');
+                return Promise.resolve({ recordingId: 'recording-1', startedAt: 1 });
+            }),
+            stopSystemRecording: () => saving.promise,
+        });
+        const { adapter } = fake;
+        const store = new AppStore(adapter);
+        store.initialize();
+        try {
+            expect((await store.openSession(oldSession.id)).ok).toBe(true);
+            expect((await store.recording.startRecording()).ok).toBe(true);
+            expect((await store.recording.startRecording()).ok).toBe(false);
+            expect((await store.requestTranscriptionStart()).ok).toBe(false);
+            expect((await store.startTranscription(transcriptionOptions)).ok).toBe(false);
+            expect((await store.importAudio()).ok).toBe(false);
+            expect((await store.importAudio(new File([], 'audio.wav'))).ok).toBe(false);
+            expect((await store.openSession('other')).ok).toBe(false);
+            expect((await store.saveText('Stored text')).ok).toBe(false);
+            expect(store.clearWorkspace().ok).toBe(false);
+            expect((await store.revealSessionFolder(oldSession.id)).ok).toBe(true);
+            expect(adapter.startSystemRecording).toHaveBeenCalledOnce();
+            expect(adapter.getSession).toHaveBeenCalledOnce();
+            expect(adapter.importAudio).not.toHaveBeenCalled();
+            expect(adapter.importDroppedAudio).not.toHaveBeenCalled();
+            expect(adapter.saveText).not.toHaveBeenCalled();
+            expect(adapter.transcribe).not.toHaveBeenCalled();
+            expect(store.transcription.savedTranscript?.segments[0]?.text).toBe('Saved source transcript');
+
+            store.transcriptionControl.setLanguage('fr');
+            await store.speakers.setEnabled(true);
+            const stop = store.recording.stopRecording();
+            recordingState('idle');
+            expect((await store.importAudio()).ok).toBe(false);
+            saving.resolve(finalizeResult(recorded));
+            expect((await stop).ok).toBe(true);
+            expect(store.workspace.activeSessionId).toBe(recorded.id);
+            expect(store.transcriptionControl.language).toBe('fr');
+            expect(store.speakers.enabled).toBe(true);
+            expect((await store.importAudio(new File([], 'audio.wav'))).ok).toBe(true);
+            expect(adapter.importDroppedAudio).toHaveBeenCalledOnce();
+            expect(store.clearWorkspace().ok).toBe(true);
+        } finally {
+            store.dispose();
+        }
+    });
+
+    it.each(['success', 'failure'] as const)('freezes the transcription input and restores editing after %s', async (outcome) => {
+        const session = createSession();
+        const recognition = createDeferred<string>();
+        const transcribe = vi.fn<RendererAdapter['transcribe']>(() => recognition.promise);
+        const fake = createFakeRendererAdapter({
+            getSession: () => Promise.resolve(session),
+            transcribe,
+            optimizeAudio: vi.fn(() => Promise.resolve(session)),
+            startSystemRecording: vi.fn(),
+            saveText: vi.fn(() => Promise.resolve({ ok: true })),
+        });
+        const store = new AppStore(fake.adapter);
+        store.initialize();
+        try {
+            await store.openSession(session.id);
+            store.workspace.setSegmentStart(1);
+            store.workspace.setSegmentEnd(4);
+            const run = store.startTranscription(transcriptionOptions);
+            const { runId } = transcribe.mock.calls[0][1];
+            expect(store.transcription.recognitionStarted).toBe(false);
+            fake.emitTranscribeProgress({ runId, value: 0 });
+            expect(store.transcription.recognitionStarted).toBe(true);
+            fake.emitTranscribeText({ runId, chunk: '[00:00:00.000 --> 00:00:01.000] Live text\n' });
+
+            store.transcriptionControl.setLanguage('fr');
+            expect(store.activeTranscriptionSettings?.request.options.language).toBe('en');
+            store.workspace.setSegmentStart(2);
+            store.workspace.setSegmentEnd(3);
+            store.workspace.clearSegment();
+            expect(store.workspace.selectedSegment).toEqual({ start: 1, end: 4 });
+            expect(transcribe.mock.calls[0][1].segment).toEqual({ start: 1, end: 4 });
+            store.workspace.requestPlaybackTime(2);
+            expect(store.workspace.playbackRequest?.time).toBe(2);
+            expect(store.transcription.visibleTranscript?.segments[0]?.text).toBe('Live text');
+            expect((await store.recording.startRecording()).ok).toBe(false);
+            expect((await store.setAudioMode('optimized')).ok).toBe(false);
+            expect((await store.saveText('Live text')).ok).toBe(false);
+            expect(fake.adapter.saveText).not.toHaveBeenCalled();
+
+            recognition.resolve(outcome === 'success' ?
+                '[00:00:00.000 --> 00:00:01.000] Saved text\n' : Promise.reject(new Error('Recognition failed')));
+            expect((await run).ok).toBe(outcome === 'success');
+            expect(store.activeTranscriptionSettings).toBeNull();
+            store.workspace.clearSegment();
+            expect(store.workspace.segmentSelection).toBeNull();
+            expect((await store.saveText('Exportable text')).ok).toBe(true);
+            expect((await store.openSession(session.id)).ok).toBe(true);
+        } finally {
+            store.dispose();
+        }
+    });
+
     it.each(['recording', 'idle'] as const)(
         'restores recording ownership after reinitialization when capture is %s',
         async (restoredState) => {
@@ -236,7 +348,7 @@ describe('AppStore', () => {
         store.dispose();
     });
 
-    it('ignores a delayed stop response after another transcription starts', async () => {
+    it('holds transcription ownership until a pending stop is acknowledged', async () => {
         let resolveTranscription: (value: string) => void = () => undefined;
         let resolveStop: (value: boolean) => void = () => undefined;
         const transcribe = vi.fn<RendererAdapter['transcribe']>(() => new Promise<string>((resolve) => {
@@ -259,19 +371,16 @@ describe('AppStore', () => {
             const stopPromise = store.stopTranscription();
 
             resolveTranscription('[00:00:00.000 --> 00:00:01.000] First result\n');
-            await firstRun;
-            const secondRun = store.startTranscription(transcriptionOptions);
-            const secondOperation = store.operations.active;
-            const secondRunId = transcribe.mock.calls[1][1].runId;
+            await Promise.resolve();
+            expect((await store.openSession('different-session')).ok).toBe(false);
+            expect((await store.startTranscription(transcriptionOptions)).ok).toBe(false);
+            expect(transcribe).toHaveBeenCalledOnce();
 
-            fake.emitTranscribeText({ runId: secondRunId, chunk: '[00:00:00.000 --> 00:00:01.000] Second draft\n' });
             resolveStop(true);
-            expect(await stopPromise).toEqual({ ok: false, message: 'The transcription run is no longer active.' });
-
-            expect(store.operations.active).toEqual(secondOperation);
-            expect(store.transcription.runOutcome).toBe('none');
-            expect(store.transcription.draftTranscript?.segments[0]?.text).toBe('Second draft');
-
+            expect((await stopPromise).ok).toBe(true);
+            await firstRun;
+            expect(store.transcription.runOutcome).toBe('stopped');
+            const secondRun = store.startTranscription(transcriptionOptions);
             resolveTranscription('[00:00:00.000 --> 00:00:01.000] Second result\n');
             expect((await secondRun).ok).toBe(true);
             expect(store.transcription.savedTranscript?.segments[0]?.text).toBe('Second result');
