@@ -184,18 +184,46 @@ export const LateStopFailure: Story = {
     play: async ({ canvas, loaded }) => {
         const { adapter, store } = loaded.workspace as StoryWorkspace;
         let rejectStop!: (error: Error) => void;
+        let rejectSkip!: (error: Error) => void;
+        let finishAnalysis!: (session: Awaited<ReturnType<typeof adapter.getSession>>) => void;
+        let analysis: ReturnType<typeof store.analyzeSpeakers> | undefined;
         const stop = spyOn(adapter, 'stopTranscription').mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectStop = reject; }));
+        const analyze = spyOn(adapter, 'analyzeSpeakers').mockImplementationOnce(() => new Promise((resolve) => { finishAnalysis = resolve; }));
+        const skip = spyOn(adapter, 'stopSpeakerAnalysis').mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectSkip = reject; }));
         try {
             await userEvent.click(canvas.getByRole('button', { name: 'Stop transcription' }));
-            await waitFor(() => expect(stop).toHaveBeenCalledOnce());
+            await expect(stop).toHaveBeenCalledOnce();
             const previous = store.operations.active!;
-            store.operations.finish(previous);
-            store.operations.begin('analyzing-speakers');
-            rejectStop(new Error('Synthetic late stop failure'));
+            store.operations.transition(previous, 'analyzing-speakers');
             await waitFor(() => expect(canvas.getByRole('button', { name: 'Skip speaker analysis' })).toBeEnabled());
+            await expect(store.operations.active?.id).toBe(previous.id);
+            store.operations.finish(previous);
+            store.transcription.replaceSavedTranscript({ version: 1, segments: [{ startSec: 0, endSec: 1, text: 'Synthetic saved transcript.' }] });
+            analysis = store.analyzeSpeakers();
+            await waitFor(() => expect(analyze).toHaveBeenCalledOnce());
+            await userEvent.click(canvas.getByRole('button', { name: 'Skip speaker analysis' }));
+            await expect(skip).toHaveBeenCalledOnce();
+            rejectStop(new Error('Synthetic late stop failure'));
+            await userEvent.click(canvas.getByRole('button', { name: 'Log' }));
+            await expect(canvas.getByRole('button', { name: 'Skip speaker analysis' })).toBeDisabled();
             await expect(canvas.queryByRole('alert')).not.toBeInTheDocument();
-            await expect(store.operations.kind).toBe('analyzing-speakers');
             await expect(store.activityLog.content).not.toContain('Synthetic late stop failure');
-        } finally { stop.mockRestore(); }
+            await userEvent.click(canvas.getByRole('button', { name: 'Log' }));
+            rejectSkip(new Error('Synthetic current skip failure'));
+            const alert = within(await canvas.findByRole('alert'));
+            await expect(alert.getByRole('button', { name: 'Retry skipping' })).toBeEnabled();
+            await userEvent.click(alert.getByRole('button', { name: 'Show in log' }));
+            await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent('Synthetic current skip failure');
+            await expect(store.operations.kind).toBe('analyzing-speakers');
+        } finally {
+            store.operations.cancelActive();
+            rejectStop?.(new Error('Synthetic cleanup'));
+            rejectSkip?.(new Error('Synthetic cleanup'));
+            finishAnalysis?.(await adapter.getSession('storybook-session'));
+            await analysis;
+            stop.mockRestore();
+            analyze.mockRestore();
+            skip.mockRestore();
+        }
     },
 };

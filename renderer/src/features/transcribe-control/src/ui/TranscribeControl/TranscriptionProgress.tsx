@@ -33,10 +33,13 @@ interface StepProps {
     children?: ReactNode;
 }
 
-interface StopFailure {
+interface StopOwner {
     operationId: number;
     kind: ForegroundOperationKind;
     sessionId: string | null;
+}
+
+interface StopFailure extends StopOwner {
     message: string;
 }
 
@@ -55,7 +58,7 @@ const Step: React.FC<StepProps> = ({ number, label, status, children }) => (
 export const TranscriptionProgress: React.FC = observer(() => {
     const store = useAppStore();
     const { transcription, speakers, activeTranscriptionSettings: settings } = store;
-    const [stopPending, setStopPending] = useState(false);
+    const [pendingStop, setPendingStop] = useState<StopOwner | null>(null);
     const [stopError, setStopError] = useState<StopFailure | null>(null);
     const isAnalyzing = store.operations.kind === 'analyzing-speakers';
     const recognitionStarted = isAnalyzing || transcription.recognitionStarted;
@@ -66,24 +69,27 @@ export const TranscriptionProgress: React.FC = observer(() => {
         Math.min(100, 100 * speakers.downloadedBytes / speakers.totalBytes) : speakers.percent;
     const request = settings?.request;
     const options = request?.options;
-    const currentStopError = stopError?.operationId === store.operations.active?.id
-        && stopError?.kind === store.operations.kind && stopError?.sessionId === store.workspace.activeSessionId ? stopError : null;
+    const isCurrent = (owner: StopOwner | null): boolean => owner !== null
+        && owner.operationId === store.operations.active?.id && owner.kind === store.operations.kind
+        && owner.sessionId === store.workspace.activeSessionId;
+    const currentStopError = isCurrent(stopError) ? stopError : null;
+    const stopPending = isCurrent(pendingStop);
 
     const stop = async () => {
         const operation = store.operations.active;
         if (!canStop || stopPending || !operation) return;
         const { id: operationId, kind } = operation;
         const sessionId = store.workspace.activeSessionId;
-        setStopPending(true);
+        const owner = { operationId, kind, sessionId };
+        setPendingStop(owner);
         setStopError(null);
         try {
             const result = isAnalyzing ? await store.stopSpeakerAnalysis() : await store.stopTranscription();
-            if (!result.ok && operationId === store.operations.active?.id && kind === store.operations.kind
-                && sessionId === store.workspace.activeSessionId) {
-                setStopError({ operationId, kind, sessionId, message: result.message });
+            if (!result.ok && isCurrent(owner)) {
+                setStopError({ ...owner, message: result.message });
             }
         } finally {
-            setStopPending(false);
+            setPendingStop((pending) => pending === owner ? null : pending);
         }
     };
 
