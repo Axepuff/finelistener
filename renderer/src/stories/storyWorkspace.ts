@@ -173,6 +173,11 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
             sessions = [session];
             return Promise.resolve(session);
         },
+        importDroppedAudio: (file) => {
+            session = { ...session, title: file.name, sourceFileName: file.name };
+            sessions = [session];
+            return Promise.resolve(session);
+        },
         deleteSession: (id) => {
             sessions = sessions.filter((item) => item.id !== id);
             return Promise.resolve(true);

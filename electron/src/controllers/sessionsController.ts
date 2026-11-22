@@ -1,11 +1,13 @@
 import type { BrowserWindow, IpcMain } from 'electron';
 import { dialog } from 'electron';
+import { stat } from 'node:fs/promises';
+import path from 'node:path';
 import { SUPPORTED_MEDIA_EXTENSIONS } from '../constants';
 import { SessionsService } from '../services/SessionsService';
 
 export function registerSessionsController(
     ipc: IpcMain,
-    _getMainWindow: () => BrowserWindow | null,
+    getMainWindow: () => BrowserWindow | null,
     service = new SessionsService(),
 ): void {
 
@@ -51,6 +53,19 @@ export function registerSessionsController(
         if (canceled || filePaths.length === 0) return null;
 
         return service.createSessionFromImport(filePaths[0]);
+    });
+
+    ipc.handle('sessions:import-dropped-audio', async (event, filePath: unknown) => {
+        const mainFrame = getMainWindow()?.webContents.mainFrame;
+
+        if (!mainFrame || event.senderFrame !== mainFrame) throw new Error('Invalid audio import sender');
+        if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) throw new Error('Invalid audio file path');
+        if (!SUPPORTED_MEDIA_EXTENSIONS.includes(path.extname(filePath).slice(1).toLowerCase())) {
+            throw new Error('Unsupported audio or video file format');
+        }
+        if (!(await stat(filePath)).isFile()) throw new Error('Audio import requires a file');
+
+        return service.createSessionFromImport(filePath);
     });
 
     ipc.handle('sessions:optimize-audio', async (_event, sessionId: unknown, mode: unknown = 'optimized') => {

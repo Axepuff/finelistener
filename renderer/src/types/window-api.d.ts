@@ -28,6 +28,7 @@ declare global {
                 setActive: (sessionId: string | null) => Promise<boolean>;
                 delete: (sessionId: string) => Promise<boolean>;
                 importAudio: () => Promise<SessionDetails | null>;
+                importDroppedAudio: (file: File) => Promise<SessionDetails | null>;
                 optimizeAudio: (sessionId: string, mode?: 'original' | 'optimized') => Promise<SessionDetails>;
                 setTranscriptDuplicateFilter: (sessionId: string, enabled: boolean) => Promise<SessionDetails>;
                 generateSummary: (sessionId: string, options?: RecordingSummaryOptions) => Promise<SummaryGenerationResult>;

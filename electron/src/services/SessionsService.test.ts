@@ -153,6 +153,16 @@ it('opens legacy sessions without assigning invented source labels', async () =>
     expect(session.audioOptimizedWavPath).toBeTruthy();
 });
 
+it('removes an incomplete import when audio conversion fails', async () => {
+    const sourcePath = path.join(environment.root, 'broken.wav');
+    await fs.writeFile(sourcePath, 'Invalid audio');
+    const service = new SessionsService();
+
+    await expect(service.createSessionFromImport(sourcePath)).rejects.toThrow('Failed to convert audio to WAV');
+    await expect(fs.readdir(service.getSessionsRootDir())).resolves.toEqual([]);
+    await expect(fs.readFile(sourcePath, 'utf8')).resolves.toBe('Invalid audio');
+});
+
 it('persists reversible duplicate-filter presentations without changing source results', async () => {
     const sourcePath = path.join(environment.root, 'source.wav');
     await fs.writeFile(sourcePath, wav(1000));

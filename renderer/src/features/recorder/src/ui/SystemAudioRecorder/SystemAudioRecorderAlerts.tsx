@@ -6,10 +6,12 @@ import React from 'react';
 export const SystemAudioRecorderAlerts: React.FC = observer(() => {
     const { alerts } = useSystemAudioRecorder();
 
+    if (!alerts.recordingError && !alerts.showSilenceWarning && !alerts.deviceError && alerts.isRecordingAvailable) return null;
+
     return (
         <Stack gap={12}>
             {alerts.recordingError ? (
-                <Text size="sm" c="red">
+                <Text size="sm" role="alert">
                     {alerts.recordingError}
                 </Text>
             ) : null}
