@@ -6,3 +6,40 @@
 .workspace-title-bar button {
     -webkit-app-region: no-drag;
 }
+
+.workspace-title-bar__session {
+    flex: 1;
+    min-width: 0;
+}
+
+.workspace-title-bar__language,
+.workspace-title-bar__status {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--brand-color-border);
+    border-radius: 3px;
+    background: var(--brand-color-fill-tertiary);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.workspace-title-bar__language {
+    height: 22px;
+    padding: 0 6px;
+    color: var(--brand-color-text-secondary);
+}
+
+.workspace-title-bar__saved {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.workspace-title-bar__status[data-recording] {
+    background: var(--brand-color-error-bg);
+    border-color: var(--brand-color-error-border);
+    font-variant-numeric: tabular-nums;
+}

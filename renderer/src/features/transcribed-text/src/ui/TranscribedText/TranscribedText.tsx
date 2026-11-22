@@ -245,8 +245,8 @@ export const TranscribedText: React.FC = observer(() => {
                                         </Text>
                                         <Text size="sm" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
                                             {audioTitle ?
-                                                `Click "Transcribe" to see the text for ${audioTitle} here.` :
-                                                'Click "Transcribe" to see the text here.'}
+                                                `Transcribe the audio to see the text for ${audioTitle} here.` :
+                                                'Transcribe the audio to see the text here.'}
                                         </Text>
                                     </Stack>
                                 </Paper>

@@ -1,0 +1,102 @@
+.player-strip {
+    padding: 12px 16px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.player-strip__controls {
+    height: 32px;
+    white-space: nowrap;
+}
+
+.player-strip__controls > * {
+    flex-shrink: 0;
+}
+
+.player-strip__time {
+    font-variant-numeric: tabular-nums;
+}
+
+.player-strip__segment {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 4px 0 8px;
+    border-radius: 3px;
+    border: 1px solid var(--brand-color-info-border);
+    background: var(--brand-color-info-bg);
+    font-family: var(--brand-font-family-code);
+    font-size: 12px;
+}
+
+.player-strip__audio-mode {
+    height: 24px;
+    padding: 2px;
+}
+
+.player-strip__segment[data-invalid] {
+    border-color: var(--brand-color-error-border);
+    background: var(--brand-color-error-bg);
+}
+
+.player-strip__audio-mode .mantine-SegmentedControl-label {
+    padding: 0 8px;
+    line-height: 20px;
+    font-size: 12px;
+}
+
+.player-strip__audio-mode .mantine-SegmentedControl-label[data-active] {
+    font-weight: 600;
+}
+
+.player-strip__waveform {
+    position: relative;
+    height: 100px;
+}
+
+.player-strip__loader {
+    position: absolute;
+    top: 40px;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.player-strip__waveform ::part(cursor) {
+    overflow: visible;
+    height: 80px;
+}
+
+.player-strip__waveform ::part(regions-container) {
+    height: 80px;
+    z-index: 0;
+}
+
+.player-strip__waveform ::part(canvases) {
+    /* Keep the library-drawn bars above the selection and below the playhead. */
+    position: relative;
+    z-index: 1;
+}
+
+.player-strip__waveform ::part(cursor)::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -3px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--brand-color-info);
+}
+
+.player-strip__waveform ::part(region) {
+    border-left: 1px solid var(--brand-color-info-border);
+    border-right: 1px solid var(--brand-color-info-border);
+    border-radius: 0;
+}
+
+.player-strip__waveform ::part(region-handle-left),
+.player-strip__waveform ::part(region-handle-right) {
+    border: 0;
+}

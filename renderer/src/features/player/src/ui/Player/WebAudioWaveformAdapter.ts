@@ -85,6 +85,10 @@ export class WebAudioWaveformAdapter extends PlayerAdapter {
         return this.isPlayingInternal;
     }
 
+    public get duration(): number {
+        return this.audioBuffer?.duration ?? 0;
+    }
+
     public async loadSource(source?: string | File): Promise<void> {
         console.log(source);
 

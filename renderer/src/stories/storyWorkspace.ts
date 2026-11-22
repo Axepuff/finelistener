@@ -53,6 +53,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         updatedAt: 1791511800000,
         sourceKind: 'imported',
         hasTranscript,
+        transcription: { language: 'en' },
         audioMode: 'optimized',
         audioOriginalPath: STORY_AUDIO_PATH,
         audioWavPath: STORY_AUDIO_PATH,
@@ -233,7 +234,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         transcribe: (_path, options) => {
             if (scenario === 'error') return Promise.reject(new Error('Demo transcription failure'));
             if (scenario !== 'transcribing') {
-                session = { ...session, hasTranscript: true, transcript: structuredClone(transcript) };
+                session = { ...session, updatedAt: session.updatedAt + 60_000, transcription: { language: options.language }, hasTranscript: true, transcript: structuredClone(transcript) };
                 sessions = [session];
                 return Promise.resolve(transcriptSource);
             }
