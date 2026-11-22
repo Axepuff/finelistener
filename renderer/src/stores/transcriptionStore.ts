@@ -1,6 +1,7 @@
 import type { RecordingSource, SessionSummary, SessionSummaryDraft, SessionTranscriptSegmentV1, SessionTranscriptV1 } from 'electron/src/types/sessions';
 import type { TranscribeOpts, TranscriptionProgressEvent, TranscriptionTextEvent } from 'electron/src/types/transcription';
 import type { WhisperModelName } from 'electron/src/types/whisper';
+import type { ActivityLogStore } from './activityLogStore';
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { TranscriptionRunOutcome } from 'renderer/src/features/transcribe-state/src/model/transcriptionWorkflow';
 import type { RendererAdapter } from './rendererAdapter';
@@ -37,6 +38,13 @@ export type TranscriptionRunResult =
 /** Owns one transcription run, its streaming listeners, and the visible transcript state. */
 export class TranscriptionStore {
     private savedTranscriptValue: DeepReadonly<SessionTranscriptV1> | null = null;
+
+    previousTranscriptKept = false;
+
+    confirmPreviousTranscript(transcript: SessionTranscriptV1 | undefined): void {
+        this.previousTranscriptKept = Boolean(this.runOutcome === 'error' && this.savedTranscriptValue?.segments.length
+            && JSON.stringify(transcript) === JSON.stringify(this.savedTranscriptValue));
+    }
 
     private draftSource = '';
 
@@ -76,9 +84,9 @@ export class TranscriptionStore {
 
     private duplicateFilterPreferenceRequestId = 0;
 
-    constructor(private readonly adapter: RendererAdapter | null) {
-        makeAutoObservable<this, 'adapter' | 'runIsCurrent' | 'unsubscribeFunctions' | 'stopCompletion' | 'stoppingRunId'>(this, {
-            adapter: false,
+    constructor(private readonly adapter: RendererAdapter | null, private readonly activityLog: ActivityLogStore | null = null) {
+        makeAutoObservable<this, 'adapter' | 'activityLog' | 'runIsCurrent' | 'unsubscribeFunctions' | 'stopCompletion' | 'stoppingRunId'>(this, {
+            adapter: false, activityLog: false,
             stopCompletion: false,
             stoppingRunId: false,
             runIsCurrent: false,
@@ -300,6 +308,7 @@ export class TranscriptionStore {
             if (!this.isRunCurrent(runId, lifecycleId, isCurrent)) return { status: 'replaced' };
 
             console.error('Whisper transcription failed', error);
+            this.activityLog?.appendFailure(`Transcription failed · session ${request.sessionId ?? 'unsaved'} · run ${runId}`, error);
             runInAction(() => {
                 this.failRun(runId, 'Transcription failed.');
             });
@@ -327,7 +336,10 @@ export class TranscriptionStore {
                 return commandFailure('The transcription run is no longer active.');
             }
 
-            if (!stopped) return commandFailure('No transcription is running.');
+            if (!stopped) {
+                this.activityLog?.appendFailure(`Transcription stop failed · run ${runId}`, 'The service did not confirm cancellation.');
+                return commandFailure('No transcription is running.');
+            }
 
             const sourceSessionId = this.sourceSessionId;
 
@@ -344,6 +356,7 @@ export class TranscriptionStore {
                     });
                 } catch (error: unknown) {
                     console.error('Failed to reload completed recording source transcripts', error);
+                    if (this.isRunCurrent(runId, lifecycleId, isCurrent)) this.activityLog?.appendFailure(`Reload completed source transcripts failed · run ${runId}`, error);
                 }
             }
             runInAction(() => {
@@ -357,6 +370,7 @@ export class TranscriptionStore {
             }
 
             console.error('Failed to stop Whisper transcription', error);
+            this.activityLog?.appendFailure(`Transcription stop failed · run ${runId}`, error);
 
             return commandFailure('Failed to stop transcription.');
         } finally {
@@ -379,6 +393,7 @@ export class TranscriptionStore {
     replaceSavedTranscript(transcript: DeepReadonly<SessionTranscriptV1> | null): void {
         this.invalidateRun();
         this.savedTranscriptValue = transcript;
+        this.previousTranscriptKept = false;
         this.draftSource = '';
         this.sourceDrafts = {};
         this.draftOffsetSeconds = 0;
@@ -406,6 +421,7 @@ export class TranscriptionStore {
         this.draftOffsetSeconds = segment?.start ?? 0;
         this.progressValue = null;
         this.runOutcomeValue = 'none';
+        this.previousTranscriptKept = false;
         this.runErrorMessageValue = null;
 
         return this.runId;

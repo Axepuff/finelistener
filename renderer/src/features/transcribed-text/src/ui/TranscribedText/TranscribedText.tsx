@@ -1,4 +1,5 @@
-import { ActionIcon, Alert, Button, Center, Group, Modal, Paper, SegmentedControl, Stack, Text, ThemeIcon } from '@mantine/core';
+import { ActionIcon, Alert, Button, Center, Paper, SegmentedControl, Stack, Text, ThemeIcon } from '@mantine/core';
+import { InlineAlert } from 'renderer/src/shared/InlineAlert';
 import { IconHeadphones, IconMicrophone, IconPlus } from '@tabler/icons-react';
 import { computed } from 'mobx';
 import { observer } from 'mobx-react-lite';
@@ -44,10 +45,6 @@ export const TranscribedText: React.FC<Props> = observer(({ summaryContinuation 
     const showReading = showSpeakers && speakerLayout === 'reading';
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedMatchIndex, setSelectedMatchIndex] = useState(0);
-    const [confirmRetrySpeakers, setConfirmRetrySpeakers] = useState<{
-        sessionId: string | null;
-        speakers: object;
-    } | null>(null);
     const [selectedSpan, setSelectedSpan] = useState<{
         sessionId: string | null;
         generation: string | undefined;
@@ -168,10 +165,6 @@ export const TranscribedText: React.FC<Props> = observer(({ summaryContinuation 
         }
     };
 
-    const handleRetry = async (replaceSpeakerLabels = false) => {
-        const result = await store.retryIncompleteTranscription(replaceSpeakerLabels);
-        if (!result.ok) store.activityLog.appendEvent(result.message);
-    };
 
     return (
         <Stack gap={showSpeakers ? 10 : 16} align="stretch" style={{ width: '100%', minWidth: 0, minHeight: 0, height: '100%', padding: 16, overflow: 'hidden' }}>
@@ -238,53 +231,16 @@ export const TranscribedText: React.FC<Props> = observer(({ summaryContinuation 
                             {needsSpeakerAnalysis || isReadyEmptyState ? speakerControls : null}
                             <SpeakerAnalysisStatus />
 
-                            {transcription.isIncomplete ? (
-                                <Alert color={transcription.allSourcesFailed ? 'red' : 'yellow'} title={transcription.allSourcesFailed ? 'Transcription failed' : 'Incomplete transcription'}>
-                                    <Stack gap={8}>
-                                        <Text size="sm">{transcription.hasCompletedSources ?
-                                            'Completed sources are saved. Retry to transcribe the remaining sources using the original settings.' :
-                                            'No source was transcribed. Retry using the original settings.'}</Text>
-                                        <Button size="compact-sm" variant="light" disabled={store.operations.isBusy} title={store.operationBlockReason} aria-description={store.operationBlockReason} onClick={() => {
-                                            if (transcription.savedTranscript?.speakers) setConfirmRetrySpeakers({
-                                                sessionId: store.workspace.activeSessionId,
-                                                speakers: transcription.savedTranscript.speakers,
-                                            });
-                                            else void handleRetry();
-                                        }}>
-                                            {'Retry remaining sources'}
-                                        </Button>
-                                    </Stack>
-                                </Alert>
-                            ) : null}
-                            {transcription.runOutcome === 'error' && !transcription.isIncomplete ? (
-                                <Alert color="red" title="Transcription failed">
-                                    {transcription.runErrorMessage}
-                                </Alert>
-                            ) : null}
-                            <Modal opened={confirmRetrySpeakers !== null} onClose={() => setConfirmRetrySpeakers(null)} title="Replace speaker labels?" centered={true}>
-                                <Stack gap="sm">
-                                    <Text size="sm">A successful retry may replace speaker names, assignments, and merges in this session.</Text>
-                                    <Group justify="flex-end">
-                                        <Button variant="default" onClick={() => setConfirmRetrySpeakers(null)}>Cancel</Button>
-                                        <Button color="red" disabled={store.operations.isBusy} title={store.operationBlockReason} aria-description={store.operationBlockReason} onClick={() => {
-                                            const isCurrent = confirmRetrySpeakers?.sessionId === store.workspace.activeSessionId
-                                                && confirmRetrySpeakers.speakers === transcription.savedTranscript?.speakers;
-                                            setConfirmRetrySpeakers(null);
-                                            if (isCurrent) void handleRetry(true);
-                                            else store.activityLog.appendEvent('Speaker labels changed. Review the transcript before retrying.');
-                                        }}>Retry and replace</Button>
-                                    </Group>
-                                </Stack>
-                            </Modal>
                             {transcription.duplicateFilterFailed ? (
                                 <Alert color="yellow" title="Duplicate filtering unavailable">
                                     {'The unfiltered transcript is shown. Try the filter again.'}
                                 </Alert>
                             ) : null}
                             {store.workspace.activeSession?.tracks?.some((track) => track.failure) ? (
-                                <Alert color="yellow" title="Recording interrupted">
+                                <InlineAlert severity="warning" title="Recording source stopped early" actions={<Button size="compact-sm" variant="default" onClick={() => store.workspace.requestPlaybackTime(0, 'play')}>Play captured audio</Button>}>
                                     {'A recording source stopped early. Only the captured audio is available.'}
-                                </Alert>
+                                    {store.workspace.activeSession?.tracks?.filter((track) => track.failure).map((track) => <Text size="xs" key={track.source}>{track.source === 'system' ? 'System audio' : 'Microphone'} stopped early.</Text>)}
+                                </InlineAlert>
                             ) : null}
                             {isReadyEmptyState ? (
                                 <Paper

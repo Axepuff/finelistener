@@ -1,0 +1,88 @@
+import type { SessionDetails } from 'electron/src/types/sessions';
+import { createStoryWorkspace } from './storyWorkspace';
+
+export type ErrorScenario = 'incomplete' | 'partial-preparation' | 'nothing' | 'previous' | 'speaker' | 'speaker-existing' | 'preparation' | 'permission' | 'storage' | 'source-stopped' | 'stop-transcription' | 'stop-speakers';
+
+// Controlled IPC substitutes: these never record, download, infer, or open OS settings.
+export const createErrorWorkspace = async (scenario: ErrorScenario) => {
+    if (scenario === 'stop-transcription' || scenario === 'stop-speakers') {
+        const workspace = await createStoryWorkspace(scenario === 'stop-speakers' ? 'nemotron-analyzing' : 'transcribing');
+        const method = scenario === 'stop-speakers' ? 'stopSpeakerAnalysis' : 'stopTranscription';
+        const stop = workspace.adapter[method];
+        let attempts = 0;
+        workspace.adapter[method] = () => ++attempts === 1 ? Promise.reject(new Error('Synthetic stop failure')) : stop();
+        return workspace;
+    }
+    const workspace = await createStoryWorkspace(scenario === 'storage' ? 'sessions-recovery' : scenario === 'permission' ? 'settings-recording-silence' : scenario === 'nothing' ? 'ready' : scenario === 'speaker-existing' ? 'speakers' : 'transcript');
+    const { adapter, store } = workspace;
+    let session: SessionDetails = structuredClone(await adapter.getSession('storybook-session'));
+    const options = { language: 'en', model: 'base' as const, splitOnWord: true, useVad: true };
+    if (scenario === 'incomplete' || scenario === 'nothing' || scenario === 'partial-preparation') {
+        session.sourceKind = 'recorded';
+        session.tracks = [{ source: 'system', filePath: '/synthetic/system.wav', startOffsetMs: 0 },
+            { source: 'microphone', filePath: '/synthetic/microphone.wav', startOffsetMs: 0 }];
+        const completed = { startSec: 0, endSec: 1, text: 'Saved system audio.', source: 'system' as const };
+        session.transcript = { version: 1, segments: scenario !== 'nothing' ? [completed] : [], sourceRun: {
+            status: 'incomplete', settings: options, sources: [
+                { source: 'system', status: scenario !== 'nothing' ? 'completed' : 'failed', segments: scenario !== 'nothing' ? [completed] : [] },
+                { source: 'microphone', status: 'failed', segments: [] },
+            ],
+        } };
+        const incomplete = structuredClone(session.transcript);
+        if (scenario === 'partial-preparation') session.transcript = undefined;
+        adapter.transcribeSession = (_id, request) => {
+            if (scenario === 'partial-preparation' && !request.retryFailed) {
+                // Substitute for the native log event; main controller/runner delivery is tested separately.
+                store.activityLog.appendProcessOutput('\nSource transcription failed · session storybook-session · run 2 · microphone: Error: Synthetic microphone conversion failed; caused by Error (ENOSPC): Synthetic disk is full\n');
+                session = { ...session, transcript: incomplete };
+                return Promise.resolve(session);
+            }
+            session = { ...session, transcript: { version: 1, segments: [completed, { ...completed, source: 'microphone', text: 'Recovered microphone.' }] } };
+            return Promise.resolve(session);
+        };
+    }
+    if (scenario === 'source-stopped') session.tracks = [{ source: 'system', filePath: '/synthetic/system.wav', startOffsetMs: 0, failure: 'Synthetic stopped source' }];
+    adapter.getSession = (id) => Promise.resolve(structuredClone({ ...session, id }));
+    if (scenario !== 'storage') {
+        const opened = await store.openSession(session.id);
+        if (!opened.ok) throw new Error(opened.message);
+    }
+    if (scenario === 'partial-preparation') {
+        await store.speakers.setEnabled(false);
+        await store.startTranscription(options);
+    }
+    if (scenario === 'previous') {
+        const transcribe = adapter.transcribe;
+        adapter.transcribe = () => Promise.reject(new Error('Synthetic transcription failure'));
+        await store.startTranscription(options);
+        adapter.transcribe = transcribe;
+    }
+    if (scenario === 'speaker' || scenario === 'speaker-existing' || scenario === 'preparation') {
+        await store.speakers.setEnabled(true);
+        let ready = scenario === 'speaker-existing';
+        adapter.getSpeakerAssets = () => Promise.resolve({ ready, gpuBackend: 'vulkan', gpuAvailable: false, downloadBytes: 123_671_929 });
+        store.speakers.setAssets(await adapter.getSpeakerAssets());
+        if (scenario !== 'preparation') {
+            if (scenario === 'speaker') await store.speakers.setCompute('gpu');
+            adapter.analyzeSpeakers = () => { ready = true; return Promise.reject(new Error('SPEAKER_GPU_UNAVAILABLE')); };
+            await store.analyzeSpeakers(scenario === 'speaker-existing');
+            adapter.analyzeSpeakers = () => Promise.resolve({ ...session, transcript: { ...session.transcript!, speakers: {
+                version: 1, recognitionRevision: 'synthetic', generation: 'synthetic', settings: {}, intervals: [], corrections: [], status: 'completed', speakers: [],
+            } } });
+        } else {
+            adapter.prepareSpeakerAssets = () => Promise.reject(new Error('Synthetic component failure'));
+            await store.prepareSpeakerAssets();
+            adapter.prepareSpeakerAssets = () => Promise.resolve({ ready: true, gpuBackend: 'vulkan', gpuAvailable: false });
+        }
+    }
+    if (scenario === 'permission') {
+        adapter.getRecordingPermissionStatus = () => Promise.resolve('denied');
+        adapter.startSystemRecording = () => Promise.reject(new Error('Synthetic permission failure'));
+        await store.recording.startRecording();
+    }
+    if (scenario === 'storage') {
+        adapter.startSystemRecording = () => Promise.resolve({ error: 'recording-storage-full' });
+        await store.recording.startRecording();
+    }
+    return workspace;
+};

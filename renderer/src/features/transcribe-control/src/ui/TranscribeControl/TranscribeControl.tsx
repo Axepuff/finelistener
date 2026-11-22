@@ -1,4 +1,6 @@
-import { ActionIcon, Alert, Box, Button, Group, Loader, Modal, Progress, Select, Stack, Switch, Text } from '@mantine/core';
+import { TranscriptionError } from './TranscriptionError';
+import { InlineAlert } from 'renderer/src/shared/InlineAlert';
+import { ActionIcon, Box, Button, Group, Loader, Modal, Progress, Select, Stack, Switch, Text } from '@mantine/core';
 import { IconHeadphones, IconTrash } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useState } from 'react';
@@ -156,7 +158,7 @@ const TranscribeControl: React.FC = observer(() => {
                         description="Nemotron 3 counts speakers automatically. Auto uses CPU when no GPU is available." />
                 ) : null}
                 {store.speakers.enabled && hasSystemAudio && store.speakers.compute === 'gpu' && store.speakers.assets?.gpuAvailable === false ? (
-                    <Alert color="yellow" title="GPU unavailable">Select CPU or update your graphics driver.</Alert>
+                    <InlineAlert severity="warning" title="GPU unavailable" actions={<Button size="compact-sm" disabled={store.operations.isBusy} onClick={() => { void store.speakers.setCompute('cpu'); }}>Select CPU</Button>}>Select CPU or update your graphics driver.</InlineAlert>
                 ) : null}
                 {canPrepareSpeakerComponent ? (
                     <Stack gap={6}>
@@ -179,7 +181,7 @@ const TranscribeControl: React.FC = observer(() => {
                             </Group>
                         ) : null}
                         {store.speakers.status === 'error' && store.speakers.errorMessage ? (
-                            <Alert color="yellow" title="Component preparation failed">{store.speakers.errorMessage}</Alert>
+                            <InlineAlert title="Component preparation failed" actions={<Button size="compact-sm" disabled={store.operations.isBusy} onClick={() => { void handlePrepareSpeakerComponent(); }}>Retry download</Button>}>{store.speakers.errorMessage}</InlineAlert>
                         ) : null}
                     </Stack>
                 ) : null}
@@ -195,6 +197,7 @@ const TranscribeControl: React.FC = observer(() => {
                     microphoneGateEnabled={microphoneGateEnabled}
                     onChangeMicrophoneGateEnabled={(value) => control.setMicrophoneGateEnabled(value)}
                 />
+                <TranscriptionError />
             </Stack>
             <Box className="settings-panel__footer">
                 <Text id="settings-transcription-status" size="xs" c="dimmed" aria-live="polite">{blockReason ?? 'Ready to transcribe.'}</Text>

@@ -4,6 +4,8 @@ import { observer } from 'mobx-react-lite';
 import React, { useState, type ReactNode } from 'react';
 import { useAppStore } from 'renderer/src/AppContext';
 import { formatSecondsReadable } from 'renderer/src/shared/lib';
+import { InlineAlert } from 'renderer/src/shared/InlineAlert';
+import type { ForegroundOperationKind } from 'renderer/src/stores/types';
 
 const speakerPhases = {
     preparing: 'Preparing speaker analysis',
@@ -31,6 +33,16 @@ interface StepProps {
     children?: ReactNode;
 }
 
+interface StopOwner {
+    operationId: number;
+    kind: ForegroundOperationKind;
+    sessionId: string | null;
+}
+
+interface StopFailure extends StopOwner {
+    message: string;
+}
+
 const Step: React.FC<StepProps> = ({ number, label, status, children }) => (
     <li className="transcription-progress__step" data-status={status} aria-current={status === 'current' ? 'step' : undefined}>
         <span className="transcription-progress__number" aria-label={status === 'done' ? 'Done' : undefined}>
@@ -46,8 +58,8 @@ const Step: React.FC<StepProps> = ({ number, label, status, children }) => (
 export const TranscriptionProgress: React.FC = observer(() => {
     const store = useAppStore();
     const { transcription, speakers, activeTranscriptionSettings: settings } = store;
-    const [stopPending, setStopPending] = useState(false);
-    const [stopError, setStopError] = useState<string | null>(null);
+    const [pendingStop, setPendingStop] = useState<StopOwner | null>(null);
+    const [stopError, setStopError] = useState<StopFailure | null>(null);
     const isAnalyzing = store.operations.kind === 'analyzing-speakers';
     const recognitionStarted = isAnalyzing || transcription.recognitionStarted;
     const canStop = isAnalyzing || transcription.isRunning;
@@ -57,16 +69,27 @@ export const TranscriptionProgress: React.FC = observer(() => {
         Math.min(100, 100 * speakers.downloadedBytes / speakers.totalBytes) : speakers.percent;
     const request = settings?.request;
     const options = request?.options;
+    const isCurrent = (owner: StopOwner | null): boolean => owner !== null
+        && owner.operationId === store.operations.active?.id && owner.kind === store.operations.kind
+        && owner.sessionId === store.workspace.activeSessionId;
+    const currentStopError = isCurrent(stopError) ? stopError : null;
+    const stopPending = isCurrent(pendingStop);
 
     const stop = async () => {
-        if (!canStop || stopPending) return;
-        setStopPending(true);
+        const operation = store.operations.active;
+        if (!canStop || stopPending || !operation) return;
+        const { id: operationId, kind } = operation;
+        const sessionId = store.workspace.activeSessionId;
+        const owner = { operationId, kind, sessionId };
+        setPendingStop(owner);
         setStopError(null);
         try {
             const result = isAnalyzing ? await store.stopSpeakerAnalysis() : await store.stopTranscription();
-            if (!result.ok) setStopError(result.message);
+            if (!result.ok && isCurrent(owner)) {
+                setStopError({ ...owner, message: result.message });
+            }
         } finally {
-            setStopPending(false);
+            setPendingStop((pending) => pending === owner ? null : pending);
         }
     };
 
@@ -130,7 +153,12 @@ export const TranscriptionProgress: React.FC = observer(() => {
                 ) : null}
             </Stack>
             <Box className="settings-panel__footer">
-                {stopError ? <Text size="xs" role="alert">{stopError}</Text> : null}
+                {currentStopError ? <InlineAlert severity="warning" title={isAnalyzing ? 'Could not skip speaker analysis' : 'Could not stop transcription'}
+                    actions={<Button size="compact-sm" variant="default" disabled={!canStop || stopPending} onClick={() => void stop()}>
+                        {isAnalyzing ? 'Retry skipping' : 'Retry stop'}
+                    </Button>}>
+                    {currentStopError.message}
+                </InlineAlert> : null}
                 {isFinalizing ? <Text size="xs" c="dimmed" id="transcription-finalizing">Finishing transcription…</Text> : null}
                 <Button variant="default" onClick={() => void stop()} disabled={!canStop} loading={stopPending}
                     aria-describedby={isFinalizing ? 'transcription-finalizing' : undefined}

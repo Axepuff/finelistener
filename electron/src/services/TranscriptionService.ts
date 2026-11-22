@@ -6,6 +6,7 @@ import type { TranscriptionCallbacks } from './whisperServer/types';
 import type { SessionsService } from './SessionsService';
 import { transcribeSessionSources, type SourcePass } from './SessionTranscriptionRunner';
 import type { StructuredTranscriptionResult } from './whisperServer/utils';
+import { formatActivityFailure } from '../utils/errorDetails';
 
 export class TranscriptionService {
     public get isBusy(): boolean {
@@ -84,16 +85,12 @@ export class TranscriptionService {
             return await transcribeSessionSources(sessionId, opts, sessions, async (audioPath, options, pass) => {
                 operation.signal.throwIfAborted();
                 this.sourcePass = pass;
-                try {
-                    return await this.serverRunner.transcribeResult(audioPath, options);
-                } catch (error) {
-                    if (!operation.signal.aborted) {
-                        const message = error instanceof Error ? error.message : String(error);
-                        this.callbacks.onStderrChunk?.(`Failed to transcribe ${pass.source}: ${message}`);
-                    }
-                    throw error;
-                }
-            }, operation.signal);
+                return this.serverRunner.transcribeResult(audioPath, options);
+            }, operation.signal, (source, error) => {
+                this.callbacks.onStderrChunk?.(`\n${formatActivityFailure(
+                    `Source transcription failed · session ${sessionId} · run ${opts.runId} · ${source}`, error,
+                )}\n`);
+            });
         } finally {
             this.sourcePass = null;
             this.activeOperation = null;

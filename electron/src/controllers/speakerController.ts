@@ -1,3 +1,4 @@
+import { reportActivityFailure } from './activityLog';
 import type { BrowserWindow, IpcMain } from 'electron';
 import { SessionSpeakerWorkflow } from '../services/SessionSpeakerWorkflow';
 import { SpeakerDiarizationService } from '../services/SpeakerDiarizationService';
@@ -38,6 +39,7 @@ export function registerSpeakerController(
             return await action();
         } catch (error) {
             console.error(`Speaker ${operation} failed`, error);
+            reportActivityFailure(getMainWindow(), `Speaker ${operation} failed`, error);
             throw new Error(error instanceof SpeakerAnalysisError ? error.code : 'Speaker action failed.');
         }
     };

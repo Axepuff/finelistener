@@ -7,7 +7,7 @@ import { TranscribeControl } from '@~/transcribe-control';
 import { TranscribedText } from '@~/transcribed-text';
 import { EmptyWorkspace, SHELL_SIZES, StatusBar, TitleBar } from '@~/workspace-shell';
 import { observer } from 'mobx-react-lite';
-import React, { useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useAppStore } from 'renderer/src/AppContext';
 import { ResizableSidebarLayout } from 'renderer/src/shared/lib';
 
@@ -15,7 +15,11 @@ const panelBorder = 'var(--brand-line-width) solid var(--brand-color-border)';
 
 export const Home: React.FC = observer(() => {
     const store = useAppStore();
-    const [isLogOpen, setIsLogOpen] = useState(false);
+    const { isOpen: isLogOpen, focusRequest } = store.activityLog;
+    const logRef = useRef<HTMLElement>(null);
+    useEffect(() => {
+        if (isLogOpen && focusRequest > 0) logRef.current?.focus();
+    }, [isLogOpen, focusRequest]);
     const hasOpenSession = store.workspace.activeSessionId !== null;
     const showWorkspace = hasOpenSession || store.recordingInProgress;
 
@@ -92,6 +96,8 @@ export const Home: React.FC = observer(() => {
                 <Box
                     component="section"
                     aria-label="Process log"
+                    ref={logRef}
+                    tabIndex={-1}
                     style={{
                         position: 'absolute',
                         left: 0,
@@ -107,7 +113,7 @@ export const Home: React.FC = observer(() => {
                     <ProcessLog />
                 </Box>
             ) : null}
-            <StatusBar isLogOpen={isLogOpen} onToggleLog={() => setIsLogOpen((open) => !open)} />
+            <StatusBar isLogOpen={isLogOpen} onToggleLog={() => store.activityLog.toggle()} />
         </Box>
     );
 });

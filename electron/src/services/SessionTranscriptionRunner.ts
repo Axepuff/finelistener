@@ -28,6 +28,7 @@ export async function transcribeSessionSources(
     repository: SessionRepository,
     transcribe: (audioPath: string, options: TranscribeOpts, pass: SourcePass) => Promise<string | StructuredTranscriptionResult>,
     signal: AbortSignal,
+    reportFailure?: (source: RecordingSource, error: unknown) => void,
 ): Promise<SessionDetails> {
     if (!Number.isFinite(opts?.runId)) throw new Error('Invalid transcription request');
     const session = await repository.getSession(sessionId);
@@ -119,6 +120,7 @@ export async function transcribeSessionSources(
         } catch (error) {
             if (signal.aborted) throw error;
             console.error('Source transcription failed', source.source, error);
+            reportFailure?.(source.source, error);
             source.status = 'failed';
             source.error = 'Could not transcribe this source.';
             source.segments = [];

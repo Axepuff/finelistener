@@ -79,7 +79,8 @@ it('rejects corrupt on-disk weights and transfers, removes the partial file and 
 });
 
 it('retains bytes written before a network failure', async () => {
-    const service = new SummaryModelService(directory, () => {});
+    const diagnostic = vi.fn();
+    const service = new SummaryModelService(directory, () => {}, diagnostic);
     vi.spyOn(console, 'error').mockImplementation(() => {});
     let stream!: ReadableStreamDefaultController<Uint8Array>;
     fetch.mockResolvedValue(new Response(new ReadableStream<Uint8Array>({
@@ -88,9 +89,11 @@ it('retains bytes written before a network failure', async () => {
     const transfer = service.download();
     stream.enqueue(Buffer.from('a'));
     await vi.waitFor(async () => expect((await service.getStatus()).downloadedBytes).toBe(1));
-    stream.error(new Error('Connection lost'));
+    const networkError = new Error('Connection lost');
+    stream.error(networkError);
     const expected = { state: 'error', error: 'download', downloadedBytes: 1 };
     await expect(transfer).resolves.toMatchObject(expected);
+    expect(diagnostic).toHaveBeenCalledWith('Summary model download failed · reached 1 bytes', networkError);
     await expect(service.getStatus()).resolves.toMatchObject(expected);
     expect(await fs.readdir(directory)).toEqual([]);
 });

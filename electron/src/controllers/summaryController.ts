@@ -1,3 +1,4 @@
+import { reportActivityFailure } from './activityLog';
 import type { BrowserWindow, IpcMain } from 'electron';
 import { generateLocalSummary, SUMMARY_MODEL } from '../services/localSummary';
 import type { SessionsService } from '../services/SessionsService';
@@ -56,6 +57,7 @@ export function registerSummaryController(
             return { ok: true, summary: completed };
         } catch (error) {
             if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) return { ok: false, reason: 'cancelled' };
+            reportActivityFailure(getMainWindow(), `Summary generation failed · session ${sessionId}`, error);
             if (error instanceof Error) {
                 switch (error.message) {
                     case 'SUMMARY_DRAFT_INCOMPATIBLE': return { ok: false, reason: 'draft-incompatible' };

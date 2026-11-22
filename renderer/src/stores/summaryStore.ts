@@ -1,5 +1,6 @@
 import type { SessionSummary, SessionSummaryDraft, SummaryGenerationFailure } from 'electron/src/types/sessions';
 import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
+import type { ActivityLogStore } from './activityLogStore';
 import { makeAutoObservable, runInAction } from 'mobx';
 import { defaultRecordingSummaryOptions, type RecordingSummaryOptions } from '../../../electron/src/types/summaryOptions';
 import type { ForegroundOperationStore } from './foregroundOperationStore';
@@ -36,9 +37,9 @@ export class SummaryStore {
     private unsubscribeModel: (() => void) | null = null;
     private unsubscribe: (() => void) | null = null;
 
-    constructor(private readonly adapter: RendererAdapter | null, private readonly operations: ForegroundOperationStore) {
-        makeAutoObservable<this, 'adapter' | 'operations' | 'unsubscribe' | 'unsubscribeModel' | 'modelRequest'>(this, {
-            adapter: false, operations: false, unsubscribe: false, unsubscribeModel: false, modelRequest: false,
+    constructor(private readonly adapter: RendererAdapter | null, private readonly operations: ForegroundOperationStore, private readonly activityLog: ActivityLogStore | null = null) {
+        makeAutoObservable<this, 'adapter' | 'activityLog' | 'operations' | 'unsubscribe' | 'unsubscribeModel' | 'modelRequest'>(this, {
+            adapter: false, activityLog: false, operations: false, unsubscribe: false, unsubscribeModel: false, modelRequest: false,
         }, { autoBind: true });
     }
 
@@ -60,12 +61,20 @@ export class SummaryStore {
         return 'Could not download the model. Check your connection and try again.';
     }
 
+    private setModelStatus(status: SummaryModelStatus): void {
+        const previous = this.modelValue;
+        if (status.state === 'error' && (previous?.state !== 'error' || previous.error !== status.error || previous.downloadedBytes !== status.downloadedBytes)) {
+            this.activityLog?.appendFailure('Summary model download failed', `reason=${status.error}; model=${status.model}; reached=${status.downloadedBytes}/${status.totalBytes} bytes`);
+        }
+        this.modelValue = status;
+    }
+
     initialize(): void {
         if (!this.adapter || this.unsubscribeModel) return;
         this.unsubscribeModel = this.adapter.onSummaryModelChanged((status) => {
             runInAction(() => {
                 this.modelRequest += 1;
-                this.modelValue = status;
+                this.setModelStatus(status);
                 this.modelFailure = null;
             });
         });
@@ -77,7 +86,7 @@ export class SummaryStore {
         try {
             const status = await this.adapter.getSummaryModelStatus();
             if (request === this.modelRequest) runInAction(() => {
-                this.modelValue = status;
+                this.setModelStatus(status);
                 this.modelFailure = null;
             });
         } catch (error) {
@@ -85,6 +94,7 @@ export class SummaryStore {
             if (request === this.modelRequest) runInAction(() => {
                 this.modelValue = null;
                 this.modelFailure = 'Could not check whether the model is installed.';
+                this.activityLog?.appendFailure('Summary model availability check failed', error);
             });
         }
     }
@@ -100,12 +110,13 @@ export class SummaryStore {
             const status = await this.adapter.downloadSummaryModel();
             if (this.downloadPending === attempt) runInAction(() => {
                 this.modelRequest += 1;
-                this.modelValue = status;
+                this.setModelStatus(status);
             });
         } catch (error) {
             console.error('Failed to install the summary model', error);
             if (this.downloadPending === attempt) runInAction(() => {
                 this.modelFailure = 'Could not download the model. Try again.';
+                this.activityLog?.appendFailure('Summary model download failed', error);
             });
         } finally {
             if (this.downloadPending === attempt) runInAction(() => { this.downloadPending = null; });
@@ -122,7 +133,7 @@ export class SummaryStore {
                 // The cancel acknowledgement and the original download reply can arrive independently.
                 if (attempt && this.downloadPending === attempt && status.state !== 'downloading') this.downloadPending = null;
                 if (request === this.modelRequest) {
-                    this.modelValue = status;
+                    this.setModelStatus(status);
                     this.modelFailure = null;
                 }
             });
@@ -130,6 +141,7 @@ export class SummaryStore {
             console.error('Failed to cancel the summary model download', error);
             if (request === this.modelRequest) runInAction(() => {
                 this.modelFailure = 'Could not cancel the model download. Try again.';
+                this.activityLog?.appendFailure('Summary model download cancellation failed', error);
             });
         }
     }
@@ -157,6 +169,7 @@ export class SummaryStore {
             if (result.ok) onSaved(result.summary);
             else {
                 const { reason } = result;
+                this.activityLog?.appendFailure(`Summary generation ${reason === 'cancelled' ? 'stopped' : 'failed'} · session ${sessionId}`, `reason=${reason}`);
                 runInAction(() => {
                     this.stopError = null;
                     this.stoppedValue = reason === 'cancelled';
@@ -169,6 +182,7 @@ export class SummaryStore {
             if (this.operations.owns(operation)) runInAction(() => {
                 this.stopError = null;
                 this.generationFailureValue = { sessionId, prompt, reason: 'failed' };
+                this.activityLog?.appendFailure(`Summary generation failed · session ${sessionId}`, error);
             });
         } finally {
             if (this.operations.owns(operation)) {
@@ -194,6 +208,7 @@ export class SummaryStore {
             if (this.operations.owns(operation)) runInAction(() => {
                 this.stopping = false;
                 this.stopError = 'Could not stop summary generation. Try again.';
+                this.activityLog?.appendFailure(`Summary stop failed · operation ${operation.id}`, error);
             });
         }
     }

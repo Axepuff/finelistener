@@ -1,5 +1,6 @@
 import type { RecoverableRecording } from 'electron/src/types/recordingArchive';
 import type { SessionDetails } from 'electron/src/types/sessions';
+import type { ActivityLogStore } from './activityLogStore';
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { RendererAdapter } from './rendererAdapter';
 import type { ForegroundOperationStore } from './foregroundOperationStore';
@@ -18,9 +19,10 @@ export class RecordingRecoveryStore {
         private readonly adapter: RendererAdapter | null,
         private readonly operations: ForegroundOperationStore,
         private readonly onRecovered: (session: SessionDetails) => void,
+        private readonly activityLog: ActivityLogStore | null = null,
     ) {
-        makeAutoObservable<this, 'adapter' | 'operations' | 'onRecovered' | 'requestId' | 'lifecycleId' | 'disposed'>(this, {
-            adapter: false,
+        makeAutoObservable<this, 'adapter' | 'activityLog' | 'operations' | 'onRecovered' | 'requestId' | 'lifecycleId' | 'disposed'>(this, {
+            adapter: false, activityLog: false,
             operations: false,
             onRecovered: false,
             requestId: false,
@@ -56,12 +58,16 @@ export class RecordingRecoveryStore {
             if (!this.isCurrent(lifecycleId, requestId)) return;
             runInAction(() => {
                 this.itemsValue = items;
+                for (const item of items) this.activityLog?.appendEvent(`Unfinished recording found: id=${item.recordingId}; state=${item.state}; size=${item.sizeBytes} bytes; sources=${item.sources.join(', ')}`);
                 this.warningAgeMsValue = warningDays * 24 * 60 * 60 * 1000;
             });
         } catch (error) {
             console.error('Failed to load recoverable recordings', error);
             if (this.isCurrent(lifecycleId, requestId)) {
-                runInAction(() => { this.errorValue = 'Could not load unfinished recordings.'; });
+                runInAction(() => {
+                    this.errorValue = 'Could not load unfinished recordings.';
+                    this.activityLog?.appendFailure('Load unfinished recordings failed', error);
+                });
             }
         } finally {
             if (this.isCurrent(lifecycleId, requestId)) runInAction(() => { this.isLoadingValue = false; });
@@ -87,7 +93,10 @@ export class RecordingRecoveryStore {
         } catch (error) {
             console.error('Failed to recover recording', error);
             if (this.isCurrent(lifecycleId)) {
-                runInAction(() => { this.errorValue = 'Could not recover the recording.'; });
+                runInAction(() => {
+                    this.errorValue = 'Could not recover the recording.';
+                    this.activityLog?.appendFailure(`Recording recovery failed · ${recordingId}`, error);
+                });
             }
         } finally {
             if (this.isCurrent(lifecycleId)) {
@@ -111,7 +120,10 @@ export class RecordingRecoveryStore {
         } catch (error) {
             console.error('Failed to delete recoverable recording', error);
             if (this.isCurrent(lifecycleId)) {
-                runInAction(() => { this.errorValue = 'Could not delete the unfinished recording.'; });
+                runInAction(() => {
+                    this.errorValue = 'Could not delete the unfinished recording.';
+                    this.activityLog?.appendFailure(`Delete unfinished recording failed · ${recordingId}`, error);
+                });
             }
         } finally {
             if (this.isCurrent(lifecycleId)) {

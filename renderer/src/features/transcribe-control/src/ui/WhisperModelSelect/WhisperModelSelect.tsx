@@ -1,5 +1,6 @@
 import { Button, Group, Progress, Stack, Text } from '@mantine/core';
-import { IconCheck, IconAlertCircle } from '@tabler/icons-react';
+import { InlineAlert } from 'renderer/src/shared/InlineAlert';
+import { IconCheck } from '@tabler/icons-react';
 import type { WhisperModelName } from 'electron/src/types/whisper';
 import { observer } from 'mobx-react-lite';
 import React, { useId } from 'react';
@@ -38,7 +39,8 @@ export const WhisperModelSelect: React.FC<Props> = observer(({ value, onChange, 
                             </span>
                         </label>
                         <Stack gap={6} className="settings-model__state" id={`${id}-${name}`}>
-                            {error ? <Group gap={4} wrap="nowrap" role="alert"><IconAlertCircle size={14} aria-hidden="true" /><Text size="xs">{error}</Text></Group> : null}
+                            {error ? <InlineAlert title="Model download failed" actions={<Button variant="default" size="compact-xs" disabled={disabled || whisperModels.isDownloadActive}
+                                aria-label={`Retry download ${title}`} onClick={() => { void store.downloadWhisperModel(name); }}>Retry download</Button>}>{error}</InlineAlert> : null}
                             {progress ? (
                                 <>
                                     <Group gap={4} justify="space-between" role="status">
@@ -55,7 +57,7 @@ export const WhisperModelSelect: React.FC<Props> = observer(({ value, onChange, 
                             ) : (
                                 <Group gap={6} justify="space-between">
                                     <Text size="xs">{model?.sizeLabel ?? 'Checking availability…'}{blocked ? ' · available after the current download' : ''}</Text>
-                                    {!blocked && model ? <Button variant="default" size="compact-xs" disabled={disabled}
+                                    {!error && !blocked && model ? <Button variant="default" size="compact-xs" disabled={disabled}
                                         aria-label={`${error ? 'Retry download' : 'Download'} ${title}`}
                                         onClick={() => { void store.downloadWhisperModel(name); }}>{error ? 'Retry download' : 'Download'}</Button> : null}
                                 </Group>
