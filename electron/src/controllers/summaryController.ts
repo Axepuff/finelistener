@@ -1,7 +1,7 @@
 import type { BrowserWindow, IpcMain } from 'electron';
 import { generateLocalSummary, SUMMARY_MODEL } from '../services/localSummary';
 import type { SessionsService } from '../services/SessionsService';
-import type { SessionSummary, SummaryGenerationResult, SummaryProgressEvent } from '../types/sessions';
+import type { SessionSummaryDraft, SummaryGenerationResult, SummaryProgressEvent } from '../types/sessions';
 import {
     defaultRecordingSummaryOptions, isRecordingSummaryOptions, recordingSummaryGenerationVersion,
     sameRecordingSummaryOptions, type RecordingSummaryOptions,
@@ -18,43 +18,47 @@ export function registerSummaryController(
 
     const generate = async (sessionId: string, options: RecordingSummaryOptions, signal: AbortSignal): Promise<SummaryGenerationResult> => {
         try {
-            const { rows, inputHash, sourceRevision, saved, languageHint } = await sessions.readSummaryInput(sessionId);
+            const activeGeneration = sessions.getActiveSessionGeneration();
+            const { rows, inputHash, sourceRevision, saved, savedSourceMatches, draft, languageHint } = await sessions.readSummaryInput(sessionId);
             signal.throwIfAborted();
             const modelPath = await requireInstalled(signal);
             signal.throwIfAborted();
-            const publish = (message: string, checkpoint?: SessionSummary): void => {
+            const publish = (message: string, checkpoint?: SessionSummaryDraft): void => {
                 const window = getMainWindow();
                 if ((checkpoint || !signal.aborted) && window && !window.isDestroyed()) {
-                    window.webContents.send('sessions:summary-progress', { sessionId, message, saved: checkpoint } satisfies SummaryProgressEvent);
+                    window.webContents.send('sessions:summary-progress', { sessionId, message, draft: checkpoint } satisfies SummaryProgressEvent);
                 }
             };
-            const canResume = saved?.generationVersion === recordingSummaryGenerationVersion && saved.model === SUMMARY_MODEL && !saved.brief
+            const resume = draft?.inputHash === inputHash && draft.sourceRevision === sourceRevision
+                && draft.generationVersion === recordingSummaryGenerationVersion && draft.progress.version === 1 && draft.model === SUMMARY_MODEL && sameRecordingSummaryOptions(draft.options, options) ? draft : undefined;
+            const canRetryBrief = !resume && savedSourceMatches !== false && saved?.generationVersion === recordingSummaryGenerationVersion
+                && saved.inputHash === inputHash && saved.model === SUMMARY_MODEL && !saved.brief
+                && (!saved.sourceRevision || saved.sourceRevision === sourceRevision)
                 && sameRecordingSummaryOptions(saved.options, options);
-            const exactRevision = canResume ? saved.sourceRevision : sourceRevision;
             const provenance = { inputHash, model: SUMMARY_MODEL, generationVersion: recordingSummaryGenerationVersion, options,
-                // Legacy cached paragraphs have no exact provenance; never backfill it from current rows.
-                ...(exactRevision ? { sourceRevision: exactRevision } : {}),
+                // A legacy brief cache must not acquire invented exact provenance.
+                ...(!canRetryBrief || saved.sourceRevision ? { sourceRevision: canRetryBrief ? saved.sourceRevision : sourceRevision } : {}),
             };
-            let reviewedChunks = canResume ? saved.reviewedChunks : undefined;
-            const summary = await generateLocalSummary(rows, modelPath, signal, publish, async (chunks) => {
+            let reviewedChunks = resume?.reviewedChunks ?? (canRetryBrief ? saved.reviewedChunks : undefined);
+            const summary = await generateLocalSummary(rows, modelPath, signal, publish, async (chunks, progress) => {
                 reviewedChunks = chunks;
-                // The generator can reject a cache on language checks and review the current rows instead.
-                if (sourceRevision) provenance.sourceRevision = sourceRevision;
-                // Keep an existing complete result readable while a replacement brief is generated.
-                if (saved?.brief) return;
-                const checkpoint = await sessions.saveSummary(sessionId, {
+                provenance.sourceRevision = sourceRevision;
+                if (!progress) throw new Error('SUMMARY_DRAFT_INCOMPATIBLE');
+                const checkpoint = await sessions.saveSummaryDraft(sessionId, {
                     reviewedChunks: chunks, detailed: chunks.map((item) => item.text).join('\n\n'),
-                    brief: '', ...provenance,
-                }, signal);
-                publish('Writing the brief summary…', checkpoint);
-            }, reviewedChunks, languageHint, options);
+                    ...provenance, sourceRevision, progress,
+                }, signal, activeGeneration);
+                publish(progress.phase === 'brief' ? 'Writing the brief summary…' : `Saved ${chunks.length} reviewed chunks.`, checkpoint);
+                signal.throwIfAborted();
+            }, reviewedChunks, languageHint, options, resume?.progress);
             signal.throwIfAborted();
-            const completed = await sessions.saveSummary(sessionId, { ...summary, reviewedChunks, ...provenance, generatedAt: Date.now() }, signal);
+            const completed = await sessions.saveSummary(sessionId, { ...summary, reviewedChunks, ...provenance, generatedAt: Date.now() }, signal, activeGeneration);
             return { ok: true, summary: completed };
         } catch (error) {
-            if (signal.aborted) return { ok: false, reason: 'cancelled' };
+            if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) return { ok: false, reason: 'cancelled' };
             if (error instanceof Error) {
                 switch (error.message) {
+                    case 'SUMMARY_DRAFT_INCOMPATIBLE': return { ok: false, reason: 'draft-incompatible' };
                     case 'SUMMARY_MODEL_MISSING': return { ok: false, reason: 'model-missing' };
                     case 'SUMMARY_RUNTIME_UNAVAILABLE': return { ok: false, reason: 'runtime-unavailable' };
                     case 'SUMMARY_PROMPT_TOO_LONG': return { ok: false, reason: 'prompt-too-long' };

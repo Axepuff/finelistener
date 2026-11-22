@@ -28,7 +28,7 @@ it.each([
     const save = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
     const result = await generateRecordingNotes(rows, { countTokens, complete }, () => {}, save, undefined, hint);
     expect(result).toEqual({ brief, detailed: notes });
-    expect(save).toHaveBeenCalledWith([{ startSec: 2, endSec: 20, text: notes }]);
+    expect(save).toHaveBeenCalledWith([{ startSec: 2, endSec: 20, text: notes }], expect.objectContaining({ version: 1, phase: 'brief' }));
 });
 
 it('keeps an almost 3,100-token turn together and carries its last 10% into the next automatic chunk', async () => {
@@ -79,7 +79,7 @@ it('reviews original timed turns independently with zero overlap and joins the r
             expect(original).toBe(sourceParts.at(-1));
             return sourceParts.length === 1 ? 'The count is provisional.' : 'Nine were accepted.';
         }
-        expect(detailed).toHaveBeenCalledOnce();
+        expect(detailed).toHaveBeenCalledTimes(2);
         return 'Nine were accepted.';
     };
     const result = await generateRecordingNotes(rows, { countTokens, complete }, () => undefined, detailed, undefined, undefined,
@@ -89,7 +89,8 @@ it('reviews original timed turns independently with zero overlap and joins the r
     expect(detailed).toHaveBeenCalledWith([
         { startSec: 0, endSec: 6, text: 'The count is provisional.' },
         { startSec: 9, endSec: 18, text: 'Nine were accepted.' },
-    ]);
+    ], expect.objectContaining({ phase: 'brief', cursors: [{ groupIndex: 0, startChar: 0, endChar: rows[0].text.length },
+        { groupIndex: 1, startChar: 0, endChar: rows[1].text.length }] }));
 });
 
 it.each([

@@ -7,6 +7,7 @@ import type {
     SessionFileV1,
     SessionListItem,
     SessionSummary,
+    SessionSummaryDraft,
     SessionTranscriptV1,
     SessionTranscriptionInfo,
     SessionSourceTrack,
@@ -14,7 +15,7 @@ import type {
 import { AudioPreprocessor } from './AudioPreprocessor';
 import type { RecordingResult } from './RecordingService';
 import { deriveSourceTranscript } from './transcriptDuplicateFilter';
-import { deriveSpeakerTranscript, getReadableSummary, getSummaryInput, materializeRecognitionTranscript } from './sessionTranscript';
+import { deriveSpeakerTranscript, getReadableSummary, getReadableSummaryDraft, getSummaryInput, materializeRecognitionTranscript } from './sessionTranscript';
 
 const SESSION_FILE_NAME = 'session.json';
 const SESSION_VERSION = 1 as const;
@@ -58,7 +59,7 @@ const readJsonFile = async <T>(filePath: string): Promise<T> => {
     return JSON.parse(raw) as T;
 };
 
-const writeJsonFile = async (filePath: string, value: unknown, signal?: AbortSignal): Promise<void> => {
+const writeJsonFile = async (filePath: string, value: unknown, signal?: AbortSignal, beforeCommit?: () => void): Promise<void> => {
     const dir = path.dirname(filePath);
 
     await fs.mkdir(dir, { recursive: true });
@@ -69,6 +70,7 @@ const writeJsonFile = async (filePath: string, value: unknown, signal?: AbortSig
         // Windows readers may briefly keep an existing manifest open during refresh.
         for (let attempt = 0; ; attempt += 1) {
             signal?.throwIfAborted();
+            beforeCommit?.();
             try { await fs.rename(temporaryPath, filePath); break; }
             catch (error) {
                 if (process.platform !== 'win32' || !['EPERM', 'EBUSY'].includes((error as NodeJS.ErrnoException).code ?? '') || attempt >= 9) throw error;
@@ -290,6 +292,7 @@ export class SessionsService {
             try {
                 transcript = await readJsonFile<SessionTranscriptV1>(transcriptPath);
                 if (transcript.summary) transcript.summary = getReadableSummary(transcript);
+                if (transcript.summaryDraft) transcript.summaryDraft = getReadableSummaryDraft(transcript);
             } catch {
                 transcript = undefined;
             }
@@ -585,10 +588,11 @@ export class SessionsService {
         const saved = getReadableSummary(transcript);
         const setting = transcript.sourceRun?.settings.language ?? session.transcription?.language;
         const languageHint = typeof setting === 'string' ? setting.trim() : '';
-        return { ...input, saved, ...(languageHint && languageHint.toLowerCase() !== 'auto' ? { languageHint } : {}) };
+        return { ...input, saved, savedSourceMatches: !transcript.summary?.sourceRevision || transcript.summary.sourceRevision === input.sourceRevision,
+            draft: getReadableSummaryDraft(transcript), ...(languageHint && languageHint.toLowerCase() !== 'auto' ? { languageHint } : {}) };
     }
 
-    public async saveSummary(sessionId: string, summary: SessionSummary, signal: AbortSignal): Promise<SessionSummary> {
+    public async saveSummary(sessionId: string, summary: SessionSummary, signal: AbortSignal, activeGeneration?: number): Promise<SessionSummary> {
         return this.withTranscriptWrite(sessionId, async () => {
             signal.throwIfAborted();
             const { transcript, transcriptPath } = await this.readStoredTranscript(sessionId);
@@ -598,10 +602,39 @@ export class SessionsService {
                 throw new Error('The transcript changed during summarization.');
             }
             // This rename commits the summary. Cancellation after it must return the saved result.
+            this.assertSummaryOwner(sessionId, activeGeneration);
             const readable = getReadableSummary({ ...transcript, summary })!;
-            await writeJsonFile(transcriptPath, { ...transcript, summary: readable }, signal);
+            await writeJsonFile(transcriptPath, { ...transcript, summary: readable,
+                summaryDraft: summary.brief ? undefined : getReadableSummaryDraft(transcript) }, signal,
+                () => this.assertSummaryOwner(sessionId, activeGeneration));
             return readable;
         });
+    }
+
+    public async saveSummaryDraft(
+        sessionId: string, draft: SessionSummaryDraft, signal: AbortSignal, activeGeneration?: number,
+    ): Promise<SessionSummaryDraft> {
+        return this.withTranscriptWrite(sessionId, async () => {
+            signal.throwIfAborted();
+            const { transcript, transcriptPath } = await this.readStoredTranscript(sessionId);
+            const input = getSummaryInput(transcript);
+            if (!input || draft.inputHash !== input.inputHash || draft.sourceRevision !== input.sourceRevision) {
+                throw new Error('The transcript changed during summarization.');
+            }
+            const readable = getReadableSummaryDraft({ ...transcript, summaryDraft: draft });
+            if (!readable) throw new Error('SUMMARY_DRAFT_INCOMPATIBLE');
+            this.assertSummaryOwner(sessionId, activeGeneration);
+            await writeJsonFile(transcriptPath, { ...transcript, summaryDraft: readable }, signal,
+                () => this.assertSummaryOwner(sessionId, activeGeneration));
+            return readable;
+        });
+    }
+
+    private assertSummaryOwner(sessionId: string, activeGeneration?: number): void {
+        if (activeGeneration !== undefined && (this.activeSessionGeneration !== activeGeneration
+            || (this.activeSessionId !== null && this.activeSessionId !== sessionId))) {
+            throw new DOMException('The active session changed.', 'AbortError');
+        }
     }
 
     public async replaceTranscriptIfCurrent(
@@ -670,7 +703,7 @@ export class SessionsService {
 
         const transcriptPath = path.join(sessionDir, TRANSCRIPT_FILE_RELATIVE_PATH);
 
-        await writeJsonFile(transcriptPath, { ...transcript, summary: getReadableSummary(transcript) }, signal);
+        await writeJsonFile(transcriptPath, { ...transcript, summary: getReadableSummary(transcript), summaryDraft: getReadableSummaryDraft(transcript) }, signal);
         await writeJsonFile(sessionFilePath, session);
     }
 

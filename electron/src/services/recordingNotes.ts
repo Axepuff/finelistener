@@ -1,6 +1,8 @@
-import type { ReviewedSummaryChunk, SummarySourceRow } from '../types/sessions';
+import type { ReviewedSummaryChunk, SummarySourceRow, SummaryDraftProgress } from '../types/sessions';
 import { defaultRecordingSummaryOptions, type RecordingSummaryOptions } from '../types/summaryOptions';
 import { getSummaryLanguage, type SummaryLanguage } from './summaryLanguage';
+
+import { groupRows, sliceRow, sliceGroup, passageMetadata, validSummaryProgress } from './summaryProgress';
 
 export const summaryContext = 6144;
 const sourceTarget = 3100;
@@ -37,66 +39,6 @@ const promptFor = (instruction: string, source: string, task: SummaryTask): stri
 
 const timedLine = (row: SummarySourceRow): string =>
     `[${row.startSec.toFixed(2)}–${row.endSec.toFixed(2)}] ${row.speaker ? row.speaker + ': ' : ''}${row.text}`;
-
-const sliceRow = (row: SummarySourceRow, start: number, end = row.text.length): SummarySourceRow => {
-    if (!row.sourceRef) return { ...row, text: row.text.slice(start, end) };
-    const sourcePosition = (offset: number): number => {
-        const boundary = row.sourceOffsets?.findLast((item) => item.offset <= offset);
-        return boundary ? boundary.sourceOffset + offset - boundary.offset : row.sourceRef!.startChar + offset;
-    };
-    return { ...row, text: row.text.slice(start, end),
-        sourceRef: { ...row.sourceRef, startChar: sourcePosition(start), endChar: sourcePosition(end) },
-        sourceOffsets: row.sourceOffsets?.filter((item) => item.offset > start && item.offset <= end)
-            .map((item) => ({ ...item, offset: item.offset - start })),
-    };
-};
-
-const groupRows = (rows: SummarySourceRow[], requested: number): SummarySourceRow[][] => {
-    if (requested <= 1) return [rows];
-    if (requested > rows.length) {
-        const turns = rows.map((row) => {
-            const starts: number[] = [];
-            for (const word of wordSegmenter.segment(row.text)) {
-                if (word.isWordLike) starts.push(word.index);
-            }
-            return { row, starts, parts: 1 };
-        });
-        for (let count = turns.length; count < requested; count++) {
-            let widest: typeof turns[number] | undefined;
-            for (const turn of turns) {
-                if (turn.parts < turn.starts.length && (!widest || turn.starts.length / turn.parts > widest.starts.length / widest.parts)) widest = turn;
-            }
-            if (!widest) break;
-            widest.parts++;
-        }
-        return turns.flatMap(({ row, starts, parts }) => {
-            let start = 0;
-            return Array.from({ length: parts }, (_, index) => {
-                const end = index === parts - 1 ? row.text.length : starts[Math.floor((index + 1) * starts.length / parts)];
-                const group = [sliceRow(row, start, end)];
-                start = end;
-                return group;
-            });
-        });
-    }
-    const groups: SummarySourceRow[][] = [];
-    let remainingSize = rows.reduce((total, row) => total + row.text.length, 0);
-    let first = 0;
-    for (let remaining = Math.min(requested, rows.length); remaining > 1; remaining--) {
-        const target = remainingSize / remaining;
-        let end = first + 1;
-        let size = rows[first].text.length;
-        // Prefer the nearest turn boundary and leave a turn for each remaining group.
-        while (end <= rows.length - remaining && Math.abs(size + rows[end].text.length - target) <= Math.abs(size - target)) {
-            size += rows[end++].text.length;
-        }
-        groups.push(rows.slice(first, end));
-        first = end;
-        remainingSize -= size;
-    }
-    groups.push(rows.slice(first));
-    return groups;
-};
 
 const overlapBlock = (previous: SummarySourceRow[], percent: number): string => {
     if (!percent || !previous.length) return '';
@@ -226,14 +168,18 @@ const summarizeBrief = async (chunks: ReviewedSummaryChunk[], model: SummaryInfe
 
 export const generateRecordingNotes = async (
     source: SummarySourceRow[], model: SummaryInference, progress: (message: string) => void,
-    onReviewed: (chunks: ReviewedSummaryChunk[]) => Promise<void>, cachedChunks?: ReviewedSummaryChunk[], languageHint?: string,
-    options: RecordingSummaryOptions = defaultRecordingSummaryOptions,
+    onReviewed: (chunks: ReviewedSummaryChunk[], progress?: SummaryDraftProgress) => Promise<void>, cachedChunks?: ReviewedSummaryChunk[], languageHint?: string,
+    options: RecordingSummaryOptions = defaultRecordingSummaryOptions, resume?: SummaryDraftProgress,
 ): Promise<{ brief: string; detailed: string }> => {
     const rows = source.filter((row) => row.text.trim());
     if (!rows.length) throw new Error('The saved transcript is empty');
     const task = { prompt: options.prompt, language: await getSummaryLanguage(rows, languageHint) };
-    const chunks = cachedChunks?.every((chunk) => task.language.accepts(chunk.text)) ? cachedChunks : [];
-    if (!chunks.length) {
+    if (resume && (!cachedChunks || !validSummaryProgress(rows, cachedChunks, resume, options.chunkCount))) {
+        throw new Error('SUMMARY_DRAFT_INCOMPATIBLE');
+    }
+    const chunks = cachedChunks?.every((chunk) => task.language.accepts(chunk.text)) ? [...cachedChunks] : [];
+    const cursors = resume && chunks.length ? [...resume.cursors] : [];
+    if (!chunks.length || resume?.phase === 'chunks') {
         const availableFor = async (overlap: string): Promise<number> => {
             const emptyReview = promptFor(reviewInstruction, `DRAFT\n\n\n${overlap}ORIGINAL LINES\n`, task);
             return summaryContext - paragraphLimit - contextMargin - await model.countTokens(emptyReview);
@@ -241,7 +187,14 @@ export const generateRecordingNotes = async (
         const availableWithoutOverlap = await availableFor('');
         if (availableWithoutOverlap < 1) throw new Error('SUMMARY_PROMPT_TOO_LONG');
         let previous: SummarySourceRow[] = [];
-        for (const group of groupRows(rows, options.chunkCount)) {
+        const groups = groupRows(rows, options.chunkCount);
+        const last = cursors.at(-1);
+        if (last) previous = sliceGroup(groups[last.groupIndex], last.startChar, last.endChar);
+        for (const [groupIndex, original] of groups.entries()) {
+            if (last && groupIndex < last.groupIndex) continue;
+            const size = original.reduce((sum, row) => sum + row.text.length, 0);
+            let offset = last?.groupIndex === groupIndex ? last.endChar : 0;
+            const group = sliceGroup(original, offset, size);
             for (let first = 0; first < group.length;) {
                 let overlap = '';
                 let available = availableWithoutOverlap;
@@ -259,7 +212,8 @@ export const generateRecordingNotes = async (
                 let accepted = false;
                 for (const budget of [target, Math.floor(target / 2), Math.floor(target / 4)]) {
                     if (budget < 1) break;
-                    const passage = await nextPassage(group, first, budget, model);
+                    const candidate = [...group];
+                    const passage = await nextPassage(candidate, first, budget, model);
                     const lines = passage.map(timedLine).join('\n');
                     progress(`Writing chunk ${chunks.length + 1}…`);
                     const draft = await generate(model, draftInstruction, `${overlap}NEW LINES\n${lines}`, paragraphLimit, task);
@@ -267,21 +221,21 @@ export const generateRecordingNotes = async (
                     progress(`Checking chunk ${chunks.length + 1} against the transcript…`);
                     const text = await generate(model, reviewInstruction, `DRAFT\n${draft}\n\n${overlap}ORIGINAL LINES\n${lines}`, paragraphLimit, task);
                     if (!text) continue;
-                    const sourceRefs = passage.flatMap((row) => row.sourceRef ? [row.sourceRef] : []);
-                    const speakers = passage.flatMap((row) => row.speakerSnapshot ? [row.speakerSnapshot] : [])
-                        .filter((speaker, index, all) => all.findIndex((item) => item.id === speaker.id && item.name === speaker.name) === index);
-                    chunks.push({ startSec: passage[0].startSec, endSec: Math.max(...passage.map((row) => row.endSec)), text,
-                        ...(sourceRefs.length ? { sourceRefs } : {}), ...(speakers.length ? { speakers } : {}),
-                    });
+                    chunks.push({ ...passageMetadata(passage), text });
+                    group.splice(0, group.length, ...candidate);
                     previous = passage;
                     first += passage.length;
+                    const endChar = offset + passage.reduce((sum, row) => sum + row.text.length, 0);
+                    cursors.push({ groupIndex, startChar: offset, endChar });
+                    offset = endChar;
+                    const phase = groupIndex === groups.length - 1 && offset === size ? 'brief' : 'chunks';
+                    await onReviewed([...chunks], { version: 1, phase, cursors: [...cursors] });
                     accepted = true;
                     break;
                 }
                 if (!accepted) throw new Error('The model could not finish a transcript passage');
             }
         }
-        await onReviewed(chunks);
     }
     progress('Writing the brief overview…');
     const brief = await summarizeBrief(chunks, model, task);

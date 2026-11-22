@@ -1,4 +1,4 @@
-import type { SessionSummary, SummaryGenerationFailure } from 'electron/src/types/sessions';
+import type { SessionSummary, SessionSummaryDraft, SummaryGenerationFailure } from 'electron/src/types/sessions';
 import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
 import type { RecordingSummaryOptions } from 'electron/src/types/summaryOptions';
 import { makeAutoObservable, runInAction } from 'mobx';
@@ -13,6 +13,7 @@ const generationMessages: Record<SummaryGenerationFailure, string | null> = {
     'no-transcript': 'A complete transcript is required.',
     'prompt-too-long': 'The prompt is too long for the available context. Shorten it and try again.',
     'transcript-changed': 'The transcript changed. Generate the summary again.',
+    'draft-incompatible': 'The saved progress cannot be continued. Generate the summary again.',
     failed: 'Could not generate the summary. Try again.',
 };
 
@@ -99,7 +100,8 @@ export class SummaryStore {
         }
     }
 
-    async generate(sessionId: string, options: RecordingSummaryOptions | undefined, onSaved: (summary: SessionSummary) => void): Promise<void> {
+    async generate(sessionId: string, options: RecordingSummaryOptions | undefined, onSaved: (summary: SessionSummary) => void,
+        onDraft?: (draft: SessionSummaryDraft) => void): Promise<void> {
         if (!this.adapter) return;
         const operation = this.operations.begin('summarizing');
         if (!operation) return;
@@ -113,6 +115,7 @@ export class SummaryStore {
                 if (this.operations.owns(operation) && event.sessionId === sessionId) {
                     runInAction(() => { this.progressValue = event.message; });
                     if (event.saved) onSaved(event.saved);
+                    if (event.draft) onDraft?.(event.draft);
                 }
             });
             const result = await this.adapter.generateSummary(sessionId, options);

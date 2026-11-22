@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from 'crypto';
 import { assignedSpeaker, completeWordTimings, fallbackSpeaker } from '../utils/speakerAssignment';
 import type {
-    SessionSpeakerInterval, SessionSpeakerMetadataV1, SessionSummary, SessionTranscriptSegmentV1, SessionTranscriptV1, SummarySourceRow,
+    SessionSpeakerInterval, SessionSpeakerMetadataV1, SessionSummary, SessionSummaryDraft, SessionTranscriptSegmentV1, SessionTranscriptV1, SummarySourceRow,
 } from '../types/sessions';
 import type { StructuredTranscriptionResult } from './whisperServer/utils';
+import { recordingSummaryGenerationVersion } from '../types/summaryOptions';
+import { validSummaryDraft } from './summaryProgress';
 import { deriveSourceTranscript } from './transcriptDuplicateFilter';
 
 const TRANSCRIPT_LINE_REGEX =
@@ -28,6 +30,13 @@ export const getReadableSummary = (transcript: SessionTranscriptV1): SessionSumm
         const { sourceRefs: _refs, ...paragraph } = chunk;
         return paragraph;
     }) } : {}) };
+};
+
+export const getReadableSummaryDraft = (transcript: SessionTranscriptV1): SessionSummaryDraft | undefined => {
+    const draft = transcript.summaryDraft;
+    const input = getSummaryInput(transcript);
+    return draft && input && draft.inputHash === input.inputHash && draft.sourceRevision === input.sourceRevision
+        && draft.generationVersion === recordingSummaryGenerationVersion && validSummaryDraft(draft, input.rows) ? draft : undefined;
 };
 
 export const getSummaryInput = (transcript: SessionTranscriptV1): { rows: SummarySourceRow[]; inputHash: string; sourceRevision: string } | null => {

@@ -182,15 +182,39 @@ export interface SummaryProgressEvent {
     sessionId: string;
     message: string;
     saved?: SessionSummary;
+    draft?: SessionSummaryDraft;
 }
 
-export type SummaryGenerationFailure = 'busy' | 'cancelled' | 'model-missing' | 'runtime-unavailable' | 'transcript-changed' | 'no-transcript' | 'prompt-too-long' | 'failed';
+export interface SummaryChunkCursor {
+    groupIndex: number;
+    // Half-open UTF-16 offsets in the concatenated normalized text of this source group.
+    startChar: number;
+    endChar: number;
+}
+
+export interface SummaryDraftProgress {
+    version: 1;
+    phase: 'chunks' | 'brief';
+    // One source cursor per accepted chunk; the final endChar is the next unread position.
+    cursors: SummaryChunkCursor[];
+}
+
+export interface SessionSummaryDraft extends Omit<SessionSummary, 'brief' | 'generatedAt'> {
+    sourceRevision: string;
+    generationVersion: number;
+    options: RecordingSummaryOptions;
+    reviewedChunks: ReviewedSummaryChunk[];
+    progress: SummaryDraftProgress;
+}
+
+export type SummaryGenerationFailure = 'busy' | 'cancelled' | 'model-missing' | 'runtime-unavailable' | 'transcript-changed' | 'no-transcript' | 'prompt-too-long' | 'draft-incompatible' | 'failed';
 export type SummaryGenerationResult = { ok: true; summary: SessionSummary } | { ok: false; reason: SummaryGenerationFailure };
 
 export interface SessionTranscriptV1 {
     version: 1;
     segments: SessionTranscriptSegmentV1[];
     summary?: SessionSummary;
+    summaryDraft?: SessionSummaryDraft;
     recognitionRevision?: string;
     recognitionSegments?: SessionTranscriptSegmentV1[];
     speakers?: SessionSpeakerMetadataV1;
