@@ -14,6 +14,10 @@ export class ForegroundOperationStore {
         return this.activeOperation;
     }
 
+    get revision(): number {
+        return this.nextOperationId;
+    }
+
     get isBusy(): boolean {
         return this.activeOperation !== null;
     }

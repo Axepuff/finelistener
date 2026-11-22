@@ -209,7 +209,7 @@ export const TranscribedText: React.FC<Props> = observer(({ summaryContinuation 
                         onPreviousMatch={() => moveToMatch(-1)}
                         onNextMatch={() => moveToMatch(1)}
                     />
-                    {view === 'summary' ? <RecordingSummary key={activeSessionId} format={summaryFormat} continuation={summaryContinuation}
+                    {view === 'summary' ? <RecordingSummary key={activeSessionId} format={summaryFormat} continuation={summaryContinuation ?? store.summaryContinuation}
                         onFormatChange={(format) => setSummarySelection({ sessionId: activeSessionId, format })} /> : (
                         <>
                             {needsSpeakerAnalysis || isReadyEmptyState ? speakerControls : null}

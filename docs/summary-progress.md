@@ -70,5 +70,13 @@ exposes `draft` separately from the legacy `saved` field. `SummaryStore.generate
 accepts an optional fourth `onDraft` callback, wired through AppStore to the saved
 transcript's separate draft field. Calling the existing generate command with
 the same options continues compatible progress, including after reopening the
-session/application. This PR supplies the persistence and lifecycle contract;
-the Continue button and redesigned states belong to #33/#34.
+session/application.
+
+The production transcript view supplies `AppStore.summaryContinuation` to the
+Summary UI. Main-process session reads validate the draft's exact source and
+cursor coverage; the renderer checks the supported model/generation/progress
+versions and preserves every saved option for Continue. The callback captures
+session, transcript, options and foreground-operation revision, and rechecks
+them plus model availability before starting. Reopened progress does not require
+the transient stopped flag. Completed output remains separate and readable
+while a replacement draft is pending or fails.

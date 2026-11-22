@@ -1,5 +1,6 @@
 import type { SessionDetails, SessionRawSpan, SessionSpeakerAssignment } from 'electron/src/types/sessions';
-import type { RecordingSummaryOptions } from 'electron/src/types/summaryOptions';
+import { isRecordingSummaryOptions, recordingSummaryGenerationVersion, sameRecordingSummaryOptions, type RecordingSummaryOptions } from '../../../electron/src/types/summaryOptions';
+import { SUMMARY_MODEL_ARTIFACT } from '../../../electron/src/types/summaryModel';
 import type { AnalyzeSpeakersOptions } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelName } from 'electron/src/types/whisper';
@@ -695,6 +696,25 @@ export class AppStore {
         this.transcription.clear();
 
         return commandSuccess(undefined);
+    }
+
+    get summaryContinuation(): { options: Readonly<RecordingSummaryOptions>; onContinue: () => void } | undefined {
+        const sessionId = this.workspace.activeSessionId;
+        const transcript = this.transcription.savedTranscript;
+        const draft = transcript?.summaryDraft;
+        // The main-process reader validates exact source hashes, cursor coverage and provenance.
+        if (this.disposed || !this.canSummarize || !draft || draft.model !== SUMMARY_MODEL_ARTIFACT.name
+            || draft.generationVersion !== recordingSummaryGenerationVersion || draft.progress.version !== 1
+            || !isRecordingSummaryOptions(draft.options)) return undefined;
+        const options = Object.freeze({ ...draft.options });
+        const operationRevision = this.operations.revision;
+        return { options, onContinue: () => {
+            if (this.disposed || this.workspace.activeSessionId !== sessionId || this.transcription.savedTranscript !== transcript
+                || this.operations.revision !== operationRevision || this.operations.isBusy
+                || this.summary.modelStatus?.state !== 'ready' || this.summary.modelError
+                || !sameRecordingSummaryOptions(draft.options, options)) return;
+            void this.generateSummary(options);
+        } };
     }
 
     get canSummarize(): boolean {
