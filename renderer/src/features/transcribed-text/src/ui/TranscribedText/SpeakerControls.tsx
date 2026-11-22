@@ -3,6 +3,7 @@ import { ActionIcon, Alert, Button, Divider, Group, Loader, Modal, Popover, Prog
 import { IconArrowMerge, IconPencil, IconRefresh, IconSettings } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState, type ReactNode } from 'react';
+import { InlineAlert } from 'renderer/src/shared/InlineAlert';
 import { useAppStore } from 'renderer/src/AppContext';
 import type { CommandResult } from 'renderer/src/stores/types';
 import { unknownSpeaker, type SpeakerLabels } from 'renderer/src/stores/speakerReadingFormat';
@@ -205,9 +206,14 @@ export const SpeakerAnalysisStatus: React.FC = observer(() => {
     const speakerState = store.speakers;
     const isRunning = store.operations.kind === 'analyzing-speakers'
         || store.operations.kind === 'preparing-speaker-assets';
-    const hasError = speakerState.status === 'error' && speakerState.errorMessage;
+    const [confirmRetry, setConfirmRetry] = useState<{ sessionId: string | null; speakers: object } | null>(null);
+    const hasError = speakerState.componentReady && speakerState.status === 'error' && speakerState.errorMessage;
 
-    if (!isRunning && !hasError) return null;
+    if (!isRunning && !hasError && !confirmRetry) return null;
+    const retry = async (replace = false) => {
+        const result = await store.analyzeSpeakers(replace);
+        if (!result.ok) store.activityLog.appendEvent(result.message);
+    };
 
     return (
         <Stack gap={8}>
@@ -223,7 +229,28 @@ export const SpeakerAnalysisStatus: React.FC = observer(() => {
                     }}>Cancel</Button>
                 </Group>
             ) : null}
-            {hasError ? <Alert color="yellow" title="Speaker action failed">{speakerState.errorMessage}</Alert> : null}
+            {hasError ? <InlineAlert severity={store.transcription.savedTranscript?.segments.length ? 'warning' : 'error'} title="Speaker analysis failed"
+                actions={<Button size="compact-sm" disabled={store.operations.isBusy} onClick={() => {
+                    const speakers = store.transcription.savedTranscript?.speakers;
+                    if (speakers) setConfirmRetry({ sessionId: store.workspace.activeSessionId, speakers });
+                    else void retry();
+                }}>Retry speaker analysis</Button>}>
+                {speakerState.errorMessage}
+                {store.transcription.savedTranscript?.segments.length ? <Text size="xs">The saved transcript is unchanged.</Text> : null}
+                <Select label="Run on" data={speakerState.computeOptions} value={speakerState.compute}
+                    disabled={store.operations.isBusy} onChange={(value) => { void speakerState.setCompute(value); }}
+                    description={speakerState.assets?.gpuAvailable === false ? 'GPU unavailable. Select CPU to retry on this computer.' : undefined} />
+            </InlineAlert> : null}
+            <Modal opened={confirmRetry !== null} onClose={() => setConfirmRetry(null)} title="Replace speaker labels?" centered={true}>
+                <Stack gap="sm"><Text size="sm">A successful analysis replaces speaker names, assignments, and merges.</Text>
+                    <Group justify="flex-end"><Button variant="default" onClick={() => setConfirmRetry(null)}>Cancel</Button>
+                        <Button color="red" disabled={store.operations.isBusy} onClick={() => {
+                            const current = confirmRetry?.sessionId === store.workspace.activeSessionId && confirmRetry.speakers === store.transcription.savedTranscript?.speakers;
+                            setConfirmRetry(null);
+                            if (current) void retry(true);
+                        }}>Replace and analyze</Button></Group>
+                </Stack>
+            </Modal>
 
         </Stack>
     );

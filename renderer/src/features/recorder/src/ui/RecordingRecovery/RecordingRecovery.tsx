@@ -2,6 +2,7 @@ import { Alert, Box, Button, Group, Modal, Stack, Text } from '@mantine/core';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState } from 'react';
+import { ShowInLog } from 'renderer/src/shared/InlineAlert';
 import { useAppStore } from 'renderer/src/AppContext';
 
 const formatSize = (bytes: number): string => bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KiB` : `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
@@ -17,7 +18,7 @@ export const RecordingRecovery: React.FC = observer(() => {
     if (!recordingRecovery.hasItems && !recordingRecovery.error) return null;
     return (
         <>
-            <Alert icon={<IconAlertTriangle size={16} />} color={severity === 'error' ? 'red' : 'yellow'}
+            <Alert id="unfinished-recordings" tabIndex={-1} role="alert" icon={<IconAlertTriangle size={16} />} color={severity === 'error' ? 'red' : 'yellow'}
                 title={recordingRecovery.items.length === 1 ? 'Unfinished recording' : 'Unfinished recordings'} p={12}
                 styles={{ root: { border: `1px solid var(--brand-color-${severity}-border)`, background: `var(--brand-color-${severity}-bg)`, color: 'var(--brand-color-text)' }, title: { fontSize: 14 }, message: { color: 'var(--brand-color-text)' } }}>
                 <Stack gap={10}>
@@ -42,6 +43,7 @@ export const RecordingRecovery: React.FC = observer(() => {
                             </Stack>
                         </Box>
                     ))}
+                    <ShowInLog />
                     {recordingRecovery.error ? <Text size="sm" c="red">{recordingRecovery.error}</Text> : null}
                 </Stack>
             </Alert>

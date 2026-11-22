@@ -38,6 +38,13 @@ export type TranscriptionRunResult =
 export class TranscriptionStore {
     private savedTranscriptValue: DeepReadonly<SessionTranscriptV1> | null = null;
 
+    previousTranscriptKept = false;
+
+    confirmPreviousTranscript(transcript: SessionTranscriptV1 | undefined): void {
+        this.previousTranscriptKept = Boolean(this.runOutcome === 'error' && this.savedTranscriptValue?.segments.length
+            && JSON.stringify(transcript) === JSON.stringify(this.savedTranscriptValue));
+    }
+
     private draftSource = '';
 
     private sourceDrafts: Partial<Record<RecordingSource, { text: string; offset: number }>> = {};
@@ -371,6 +378,7 @@ export class TranscriptionStore {
     replaceSavedTranscript(transcript: DeepReadonly<SessionTranscriptV1> | null): void {
         this.invalidateRun();
         this.savedTranscriptValue = transcript;
+        this.previousTranscriptKept = false;
         this.draftSource = '';
         this.sourceDrafts = {};
         this.draftOffsetSeconds = 0;
@@ -398,6 +406,7 @@ export class TranscriptionStore {
         this.draftOffsetSeconds = segment?.start ?? 0;
         this.progressValue = 0;
         this.runOutcomeValue = 'none';
+        this.previousTranscriptKept = false;
         this.runErrorMessageValue = null;
 
         return this.runId;

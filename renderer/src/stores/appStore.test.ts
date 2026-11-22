@@ -620,3 +620,55 @@ it('keeps a Summary rejection scoped to the current request and clears it on ses
     expect(store.summary.generationFailure).toBeNull();
     store.dispose();
 });
+
+
+describe('failed transcription recovery evidence', () => {
+    it.each(['same', 'different', 'unavailable', 'empty'] as const)(
+        'claims previous-kept only after confirming persistence: %s', async (persisted) => {
+            vi.spyOn(console, 'error').mockImplementation(() => undefined);
+            const previous: SessionTranscriptV1 = { version: 1, segments: [{ startSec: 0, endSec: 1, text: 'Previous saved result' }] };
+            const session = createSession({ transcript: previous, hasTranscript: true });
+            const fake = createFakeRendererAdapter({
+                transcribe: () => Promise.reject(new Error('Synthetic failure')),
+                getSession: () => persisted === 'unavailable' ? Promise.reject(new Error('Synthetic read failure')) :
+                    Promise.resolve({ ...session, transcript: persisted === 'same' ? previous : persisted === 'empty' ? undefined :
+                        { version: 1, segments: [{ startSec: 0, endSec: 1, text: 'Different persisted result' }] } }),
+            });
+            const store = new AppStore(fake.adapter);
+            store.workspace.replaceWorkspace(session);
+            store.transcription.replaceSavedTranscript(previous);
+            try {
+                expect((await store.startTranscription(transcriptionOptions)).ok).toBe(false);
+                expect(store.transcription.previousTranscriptKept).toBe(persisted === 'same');
+                expect(store.transcription.savedTranscript).toEqual(previous);
+                expect(store.operations.isBusy).toBe(false);
+                store.transcription.clear();
+                expect(store.transcription.previousTranscriptKept).toBe(false);
+            } finally { store.dispose(); }
+        },
+    );
+
+    it('ignores confirmation that arrives after the workspace was replaced', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const confirmation = createDeferred<SessionDetails>();
+        const previous: SessionTranscriptV1 = { version: 1, segments: [{ startSec: 0, endSec: 1, text: 'Old result' }] };
+        const session = createSession({ transcript: previous });
+        const fake = createFakeRendererAdapter({ transcribe: () => Promise.reject(new Error('Synthetic failure')), getSession: () => confirmation.promise });
+        const store = new AppStore(fake.adapter);
+        store.workspace.replaceWorkspace(session);
+        store.transcription.replaceSavedTranscript(previous);
+        try {
+            const run = store.startTranscription(transcriptionOptions);
+            await Promise.resolve();
+            await Promise.resolve();
+            store.dispose();
+            store.workspace.replaceWorkspace(createSession({ id: 'replacement' }));
+            store.transcription.clear();
+            confirmation.resolve(session);
+            await run;
+            expect(store.workspace.activeSessionId).toBe('replacement');
+            expect(store.transcription.previousTranscriptKept).toBe(false);
+            expect(store.transcription.savedTranscript).toBeNull();
+        } finally { store.dispose(); }
+    });
+});

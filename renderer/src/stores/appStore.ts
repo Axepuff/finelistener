@@ -417,6 +417,16 @@ export class AppStore {
                 return commandFailure('The transcription run is no longer active.');
             }
             if (result.status === 'failed') {
+                if (sessionId) {
+                    try {
+                        const saved = await this.adapter.getSession(sessionId);
+                        if (!isCurrent() || this.workspace.activeSessionId !== sessionId) return commandSuccess(undefined);
+                        this.transcription.confirmPreviousTranscript(saved.transcript);
+                    } catch (error: unknown) {
+                        console.error('Failed to confirm the saved transcript after recognition failure', error);
+                    }
+                }
+                if (!isCurrent()) return commandSuccess(undefined);
                 this.activityLog.appendEvent(`Whisper transcription failed for ${fileName}`);
                 void this.sessions.refresh();
 

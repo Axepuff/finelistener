@@ -1,6 +1,16 @@
 import { makeAutoObservable } from 'mobx';
 
 export class ActivityLogStore {
+    isOpen = false;
+    focusRequest = 0;
+
+    show(): void {
+        this.isOpen = true;
+        this.focusRequest += 1;
+    }
+
+    toggle(): void { this.isOpen = !this.isOpen; }
+
     private contentValue = '';
 
     constructor() {

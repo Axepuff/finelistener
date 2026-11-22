@@ -1,3 +1,4 @@
+import { InlineAlert, ShowInLog } from 'renderer/src/shared/InlineAlert';
 import { Button, Loader, Textarea } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
@@ -114,6 +115,7 @@ export const RecordingSummary: React.FC<Props> = observer(({ format, onFormatCha
                                 <IconAlertCircle size={14} aria-hidden="true" />{promptError}
                             </span>} />}
                     </div>
+                    {promptError && <ShowInLog />}
                     {!collapsed && !summary.isRunning && !resume && !generationError && <div className={styles.row}>
                         <span className={`${styles.caption} ${styles.grow}`} id={hintId}>{hint}</span>
                         {generateButton}
@@ -127,22 +129,15 @@ export const RecordingSummary: React.FC<Props> = observer(({ format, onFormatCha
                     {generationError && <span role="alert">{generationError}</span>}
                     <Button size="compact-sm" variant="default" disabled={summary.isStopping}
                         onClick={() => { void summary.stop(); }}>Stop generation</Button>
-                </div> : generationError && <div role="alert" className={styles.alert}>
-                    <IconAlertCircle size={16} aria-hidden="true" />
-                    <div className={styles.alertBody}>
-                        <strong>{generationError}</strong>
-                        {!collapsed && <span className={styles.caption} id={hintId}>{hint}</span>}
-                        {generateButton}
-                    </div>
-                </div>}
-                {!summary.isRunning && stopped && <div className={styles.runStatus}>
+                </div> : generationError && <InlineAlert title="Summary generation failed" actions={generateButton}>
+                    <span>{generationError}</span>
+                    {!collapsed && <span className={styles.caption} id={hintId}>{hint}</span>}
+                </InlineAlert>}
+                {!summary.isRunning && stopped && <InlineAlert severity="warning" title="Summary generation stopped" actions={resume && <Button size="compact-sm" variant="default" disabled={!canGenerate} onClick={resume.onContinue}>Continue</Button>}>
                     <div role="status">
-                        <strong>Summary generation stopped.</strong>
-                        {resume && ' Processed chunks are kept, so it continues from where it stopped.'}
+                        {resume ? 'Processed chunks are kept, so it continues from where it stopped.' : 'Generate a new summary to start again.'}
                     </div>
-                    {resume && <Button size="compact-sm" variant="default" disabled={!canGenerate}
-                        onClick={resume.onContinue}>Continue</Button>}
-                </div>}
+                </InlineAlert>}
             </>}
             {hasSummary && transcript && saved && <SummaryResult
                 key={`${saved.inputHash}:${saved.generatedAt ?? ''}`}

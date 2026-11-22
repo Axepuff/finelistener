@@ -2,7 +2,7 @@ import { MantineProvider } from '@mantine/core';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AppContext } from '../AppContext';
-import { TranscribedText } from '../features/transcribed-text/src/ui/TranscribedText/TranscribedText';
+import { TranscriptionError } from '../features/transcribe-control/src/ui/TranscribeControl/TranscriptionError';
 import type { RecordingState } from 'electron/src/services/RecordingService';
 import type { FinalizeRecordingResult, StartRecordingResult } from 'electron/src/types/recordingArchive';
 import type { SessionDetails, SessionTranscriptV1 } from 'electron/src/types/sessions';
@@ -260,11 +260,12 @@ describe('failed source transcription status', () => {
         store.workspace.replaceWorkspace(session);
         store.transcription.replaceSavedTranscript(failedTranscript);
         const html = renderToStaticMarkup(createElement(MantineProvider, null,
-            createElement(AppContext.Provider, { value: store }, createElement(TranscribedText))));
+            createElement(AppContext.Provider, { value: store }, createElement(TranscriptionError))));
 
         expect(html).not.toContain('Completed sources are saved.');
         expect(html).toContain('Transcription failed');
-        expect(html).toContain('Retry remaining sources');
+        expect(html).toContain('>Retry<');
+        expect(html).not.toContain('previous transcript is kept');
     });
 
     it('does not report finished or successful when both sources fail', async () => {
@@ -301,7 +302,7 @@ it.each([false, true])('keeps a completed empty source successful when another s
     store.workspace.replaceWorkspace(session);
     expect((await store.startTranscription(options)).ok).toBe(true);
     const html = renderToStaticMarkup(createElement(MantineProvider, null,
-        createElement(AppContext.Provider, { value: store }, createElement(TranscribedText))));
+        createElement(AppContext.Provider, { value: store }, createElement(TranscriptionError))));
 
     expect(store.transcription.hasCompletedSources).toBe(true);
     expect(store.transcription.allSourcesFailed).toBe(false);
