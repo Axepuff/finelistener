@@ -25,6 +25,7 @@ export interface RendererAdapter {
     setActiveSession: (sessionId: string | null) => Promise<boolean>;
     deleteSession: (sessionId: string) => Promise<boolean>;
     importAudio: () => Promise<SessionDetails | null>;
+    importDroppedAudio: (file: File) => Promise<SessionDetails | null>;
     optimizeAudio: (sessionId: string, mode?: 'original' | 'optimized') => Promise<SessionDetails>;
     setTranscriptDuplicateFilter: (sessionId: string, enabled: boolean) => Promise<SessionDetails>;
     generateSummary: (sessionId: string, options?: RecordingSummaryOptions) => Promise<SummaryGenerationResult>;
@@ -93,6 +94,7 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
         setActiveSession: (sessionId) => api.sessions.setActive(sessionId),
         deleteSession: (sessionId) => api.sessions.delete(sessionId),
         importAudio: () => api.sessions.importAudio(),
+        importDroppedAudio: (file) => api.sessions.importDroppedAudio(file),
         optimizeAudio: (sessionId, mode) => api.sessions.optimizeAudio(sessionId, mode),
         setTranscriptDuplicateFilter: (sessionId, enabled) => api.sessions.setTranscriptDuplicateFilter(sessionId, enabled),
         generateSummary: (sessionId, options) => api.sessions.generateSummary(sessionId, options),

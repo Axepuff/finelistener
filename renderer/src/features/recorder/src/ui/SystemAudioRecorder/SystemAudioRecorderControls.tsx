@@ -1,4 +1,4 @@
-import { ActionIcon, Center, Group, Select, Stack, Text } from '@mantine/core';
+import { ActionIcon, Box, Button, Center, Group, Select, Stack, Text } from '@mantine/core';
 import { IconMicrophone, IconPlayerStopFilled } from '@tabler/icons-react';
 import { useSystemAudioRecorder } from '@~/recorder/src/ui/SystemAudioRecorder/core/useSystemAudioRecorder';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
@@ -10,7 +10,11 @@ const formatDeviceLabel = (device: RecordingDevice): string => {
     return device.isDefault ? `${device.name} (Default)` : device.name;
 };
 
-export const SystemAudioRecorderControls: React.FC = observer(() => {
+interface SystemAudioRecorderControlsProps {
+    variant?: 'workspace';
+}
+
+export const SystemAudioRecorderControls: React.FC<SystemAudioRecorderControlsProps> = observer(({ variant }) => {
     const {
         controls: {
             canStartRecording,
@@ -61,43 +65,73 @@ export const SystemAudioRecorderControls: React.FC = observer(() => {
         return [{ value: '__off__', label: 'Off' }, { value: '', label: 'Default device' }, ...options];
     };
 
+    const sources = isWindows ? (
+        <Stack gap={8}>
+            <Select
+                label="System audio"
+                data={sourceOptions('system', systemDeviceId)}
+                value={systemDeviceId ?? '__off__'}
+                onChange={(value) => onSourceChange('system', value === '__off__' ? null : value)}
+                disabled={sourceSelectionDisabled}
+            />
+            <Select
+                label="Microphone"
+                data={sourceOptions('microphone', microphoneDeviceId)}
+                value={microphoneDeviceId ?? '__off__'}
+                onChange={(value) => onSourceChange('microphone', value === '__off__' ? null : value)}
+                disabled={sourceSelectionDisabled}
+            />
+            {systemDeviceId === null && microphoneDeviceId === null ? (
+                <Text size="sm" c="dimmed">{'Enable at least one recording source.'}</Text>
+            ) : null}
+        </Stack>
+    ) : showDeviceSelect ? (
+        <Select
+            label="Output device"
+            data={deviceOptions}
+            value={selectedDeviceId || null}
+            onChange={(value) => {
+                if (!value) return;
+                onDeviceChange(value);
+            }}
+            maw={variant === 'workspace' ? undefined : 240}
+            disabled={isRecordingActive || sourceSelectionDisabled}
+        />
+    ) : null;
+
+    const buttonLabel = isRecordingActive ? 'Stop recording' : 'Start recording';
+    const buttonAction = isRecordingActive ? onStopRecording : onStartRecording;
+    const buttonDisabled = isRecordingActive ? !canStopRecording : !canStartRecording;
+
     return (
-        <Stack>
-            {isRecordingActive ? (
-                <Center>
-
-                    <ActionIcon
-                        color="red"
-                        radius="xl"
-                        disabled={!canStopRecording}
-                        size={48}
-                        aria-label="Stop recording"
-                        onClick={onStopRecording}
-                    >
-                        <IconPlayerStopFilled />
-                    </ActionIcon>
-                </Center>
+        <Stack gap={variant === 'workspace' ? 16 : undefined}>
+            {variant === 'workspace' ? (
+                <>
+                    <Stack role="group" aria-label="Recording source" gap={4}>
+                        <Text size="xs" c="var(--brand-color-text-secondary)">{'Recording source'}</Text>
+                        {sources ?? <Text size="sm">{'System audio'}</Text>}
+                    </Stack>
+                    <Button size="lg" fz="sm" disabled={buttonDisabled} onClick={buttonAction} leftSection={isRecordingActive ? (
+                        <IconPlayerStopFilled size={12} color="var(--brand-color-error)" aria-hidden="true" />
+                    ) : (
+                        <Box component="span" aria-hidden="true" w={10} h={10} bg="var(--brand-color-error)" style={{ borderRadius: '50%' }} />
+                    )}>
+                        {buttonLabel}
+                    </Button>
+                </>
             ) : (
-                <Stack align="center" gap={4}>
-                    <ActionIcon
-                        color="red"
-                        disabled={!canStartRecording}
-                        radius="xl"
-                        size={48}
-                        aria-label="Start recording"
-                        onClick={onStartRecording}
-                    >
-                        <IconMicrophone />
-                    </ActionIcon>
-                    <Text size="sm">{isWindows ? 'Record audio' : 'Record system audio'}</Text>
-                </Stack>
+                <Center>
+                    <Stack align="center" gap={4}>
+                        <ActionIcon color="red" radius="xl" size={48} disabled={buttonDisabled} aria-label={buttonLabel} onClick={buttonAction}>
+                            {isRecordingActive ? <IconPlayerStopFilled /> : <IconMicrophone />}
+                        </ActionIcon>
+                        {!isRecordingActive ? <Text size="sm">{isWindows ? 'Record audio' : 'Record system audio'}</Text> : null}
+                    </Stack>
+                </Center>
             )}
-
             {isRecordingActive ? (
                 <Group>
-                    <Text size="sm" c="dimmed">
-                        {`Recording: ${durationLabel}`}
-                    </Text>
+                    <Text size="sm" c="dimmed">{`Recording: ${durationLabel}`}</Text>
                     {Object.keys(sourceLevels).length > 0 ? (['system', 'microphone'] as const).map((source) => sourceLevels[source] ? (
                         <Text key={source} size="sm" c="dimmed">
                             {`${source === 'system' ? 'System audio' : 'Microphone'}: ${formatLevel(sourceLevels[source])}`}
@@ -105,45 +139,10 @@ export const SystemAudioRecorderControls: React.FC = observer(() => {
                     ) : null) : (
                         <Text size="sm" c="dimmed">{`Level: ${levelLabel}`}</Text>
                     )}
-                    <Text size="sm" c="dimmed">
-                        {writtenLabel}
-                    </Text>
+                    <Text size="sm" c="dimmed">{writtenLabel}</Text>
                 </Group>
             ) : null}
-
-            {isWindows ? (
-                <Stack gap={8}>
-                    <Select
-                        label="System audio"
-                        data={sourceOptions('system', systemDeviceId)}
-                        value={systemDeviceId ?? '__off__'}
-                        onChange={(value) => onSourceChange('system', value === '__off__' ? null : value)}
-                        disabled={sourceSelectionDisabled}
-                    />
-                    <Select
-                        label="Microphone"
-                        data={sourceOptions('microphone', microphoneDeviceId)}
-                        value={microphoneDeviceId ?? '__off__'}
-                        onChange={(value) => onSourceChange('microphone', value === '__off__' ? null : value)}
-                        disabled={sourceSelectionDisabled}
-                    />
-                    {systemDeviceId === null && microphoneDeviceId === null ? (
-                        <Text size="sm" c="dimmed">{'Enable at least one recording source.'}</Text>
-                    ) : null}
-                </Stack>
-            ) : showDeviceSelect ? (
-                <Select
-                    label="Output device"
-                    data={deviceOptions}
-                    value={selectedDeviceId || null}
-                    onChange={(value) => {
-                        if (!value) return;
-                        onDeviceChange(value);
-                    }}
-                    w={240}
-                    disabled={isRecordingActive}
-                />
-            ) : null}
+            {variant === 'workspace' ? null : sources}
         </Stack>
     );
 });

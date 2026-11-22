@@ -1,9 +1,9 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { RecordingStartOptions } from './src/services/RecordingService';
 import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResult } from './src/types/recordingArchive';
 import type { TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from './src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from './src/types/uiPreferences';
-import type { SessionRawSpan, SessionSpeakerAssignment, SummaryGenerationResult, SummaryProgressEvent } from './src/types/sessions';
+import type { SessionDetails, SessionRawSpan, SessionSpeakerAssignment, SummaryGenerationResult, SummaryProgressEvent } from './src/types/sessions';
 import type { RecordingSummaryOptions } from './src/types/summaryOptions';
 import type { SummaryModelStatus } from './src/types/summaryModel';
 import type { AnalyzeSpeakersOptions, SpeakerAnalysisProgressEvent } from './src/types/transcription';
@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld('api', {
         setActive: (sessionId: string | null) => ipcRenderer.invoke('sessions:set-active', sessionId),
         delete: (sessionId: string) => ipcRenderer.invoke('sessions:delete', sessionId),
         importAudio: () => ipcRenderer.invoke('sessions:import-audio'),
+        importDroppedAudio: async (file: File): Promise<SessionDetails | null> => {
+            const filePath = webUtils.getPathForFile(file);
+
+            return filePath ? ipcRenderer.invoke('sessions:import-dropped-audio', filePath) as Promise<SessionDetails> : null;
+        },
         optimizeAudio: (sessionId: string, mode?: 'original' | 'optimized') => ipcRenderer.invoke('sessions:optimize-audio', sessionId, mode),
         setTranscriptDuplicateFilter: (sessionId: string, enabled: boolean) =>
             ipcRenderer.invoke('sessions:set-transcript-duplicate-filter', sessionId, enabled),

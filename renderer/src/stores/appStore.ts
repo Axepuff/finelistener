@@ -171,7 +171,7 @@ export class AppStore {
         this.operations.cancelActive();
     }
 
-    async importAudio(): Promise<CommandResult<SessionDetails | null>> {
+    async importAudio(file?: File): Promise<CommandResult<SessionDetails | null>> {
         if (!this.adapter) return commandFailure('Audio import is not available.');
 
         const operation = this.operations.begin('importing');
@@ -179,11 +179,13 @@ export class AppStore {
         if (!operation) return commandFailure('Another workspace operation is already running.');
 
         try {
-            const session = await this.adapter.importAudio();
+            const session = file ? await this.adapter.importDroppedAudio(file) : await this.adapter.importAudio();
 
             if (!this.operations.owns(operation) || this.disposed) {
                 return commandFailure('Audio import was cancelled.');
             }
+
+            if (file && !session) return commandFailure('Could not access the dropped file. Choose an audio file instead.');
 
             if (session) {
                 runInAction(() => {

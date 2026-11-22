@@ -55,7 +55,114 @@ export const Transcript: Story = {
         await userEvent.click(canvas.getByRole('radio', { name: 'Text' }));
     },
 };
-export const Empty: Story = { parameters: { scenario: 'empty' } };
+export const Empty: Story = {
+    parameters: { scenario: 'empty' },
+    play: async ({ canvas }) => {
+        await expect(canvas.getByRole('heading', { level: 1, name: 'Record or import audio' })).toBeVisible();
+        await expect(canvas.getByRole('navigation', { name: 'Sessions' })).toBeVisible();
+        await expect(canvas.getByRole('region', { name: 'Record a meeting' })).toBeVisible();
+        await expect(canvas.getByRole('region', { name: 'Import a file' })).toBeVisible();
+        await expect(canvas.queryByRole('region', { name: 'Audio player' })).not.toBeInTheDocument();
+        await expect(canvas.queryByRole('complementary', { name: 'Transcription settings' })).not.toBeInTheDocument();
+    },
+};
+
+export const EmptyRecording: Story = {
+    parameters: { scenario: 'empty' },
+    play: async ({ canvas, canvasElement, loaded }) => {
+        const { adapter } = loaded.workspace as StoryWorkspace;
+        const page = within(canvasElement.ownerDocument.body);
+        const recorder = within(canvas.getByRole('region', { name: 'Record a meeting' }));
+        const systemAudio = recorder.getByRole('textbox', { name: 'System audio' });
+        const microphone = recorder.getByRole('textbox', { name: 'Microphone' });
+        const start = recorder.getByRole('button', { name: 'Start recording' });
+        const record = spyOn(adapter, 'startSystemRecording');
+        try {
+            await waitFor(() => expect(start).toBeEnabled());
+            await userEvent.click(systemAudio);
+            await userEvent.click(page.getByRole('option', { name: 'Off' }));
+            await userEvent.click(microphone);
+            await userEvent.click(page.getByRole('option', { name: 'Off' }));
+            await expect(start).toBeDisabled();
+            await userEvent.click(systemAudio);
+            await userEvent.click(page.getByRole('option', { name: 'Default device' }));
+            await userEvent.click(microphone);
+            await userEvent.click(page.getByRole('option', { name: 'Default device' }));
+            microphone.focus();
+            await userEvent.tab();
+            await expect(start).toHaveFocus();
+            await userEvent.keyboard('{Enter}');
+            const stop = await recorder.findByRole('button', { name: 'Stop recording' });
+            await expect(stop).toBeEnabled();
+            await expect(record).toHaveBeenCalledWith(expect.objectContaining({ sources: { system: '', microphone: '' } }));
+            await expect(recorder.getByText('Written: 1313 KB')).toBeVisible();
+            await expect(recorder.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
+            await expect(systemAudio).toBeDisabled();
+            await expect(microphone).toBeDisabled();
+            await expect(canvas.getByRole('button', { name: 'Choose audio file' })).toBeDisabled();
+            await userEvent.click(stop);
+            await expect(await canvas.findByRole('region', { name: 'Audio player' })).toBeVisible();
+            await expect(canvas.getByRole('complementary', { name: 'Transcription settings' })).toBeVisible();
+        } finally {
+            record.mockRestore();
+        }
+    },
+};
+
+export const EmptyImport: Story = {
+    parameters: { scenario: 'empty' },
+    play: async ({ canvas, loaded }) => {
+        const { adapter } = loaded.workspace as StoryWorkspace;
+        const choose = canvas.getByRole('button', { name: 'Choose audio file' });
+        const pickFile = spyOn(adapter, 'importAudio').mockResolvedValueOnce(null);
+        try {
+            choose.focus();
+            await userEvent.keyboard('{Enter}');
+            await expect(pickFile).toHaveBeenCalledOnce();
+            await waitFor(() => expect(choose).toBeEnabled());
+            await expect(canvas.queryByRole('alert')).not.toBeInTheDocument();
+            await userEvent.click(choose);
+            await expect(await canvas.findByRole('region', { name: 'Audio player' })).toBeVisible();
+            await expect(canvas.getByRole('complementary', { name: 'Transcription settings' })).toBeVisible();
+        } finally {
+            pickFile.mockRestore();
+        }
+    },
+};
+
+export const EmptyDrop: Story = {
+    parameters: { scenario: 'empty' },
+    play: async ({ canvas, loaded }) => {
+        const { adapter } = loaded.workspace as StoryWorkspace;
+        const card = canvas.getByRole('region', { name: 'Import a file' });
+        const importer = spyOn(adapter, 'importDroppedAudio')
+            .mockResolvedValueOnce(null)
+            .mockRejectedValueOnce(new Error('Corrupt demo audio'));
+        const drop = (name: string) => {
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(new File(['Synthetic fixture'], name));
+            const eventInit = { dataTransfer, bubbles: true, cancelable: true };
+            card.dispatchEvent(new DragEvent('dragover', eventInit));
+            card.dispatchEvent(new DragEvent('drop', eventInit));
+        };
+
+        try {
+            drop('unsupported.txt');
+            await waitFor(() => expect(within(card).getByRole('alert')).toHaveTextContent('This file format is not supported.'));
+            await expect(importer).not.toHaveBeenCalled();
+            drop('missing.wav');
+            await waitFor(() => expect(within(card).getByRole('alert')).toHaveTextContent('Could not access the dropped file.'));
+            drop('corrupt.wav');
+            await waitFor(() => expect(within(card).getByRole('alert')).toHaveTextContent('Failed to import the audio file.'));
+            drop('Dropped fixture.WAV');
+            const header = within(canvas.getByRole('banner'));
+            await expect(await header.findByText('Dropped fixture.WAV')).toBeVisible();
+            await expect(canvas.getByRole('region', { name: 'Audio player' })).toBeVisible();
+        } finally {
+            importer.mockRestore();
+        }
+    },
+};
 export const RecordingStartError: Story = {
     parameters: { scenario: 'recording-start-error', docs: { description: { story: 'Recording started from the title bar fails; the recorder opens with the error. The developer console contains the expected failure log.' } } },
     play: async ({ canvas }) => {
@@ -325,6 +432,7 @@ export const SpeakerSettings: Story = {
         await userEvent.click(canvas.getByRole('button', { name: 'Rename speakers' }));
         await waitFor(() => expect(page.getByRole('dialog', { name: 'Rename speaker' })).toBeVisible());
         await userEvent.keyboard('{Escape}');
+        await waitFor(() => expect(page.queryByRole('dialog', { name: 'Rename speaker' })).not.toBeInTheDocument());
         await waitFor(() => expect(canvas.getByRole('button', { name: 'Rename speakers' })).toHaveFocus());
         await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
         await userEvent.click(await page.findByRole('button', { name: 'Merge speakers' }));

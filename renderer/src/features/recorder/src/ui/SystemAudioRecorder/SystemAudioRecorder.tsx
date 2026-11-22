@@ -4,11 +4,15 @@ import React from 'react';
 import { SystemAudioRecorderAlerts } from './SystemAudioRecorderAlerts';
 import { SystemAudioRecorderControls } from './SystemAudioRecorderControls';
 
-export const SystemAudioRecorder: React.FC = () => {
+interface SystemAudioRecorderProps {
+    variant?: 'workspace';
+}
+
+export const SystemAudioRecorder: React.FC<SystemAudioRecorderProps> = ({ variant }) => {
 
     return (
         <Stack gap={12}>
-            <SystemAudioRecorderControls />
+            <SystemAudioRecorderControls variant={variant} />
             <SystemAudioRecorderLevelMeter />
             <SystemAudioRecorderAlerts />
         </Stack>
