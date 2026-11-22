@@ -51,7 +51,7 @@ export const DownloadThenGenerate: Story = {
         await expect(await canvas.findByRole('tabpanel', { name: 'Brief overview' })).toHaveTextContent('reopen a recording');
         await userEvent.click(canvas.getByRole('tab', { name: 'Detailed notes' }));
         await expect(canvas.getByRole('tabpanel', { name: 'Detailed notes' })).toHaveTextContent('hear what was said');
-        await userEvent.click(canvas.getByRole('radio', { name: 'Plain Text' }));
+        await userEvent.click(canvas.getByRole('radio', { name: 'Text' }));
         await (loaded.workspace as StoryWorkspace).store.openSession('storybook-session');
         await openSummary(context);
         await expect(await canvas.findByRole('tabpanel', { name: 'Brief overview' })).toBeVisible();
@@ -79,7 +79,7 @@ export const Stopped: Story = {
         await userEvent.clear(prompt);
         await userEvent.type(prompt, instruction);
         await userEvent.click(await canvas.findByRole('button', { name: 'Generate summary' }));
-        await userEvent.click(canvas.getByRole('radio', { name: 'Plain Text' }));
+        await userEvent.click(canvas.getByRole('radio', { name: 'Text' }));
         await openSummary(context);
         await expect(canvas.getByLabelText('Prompt')).toHaveValue(instruction);
         await expect(canvas.getByLabelText('Prompt')).toBeDisabled();

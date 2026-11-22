@@ -66,9 +66,9 @@ export const SpeakerEdits: Story = { parameters: { scenario: 'sessions-speaker-e
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
     await expect(within(panel.getByRole('region', { name: 'Yesterday' })).getByRole('button', { name: 'Design discussion.wav' })).toHaveAccessibleDescription('00:12 · 3 speakers');
     await userEvent.click(canvas.getByRole('radio', { name: 'Timecodes' }));
-    await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
+    await userEvent.click(canvas.getByText('00:00:04 – 00:00:08'));
     await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
-    await userEvent.click(canvas.getByText('[00:00:08 - 00:00:12]'));
+    await userEvent.click(canvas.getByText('00:00:08 – 00:00:12'));
     await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
     await expect((await store.mergeSpeakers('alice', 'bob')).ok).toBe(true);
     await waitFor(() => expect(within(panel.getByRole('region', { name: 'Today' })).getByRole('button', { name: 'Design discussion.wav' })).toHaveAccessibleDescription('00:12 · 2 speakers'));
