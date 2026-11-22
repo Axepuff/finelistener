@@ -3,6 +3,7 @@ import type {
     RecordingProgress,
     RecordingState,
 } from 'electron/src/services/RecordingService';
+import type { RecordingSourceKind } from 'electron/src/services/capture/CaptureAdapter';
 import type { FinalizeRecordingResult } from 'electron/src/types/recordingArchive';
 import type { SessionDetails } from 'electron/src/types/sessions';
 import { makeAutoObservable, runInAction } from 'mobx';
@@ -78,16 +79,21 @@ const applyRecordingState = (previous: RecordingSessionState, state: RecordingSt
 const applyRecordingProgress = (
     previous: RecordingSessionState,
     progress: RecordingProgress,
-): RecordingSessionState => ({
-    ...previous,
-    recordingDurationMs: progress.durationMs,
-    sourceLevels: Object.fromEntries(Object.entries(previous.sourceLevels).filter(([source]) =>
-        !progress.sourceFailures?.some((failure) => failure.source === source))),
-    recordingBytesWritten: typeof progress.bytesWritten === 'number' ? progress.bytesWritten : null,
-    lastProgressAt: Date.now(),
-    recordingError: progress.sourceFailures?.length ? progress.sourceFailures.map((failure) =>
-        `${failure.source === 'microphone' ? 'Microphone' : 'System audio'} stopped recording.`).join(' ') : previous.recordingError,
-});
+): RecordingSessionState => {
+    const lastProgressAt = Date.now();
+    const recordingDurationMs = Number.isFinite(progress.durationMs) ? Math.max(previous.recordingDurationMs, progress.durationMs) : previous.recordingDurationMs;
+    return {
+        ...previous,
+        recordingDurationMs,
+        recordingStartAt: previous.recordingState === 'recording' ? lastProgressAt - recordingDurationMs : previous.recordingStartAt,
+        sourceLevels: Object.fromEntries(Object.entries(previous.sourceLevels).filter(([source]) =>
+            !progress.sourceFailures?.some((failure) => failure.source === source))),
+        recordingBytesWritten: typeof progress.bytesWritten === 'number' ? progress.bytesWritten : null,
+        lastProgressAt,
+        recordingError: progress.sourceFailures?.length ? progress.sourceFailures.map((failure) =>
+            `${failure.source === 'microphone' ? 'Microphone' : 'System audio'} stopped recording.`).join(' ') : previous.recordingError,
+    };
+};
 
 const getSilenceWarningMessage = (platform: string | null): string => {
     if (platform === 'darwin') {
@@ -148,7 +154,7 @@ const applyFallbackDuration = (previous: RecordingSessionState): RecordingSessio
     if (hasRecentProgress) return previous;
 
     const recordingStartAt = previous.recordingStartAt ?? now;
-    const recordingDurationMs = now - recordingStartAt;
+    const recordingDurationMs = Math.max(previous.recordingDurationMs, now - recordingStartAt);
 
     if (recordingDurationMs === previous.recordingDurationMs && recordingStartAt === previous.recordingStartAt) {
         return previous;
@@ -264,7 +270,7 @@ export class RecordingSessionStore {
 
         this.activeOperation = operation;
         this.pendingStart = { operation, idleReceived: false };
-        this.stateValue = clearSessionBeforeStart(this.stateValue);
+        this.stateValue = { ...clearSessionBeforeStart(this.stateValue), recordingSources: this.selectedSources() };
 
         try {
             const permissionStatus = await api.getRecordingPermissionStatus();
@@ -420,12 +426,20 @@ export class RecordingSessionStore {
         return commandFailure(errorMessage);
     }
 
+    private selectedSources(): RecordingSourceKind[] {
+        if (this.dependencies.adapter?.runtimePlatform !== 'win32') return ['system'];
+        const { systemDeviceId, microphoneDeviceId, isLoading } = this.dependencies.devicesStore.state;
+        if (isLoading) return [];
+        return (['system', 'microphone'] as const).filter((source) => (source === 'system' ? systemDeviceId : microphoneDeviceId) !== null);
+    }
+
     private handleRecordingState(state: RecordingState): void {
         this.stateValue = applyRecordingState(this.stateValue, state);
         if (this.pendingStart) this.pendingStart.idleReceived = state === 'idle';
 
         if (state !== 'idle' && !this.activeOperation && !this.dependencies.operations.isBusy) {
             this.activeOperation = this.dependencies.operations.begin('recording');
+            this.stateValue = { ...this.stateValue, recordingSources: this.selectedSources() };
         }
 
         // Start replies carry actionable failures even when the service has already emitted idle.
@@ -448,7 +462,9 @@ export class RecordingSessionStore {
             rms: Math.max(...levels.map((value) => value.rms)),
             clipped: levels.some((value) => value.clipped),
         } : level;
-        const { nextState, logMessage } = applyRecordingLevel({ ...this.stateValue, sourceLevels }, combinedLevel, platform);
+        const recordingSources = level.source && !this.stateValue.recordingSources.includes(level.source) ?
+            [...this.stateValue.recordingSources, level.source] : this.stateValue.recordingSources;
+        const { nextState, logMessage } = applyRecordingLevel({ ...this.stateValue, sourceLevels, recordingSources }, combinedLevel, platform);
 
         this.stateValue = nextState;
 

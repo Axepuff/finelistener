@@ -1,5 +1,6 @@
 import { Box, LoadingOverlay } from '@mantine/core';
 import { Player } from '@~/player';
+import { RecordingStrip } from '@~/recorder';
 import { ProcessLog } from '@~/process-log';
 import { SessionsSidebar } from '@~/sessions';
 import { TranscribeControl } from '@~/transcribe-control';
@@ -16,9 +17,20 @@ export const Home: React.FC = observer(() => {
     const store = useAppStore();
     const [isLogOpen, setIsLogOpen] = useState(false);
     const hasOpenSession = store.workspace.activeSessionId !== null;
+    const showWorkspace = hasOpenSession || store.recordingInProgress;
+
+    const preventConflictingFileDrop: React.DragEventHandler = (event) => {
+        const { dataTransfer } = event;
+        if (!store.operations.isBusy || !dataTransfer.types.includes('Files')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        dataTransfer.dropEffect = 'none';
+    };
 
     return (
         <Box
+            onDragOverCapture={preventConflictingFileDrop}
+            onDropCapture={preventConflictingFileDrop}
             style={{
                 height: '100vh',
                 minHeight: 0,
@@ -31,13 +43,13 @@ export const Home: React.FC = observer(() => {
         >
             <LoadingOverlay visible={store.lifecycleState === 'importing'} overlayProps={{ blur: 2 }} />
             <TitleBar />
-            {hasOpenSession ? (
+            {showWorkspace ? (
                 <Box
                     component="section"
-                    aria-label="Audio player"
+                    aria-label={store.recordingInProgress ? 'Recording monitor' : 'Audio player'}
                     style={{ flex: '0 0 auto', background: 'var(--brand-color-bg-container)', borderBottom: panelBorder }}
                 >
-                    <Player />
+                    {store.recordingInProgress ? <RecordingStrip /> : <Player />}
                 </Box>
             ) : null}
             <ResizableSidebarLayout
@@ -52,7 +64,7 @@ export const Home: React.FC = observer(() => {
                         </Box>
                     ),
                 }}
-                rightSidebar={hasOpenSession ? {
+                rightSidebar={showWorkspace ? {
                     ...SHELL_SIZES.settingsPanel,
                     widthPreferenceKey: 'homeRightSidebarWidth',
                     separatorAriaLabel: 'Resize settings panel',
@@ -70,7 +82,7 @@ export const Home: React.FC = observer(() => {
                 } : undefined}
                 content={(
                     <Box component="main" h="100%" bg="var(--brand-color-bg-container)" style={{ minHeight: 0, overflow: 'hidden' }}>
-                        {hasOpenSession ? <TranscribedText /> : <EmptyWorkspace />}
+                        {showWorkspace ? <TranscribedText /> : <EmptyWorkspace />}
                     </Box>
                 )}
             />

@@ -273,6 +273,8 @@ button.speakerTag:hover,
     z-index: 400;
 }
 
+.viewOptions { display: grid; justify-items: start; min-width: 0; gap: 4px; }
+
 .controlsRow {
     display: flex;
     align-items: center;
@@ -306,6 +308,11 @@ button.speakerTag:hover,
 .speakerToggle .toggleLabel[data-active] {
     font-weight: 600;
     color: var(--brand-color-text);
+}
+
+.viewToggle .toggleLabel[data-disabled] {
+    color: var(--brand-color-text-quaternary);
+    cursor: default;
 }
 
 .speakerToggle {

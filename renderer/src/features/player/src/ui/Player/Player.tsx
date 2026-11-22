@@ -5,7 +5,6 @@ import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import React, { useEffect, useRef, useState } from 'react';
 import { useAppStore } from 'renderer/src/AppContext';
-import { PlayerAdapter } from './PlayerAdapter';
 import { formatPreciseTime } from './formatPreciseTime';
 import './Player.css';
 
@@ -18,11 +17,12 @@ export const Player: React.FC = observer(() => {
     const store = useAppStore();
     const { workspace } = store;
     const containerRef = useRef<HTMLDivElement | null>(null);
-    const adapterRef = useRef<PlayerAdapter | null>(null);
+    const adapterRef = useRef<WaveSurferAdapter | null>(null);
     const [duration, setDuration] = useState(0);
     const currentAudioPath = workspace.audioSourcePath ?? undefined;
     const activeSession = workspace.activeSession;
     const segmentSelection = workspace.segmentSelection;
+    const { operationBlockReason } = store;
 
     useEffect(() => {
         const adapter = new WaveSurferAdapter(
@@ -40,12 +40,14 @@ export const Player: React.FC = observer(() => {
         );
 
         adapterRef.current = adapter;
+        const disposeRegionLock = reaction(() => store.operations.isBusy, (locked) => adapter.setRegionEditing(!locked), { fireImmediately: true });
 
         return () => {
+            disposeRegionLock();
             adapter.destroy();
             adapterRef.current = null;
         };
-    }, [workspace]);
+    }, [store, workspace]);
 
     useEffect(() => {
         const player = adapterRef.current;
@@ -85,6 +87,7 @@ export const Player: React.FC = observer(() => {
     };
 
     const handleMarkStart = () => {
+        if (store.operations.isBusy) return;
         const safeTime = Math.max(0, adapterRef.current?.currentTime ?? 0);
 
         adapterRef.current?.setRegion({ start: safeTime });
@@ -92,6 +95,7 @@ export const Player: React.FC = observer(() => {
     };
 
     const handleMarkEnd = () => {
+        if (store.operations.isBusy) return;
         const safeTime = Math.max(0, adapterRef.current?.currentTime ?? 0);
 
         adapterRef.current?.setRegion({ end: safeTime });
@@ -99,6 +103,7 @@ export const Player: React.FC = observer(() => {
     };
 
     const handleClearRange = () => {
+        if (store.operations.isBusy) return;
         workspace.clearSegment();
         adapterRef.current?.clearRegions();
     };
@@ -138,7 +143,8 @@ export const Player: React.FC = observer(() => {
                 {selectionText ? (
                     <Box className="player-strip__segment" data-invalid={hasInvalidSegment || undefined}>
                         <span>{selectionText}</span>
-                        <ActionIcon size={18} variant="subtle" color="gray" aria-label="Clear segment" onClick={handleClearRange} disabled={store.operations.isBusy}>
+                        <ActionIcon size={18} variant="subtle" color="gray" aria-label="Clear segment" onClick={handleClearRange}
+                            title={operationBlockReason} aria-description={operationBlockReason} disabled={store.operations.isBusy}>
                             <IconX size={14} />
                         </ActionIcon>
                     </Box>
@@ -149,6 +155,8 @@ export const Player: React.FC = observer(() => {
                     px={8}
                     leftSection={<IconBracketsContainStart size={14} />}
                     onClick={handleMarkStart}
+                    title={operationBlockReason}
+                    aria-description={operationBlockReason}
                     disabled={!currentAudioPath || store.operations.isBusy}
                 >
                     {'Mark start'}
@@ -159,6 +167,8 @@ export const Player: React.FC = observer(() => {
                     px={8}
                     leftSection={<IconBracketsContainEnd size={14} />}
                     onClick={handleMarkEnd}
+                    title={operationBlockReason}
+                    aria-description={operationBlockReason}
                     disabled={!canMarkSegmentEnd}
                 >
                     {'Mark end'}
@@ -174,6 +184,8 @@ export const Player: React.FC = observer(() => {
                         className="player-strip__audio-mode"
                         size="xs"
                         aria-label="Audio version"
+                        title={operationBlockReason}
+                        aria-description={operationBlockReason}
                         value={workspace.audioMode}
                         data={AUDIO_MODE_OPTIONS}
                         onChange={(value) => void handleAudioModeChange(value)}
@@ -181,6 +193,9 @@ export const Player: React.FC = observer(() => {
                     />
                 )}
             </Group>
+            {operationBlockReason && store.operations.kind !== 'optimizing-audio' ? (
+                <Text size="xs" c="dimmed" ta="right" px={16}>Segment and audio version locked. {operationBlockReason}</Text>
+            ) : null}
             <Box className="player-strip__waveform">
                 {workspace.isPlayerLoading ? <Loader size="sm" className="player-strip__loader" /> : null}
                 <div ref={containerRef} />

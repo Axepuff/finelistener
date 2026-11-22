@@ -95,14 +95,17 @@ export const RecorderWithOpenSession: Story = {
             await userEvent.click(recorder.getByRole('textbox', { name: 'System audio' }));
             await userEvent.click(page.getByRole('option', { name: 'Default device' }));
             await userEvent.click(recorder.getByRole('button', { name: 'Start recording' }));
-            await waitFor(() => expect(recorder.getByText('Written: 1313 KB')).toBeVisible());
-            await expect(recorder.getByText('System audio: 40% peak, 12% rms')).toBeVisible();
-            await expect(recorder.getByText('Microphone: 20% peak, 6% rms')).toBeVisible();
-            await expect(recorder.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
-            await expect(recorder.getByRole('textbox', { name: 'System audio' })).toBeDisabled();
-            await expect(settings.getByRole('button', { name: 'Transcribe' })).toBeDisabled();
+            const sources = within(settings.getByRole('group', { name: 'Recording sources' }));
+            await expect(sources.getByRole('textbox', { name: 'System audio' })).toBeDisabled();
+            await expect(settings.getByRole('button', { name: 'Transcribe' })).toHaveAccessibleDescription('Stop recording to transcribe.');
+            await expect(settings.getByRole('button', { name: 'Clear workspace' })).toBeDisabled();
+            const language = settings.getByRole('textbox', { name: 'Language' });
+            await userEvent.click(language);
+            await userEvent.click(page.getByRole('option', { name: 'French' }));
+            await expect(settings.getByRole('switch', { name: /^Identify speakers/ })).toBeEnabled();
             await userEvent.click(header.getByRole('button', { name: 'Stop recording' }));
             await waitFor(() => expect(recorder.getByRole('textbox', { name: 'Microphone' })).toBeEnabled());
+            await expect(language).toHaveValue('French');
             await expect(settings.getByRole('button', { name: 'Transcribe' })).toBeEnabled();
         } finally { start.mockRestore(); }
     },
