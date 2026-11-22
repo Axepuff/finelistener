@@ -7,7 +7,7 @@ export const SUMMARY_MODEL_ARTIFACT = {
 } as const;
 
 export interface SummaryModelStatus {
-    state: 'missing' | 'downloading' | 'ready' | 'error';
+    state: 'missing' | 'downloading' | 'ready' | 'cancelled' | 'error';
     model: string;
     totalBytes: number;
     downloadedBytes: number;

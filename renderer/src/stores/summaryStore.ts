@@ -26,7 +26,7 @@ export class SummaryStore {
     private modelValue: SummaryModelStatus | null = null;
     private modelFailure: string | null = null;
     private modelRequest = 0;
-    private downloadPending = false;
+    private downloadPending: symbol | null = null;
     private unsubscribeModel: (() => void) | null = null;
     private unsubscribe: (() => void) | null = null;
 
@@ -83,20 +83,45 @@ export class SummaryStore {
     async downloadModel(): Promise<void> {
         if (!this.adapter || !this.unsubscribeModel || this.downloadPending
             || this.modelValue?.state === 'downloading' || this.modelValue?.state === 'ready') return;
-        const subscription = this.unsubscribeModel;
-        this.downloadPending = true;
+        const attempt = Symbol();
+        this.downloadPending = attempt;
         this.modelFailure = null;
         this.modelRequest += 1;
         try {
             const status = await this.adapter.downloadSummaryModel();
-            if (this.unsubscribeModel === subscription) runInAction(() => { this.modelValue = status; });
+            if (this.downloadPending === attempt) runInAction(() => {
+                this.modelRequest += 1;
+                this.modelValue = status;
+            });
         } catch (error) {
             console.error('Failed to install the summary model', error);
-            if (this.unsubscribeModel === subscription) runInAction(() => {
+            if (this.downloadPending === attempt) runInAction(() => {
                 this.modelFailure = 'Could not download the model. Try again.';
             });
         } finally {
-            if (this.unsubscribeModel === subscription) runInAction(() => { this.downloadPending = false; });
+            if (this.downloadPending === attempt) runInAction(() => { this.downloadPending = null; });
+        }
+    }
+
+    async cancelModelDownload(): Promise<void> {
+        if (!this.adapter || !this.unsubscribeModel || (!this.downloadPending && this.modelValue?.state !== 'downloading')) return;
+        const attempt = this.downloadPending;
+        const request = ++this.modelRequest;
+        try {
+            const status = await this.adapter.cancelSummaryModelDownload();
+            runInAction(() => {
+                // The cancel acknowledgement and the original download reply can arrive independently.
+                if (attempt && this.downloadPending === attempt && status.state !== 'downloading') this.downloadPending = null;
+                if (request === this.modelRequest) {
+                    this.modelValue = status;
+                    this.modelFailure = null;
+                }
+            });
+        } catch (error) {
+            console.error('Failed to cancel the summary model download', error);
+            if (request === this.modelRequest) runInAction(() => {
+                this.modelFailure = 'Could not cancel the model download. Try again.';
+            });
         }
     }
 
@@ -171,7 +196,7 @@ export class SummaryStore {
         this.unsubscribeModel?.();
         this.unsubscribeModel = null;
         this.modelRequest += 1;
-        this.downloadPending = false;
+        this.downloadPending = null;
         this.modelValue = null;
         this.runningOptionsValue = undefined;
         this.modelFailure = null;

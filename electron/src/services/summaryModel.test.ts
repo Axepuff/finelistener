@@ -70,12 +70,118 @@ it('rejects corrupt on-disk weights and transfers, removes the partial file and 
     expect((await service.getStatus()).state).toBe('missing');
     fetch.mockResolvedValueOnce(new Response('abd')).mockResolvedValueOnce(new Response('abc'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect((await service.download()).state).toBe('error');
+    expect(await service.download()).toMatchObject({ state: 'error', error: 'download', downloadedBytes: 3 });
     expect((await service.getStatus()).state).toBe('error');
     await expect(fs.stat(model + '.partial')).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(service.requireInstalled(new AbortController().signal)).rejects.toThrow('SUMMARY_MODEL_MISSING');
     expect((await service.download()).state).toBe('ready');
     expect(await fs.readFile(model, 'utf8')).toBe('abc');
+});
+
+it('retains bytes written before a network failure', async () => {
+    const service = new SummaryModelService(directory, () => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    fetch.mockResolvedValue(new Response(new ReadableStream<Uint8Array>({
+        start: (controller) => { stream = controller; },
+    })));
+    const transfer = service.download();
+    stream.enqueue(Buffer.from('a'));
+    await vi.waitFor(async () => expect((await service.getStatus()).downloadedBytes).toBe(1));
+    stream.error(new Error('Connection lost'));
+    const expected = { state: 'error', error: 'download', downloadedBytes: 1 };
+    await expect(transfer).resolves.toMatchObject(expected);
+    await expect(service.getStatus()).resolves.toMatchObject(expected);
+    expect(await fs.readdir(directory)).toEqual([]);
+});
+
+it.each([
+    { outcome: 'disk-space', partialBytes: 0 },
+    { outcome: 'disk-space', partialBytes: 1 },
+    { outcome: 'cancelled', partialBytes: 1 },
+] as const)('reports $partialBytes bytes from a failed write on $outcome', async ({ outcome, partialBytes }) => {
+    const service = new SummaryModelService(directory, () => {});
+    const open = fs.open;
+    const { promise: finishWrite, resolve: releaseWrite } = Promise.withResolvers<void>();
+    let actualBytes: number | undefined;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(fs, 'open').mockImplementationOnce(async (...args) => {
+        const file = await open(...args);
+        const writeFile = file.writeFile.bind(file);
+        vi.spyOn(file, 'writeFile').mockImplementationOnce(async () => {
+            if (partialBytes) await writeFile(Buffer.from('a'));
+            actualBytes = (await file.stat()).size;
+            await finishWrite;
+            throw Object.assign(new Error('Disk full'), { code: 'ENOSPC' });
+        });
+        return file;
+    });
+    fetch.mockResolvedValueOnce(new Response('abc'));
+    const results = [service.download()];
+    try {
+        await vi.waitFor(() => expect(actualBytes).toBe(partialBytes));
+        if (outcome === 'cancelled') {
+            results.push(service.cancelDownload(), service.cancelDownload(), service.download());
+        }
+        releaseWrite();
+        const expected = outcome === 'cancelled' ?
+            { state: 'cancelled', downloadedBytes: partialBytes } :
+            { state: 'error', error: 'disk-space', downloadedBytes: partialBytes };
+        for (const result of await Promise.all(results)) expect(result).toMatchObject(expected);
+        await expect(service.getStatus()).resolves.toMatchObject(expected);
+        expect(fetch).toHaveBeenCalledOnce();
+        expect(await fs.readdir(directory)).toEqual([]);
+    } finally {
+        releaseWrite();
+        await service.stopAndWait();
+    }
+});
+
+it('cancels before opening the transfer and leaves an installed model available', async () => {
+    const service = new SummaryModelService(directory, () => {});
+    await fs.writeFile(path.join(directory, SUMMARY_MODEL_FILE + '.partial'), 'abandoned');
+    const transfer = service.download();
+    const cancelled = { state: 'cancelled', downloadedBytes: 0 };
+    await expect(service.cancelDownload()).resolves.toMatchObject(cancelled);
+    await expect(transfer).resolves.toMatchObject(cancelled);
+    expect(await fs.readdir(directory)).toEqual([]);
+
+    await fs.writeFile(path.join(directory, SUMMARY_MODEL_FILE), 'abc');
+    await expect(service.cancelDownload()).resolves.toMatchObject({ state: 'ready', downloadedBytes: 3 });
+    expect(await fs.readFile(path.join(directory, SUMMARY_MODEL_FILE), 'utf8')).toBe('abc');
+    expect(fetch).not.toHaveBeenCalled();
+});
+
+it('cancels at full transfer progress before the verified file is published', async () => {
+    let cancellation: Promise<unknown> | undefined;
+    const service = new SummaryModelService(directory, (snapshot) => {
+        if (snapshot.state === 'downloading' && snapshot.downloadedBytes === 3) cancellation = service.cancelDownload();
+    });
+    fetch.mockResolvedValue(new Response('abc'));
+    await expect(service.download()).resolves.toMatchObject({ state: 'cancelled', downloadedBytes: 3 });
+    await expect(cancellation).resolves.toMatchObject({ state: 'cancelled', downloadedBytes: 3 });
+    expect(await fs.readdir(directory)).toEqual([]);
+});
+
+it('keeps a verified installation when cancellation arrives while the rename is in flight', async () => {
+    const service = new SummaryModelService(directory, () => {});
+    const rename = fs.rename;
+    const { promise: renamed, resolve: signalRenamed } = Promise.withResolvers<void>();
+    const { promise: confirm, resolve: confirmRename } = Promise.withResolvers<void>();
+    vi.spyOn(fs, 'rename').mockImplementationOnce(async (...args) => {
+        await rename(...args);
+        signalRenamed();
+        await confirm;
+    });
+    fetch.mockResolvedValue(new Response('abc'));
+    const transfer = service.download();
+    await renamed;
+    const cancellation = service.cancelDownload();
+    confirmRename();
+    await expect(cancellation).resolves.toMatchObject({ state: 'ready', downloadedBytes: 3 });
+    await expect(transfer).resolves.toMatchObject({ state: 'ready', downloadedBytes: 3 });
+    expect(await fs.readdir(directory)).toEqual([SUMMARY_MODEL_FILE]);
+    expect(await fs.readFile(path.join(directory, SUMMARY_MODEL_FILE), 'utf8')).toBe('abc');
 });
 
 it('stops an incomplete transfer on shutdown and allows a new process to retry', async () => {
