@@ -64,6 +64,7 @@ export const TranscribedText: React.FC = observer(() => {
                 text: turn.text,
                 prefix: formatTranscriptSourcePrefix(turn),
                 startSeconds: turn.startSec,
+                playbackStartSeconds: turn.startSec,
                 endSeconds: turn.endSec,
                 timecode,
                 speaker: showSpeakers ? speakerLabels.get(turn.speakerId ?? '') ?? unknownSpeaker : undefined,
@@ -85,9 +86,9 @@ export const TranscribedText: React.FC = observer(() => {
         if (!store.workspace.isPlaying || plainSegments.length === 0) return [];
         const position = store.workspace.playbackPosition;
         return plainSegments.map((row, index) => {
-            const nextStart = plainSegments[index + 1]?.startSeconds;
-            const end = row.endSeconds ?? (nextStart > row.startSeconds ? nextStart : Infinity);
-            return position >= row.startSeconds && position < end;
+            const nextStart = plainSegments[index + 1]?.playbackStartSeconds;
+            const end = row.endSeconds ?? (nextStart > row.playbackStartSeconds ? nextStart : Infinity);
+            return position >= row.playbackStartSeconds && position < end;
         });
     }, { equals: (left, right) => left.length === right.length && left.every((value, index) => value === right[index]) }), [store.workspace, plainSegments]).get();
     const showUnknown = showReading ?
