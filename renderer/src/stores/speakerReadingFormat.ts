@@ -1,11 +1,18 @@
-import { DEFAULT_THEME } from '@mantine/core';
 import type { SessionTranscriptV1 } from 'electron/src/types/sessions';
 import { escapeHtml } from 'renderer/src/shared/lib/formatUtils';
 import type { SpeakerReadingParagraph, SpeakerReadingWord } from './speakerReading';
 import type { DeepReadonly } from './types';
 
-const speakerColors = ['blue', 'teal', 'grape', 'orange', 'pink', 'indigo', 'cyan', 'lime'];
-const readingColors = [...speakerColors, 'red', 'violet', 'green', 'yellow'];
+// Steps 1, 4 and 8 from the design ramps with readable tag text.
+const speakerRamps = [
+    ['#f6ffed', '#94de64', '#227804'],
+    ['#fff2e8', '#ff9c6e', '#ad2202'],
+    ['#f9f0ff', '#b37feb', '#391085'],
+    ['#fff0f6', '#ff85bf', '#9e1067'],
+    ['#fff1f0', '#ff7775', '#a8071a'],
+    ['#e6fffb', '#5cdbd3', '#006d75'],
+    ['#fff7e6', '#ffc069', '#ad4e00'],
+] as const;
 
 export interface SpeakerLabel {
     name: string;
@@ -16,20 +23,27 @@ export interface SpeakerLabel {
 
 export type SpeakerLabels = ReadonlyMap<string, SpeakerLabel>;
 
+export const unknownSpeaker: SpeakerLabel = {
+    name: 'Unknown speaker', clipboardBackground: '#fffbe6', accent: '#ffd666', color: '#874c00',
+};
+
 export const speakerLabelsFor = (transcript: DeepReadonly<SessionTranscriptV1> | null): SpeakerLabels =>
     new Map(transcript?.speakers?.speakers.map((speaker, index) => {
-        const shades = DEFAULT_THEME.colors[readingColors[index]];
-        // Larger legacy sessions keep distinct Reading colors beyond the named palette.
-        const hue = (index * 137.508) % 360;
+        const [clipboardBackground, accent, color] = speakerRamps[index % speakerRamps.length];
+        const label = { name: speaker.name, clipboardBackground, accent, color };
+        if (index < speakerRamps.length) return [speaker.id, label];
+
+        // Imported legacy sessions can outnumber the preset ramps. Vary lightness within the same hue.
+        const shade = Math.max(5, 72 / Math.ceil((index + 1) / speakerRamps.length));
         return [speaker.id, {
-            name: speaker.name, color: speakerColors[index % speakerColors.length],
-            accent: shades?.[5] ?? `hsl(${hue}, 68%, 53%)`,
-            clipboardBackground: shades?.[1] ?? `hsl(${hue}, 68%, 88%)`,
+            ...label,
+            accent: `color-mix(in srgb, ${label.accent} ${shade}%, ${label.color})`,
+            clipboardBackground: `color-mix(in srgb, ${label.clipboardBackground} ${100 - shade / 3}%, ${label.accent})`,
         }];
     }));
 
 export const speakerWordLabel = (word: SpeakerReadingWord, labels: SpeakerLabels): string => {
-    const parts = [labels.get(word.speakerId ?? '')?.name ?? 'Unknown speaker'];
+    const parts = [labels.get(word.speakerId ?? '')?.name ?? unknownSpeaker.name];
     if (word.overlap) parts.push('Overlapping voices');
     if (word.estimated) parts.push('Estimated from voice activity');
     return parts.join(' · ');
@@ -40,7 +54,7 @@ export const speakerReadingToHtml = (paragraphs: readonly SpeakerReadingParagrap
         const parts: string[] = [];
         let cursor = 0;
         for (const word of words) {
-            const background = labels.get(word.speakerId ?? '')?.clipboardBackground ?? DEFAULT_THEME.colors.gray[1];
+            const background = labels.get(word.speakerId ?? '')?.clipboardBackground ?? unknownSpeaker.clipboardBackground;
             const title = escapeHtml(speakerWordLabel(word, labels));
             const content = escapeHtml(text.slice(word.startChar, word.endChar));
             parts.push(escapeHtml(text.slice(cursor, word.startChar)),

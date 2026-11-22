@@ -21,14 +21,17 @@ export const findTranscriptMatches = (segments: ReadonlyArray<{ text: string }>,
     });
     const transcriptText = segments.map((segment) => segment.text).join(separator);
 
+    let firstSpan = 0;
     return Array.from(transcriptText.matchAll(pattern), (match) => {
         const matchEnd = match.index + match[0].length;
-        const ranges = segmentSpans.flatMap((span) => {
+        const ranges: TranscriptMatchRange[] = [];
+        while (firstSpan < segmentSpans.length && segmentSpans[firstSpan].end <= match.index) firstSpan++;
+        for (let i = firstSpan; i < segmentSpans.length && segmentSpans[i].start < matchEnd; i++) {
+            const span = segmentSpans[i];
             const start = Math.max(span.start, match.index) - span.start;
             const end = Math.min(span.end, matchEnd) - span.start;
-
-            return start < end ? [{ segmentIndex: span.segmentIndex, start, end }] : [];
-        });
+            if (start < end) ranges.push({ segmentIndex: span.segmentIndex, start, end });
+        }
 
         return { ranges };
     });

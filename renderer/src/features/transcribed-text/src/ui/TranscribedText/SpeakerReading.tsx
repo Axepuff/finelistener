@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
 import { formatSecondsReadable } from 'renderer/src/shared/lib';
 import type { SpeakerReadingParagraph, SpeakerReadingWord } from 'renderer/src/stores/speakerReading';
-import { speakerWordLabel, type SpeakerLabels } from 'renderer/src/stores/speakerReadingFormat';
+import { speakerWordLabel, unknownSpeaker, type SpeakerLabels } from 'renderer/src/stores/speakerReadingFormat';
 import styles from './TranscribedText.module.css';
+import { speakerStyle } from './speakerStyle';
 
 interface Props {
     paragraphs: SpeakerReadingParagraph[];
     labels: SpeakerLabels;
     highlightSegment: (text: string, paragraphIndex: number) => (start: number, end: number) => React.ReactNode;
 }
-
-const speakerFill = (accent = 'var(--mantine-color-gray-5)') => `color-mix(in srgb, ${accent} 32%, var(--mantine-color-body))`;
 
 const focusWord = (event: React.FocusEvent<HTMLParagraphElement>) => {
     const target = event.target;
@@ -32,48 +31,59 @@ const navigateWords = (event: React.KeyboardEvent<HTMLParagraphElement>) => {
 
 export const SpeakerReading: React.FC<Props> = ({ paragraphs, labels, highlightSegment }) => {
     const [activeWord, setActiveWord] = useState<SpeakerReadingWord | null>(null);
-    const displayed = new Set<string | null>();
-    for (const paragraph of paragraphs) {
-        for (const word of paragraph.words) displayed.add(word.speakerId);
-    }
-
     return (
-        <div className={styles.reading}>
-            <ul className={styles.speakerLegend} aria-label="Speaker colors">
-                {Array.from(labels).filter(([id]) => displayed.has(id)).map(([id, speaker]) => (
-                    <li key={id}><span style={{ backgroundColor: speakerFill(speaker.accent) }} />{speaker.name}</li>
-                ))}
-                {displayed.has(null) ? <li><span style={{ backgroundColor: speakerFill() }} />Unknown speaker</li> : null}
-            </ul>
+        <div>
             {paragraphs.map((paragraph, index) => {
                 const slice = highlightSegment(paragraph.text, index);
                 const firstTimed = paragraph.words.findIndex((word) => word.startSec !== null);
+                const passages: React.ReactNode[] = [];
                 let cursor = 0;
+                let run: React.ReactNode[] = [];
+                paragraph.words.forEach((word, wordIndex) => {
+                    const gap = slice(cursor, word.startChar);
+                    const content = slice(word.startChar, word.endChar);
+                    cursor = word.endChar;
+                    if (run.length > 0) run.push(<React.Fragment key={`gap-${word.startChar}`}>{gap}</React.Fragment>);
+                    else passages.push(<React.Fragment key={`gap-${word.startChar}`}>{gap}</React.Fragment>);
+
+                    const label = speakerWordLabel(word, labels);
+                    run.push(word.startSec !== null ? (
+                        <button
+                            key={word.startChar}
+                            type="button"
+                            className={styles.readingWord}
+                            data-regions={word.startSec}
+                            tabIndex={wordIndex === firstTimed ? 0 : -1}
+                            onClick={() => setActiveWord(word)}
+                            aria-current={word === activeWord ? 'true' : undefined}
+                            aria-label={`${paragraph.text.slice(word.startChar, word.endChar)} · ${label}`}
+                            title={`${label} · Play from ${formatSecondsReadable(word.startSec)}`}
+                        >{content}</button>
+                    ) : (
+                        <span key={word.startChar} className={styles.untimedWord} title={`${label} · No word timestamp`}>{content}</span>
+                    ));
+
+                    const next = paragraph.words[wordIndex + 1];
+                    if (!next || next.speakerId !== word.speakerId) {
+                        const speaker = labels.get(word.speakerId ?? '') ?? unknownSpeaker;
+                        // Keep punctuation with the passage preceding it and leave separating spaces uncolored.
+                        const punctuationEnd = next?.startChar ?? paragraph.text.length;
+                        const trailing = paragraph.text.slice(cursor, punctuationEnd).match(/^[^\s]+/u)?.[0] ?? '';
+                        if (trailing) {
+                            run.push(<React.Fragment key={`punctuation-${cursor}`}>{slice(cursor, cursor + trailing.length)}</React.Fragment>);
+                            cursor += trailing.length;
+                        }
+                        passages.push(
+                            <span key={word.startChar} className={styles.readingPassage} style={speakerStyle(speaker)} title={speaker.name}>
+                                {run}
+                            </span>,
+                        );
+                        run = [];
+                    }
+                });
                 return (
-                    <p key={paragraph.offset} className={styles.readingParagraph} onFocus={focusWord} onKeyDown={navigateWords}>
-                        {paragraph.words.map((word, wordIndex) => {
-                            const gap = slice(cursor, word.startChar);
-                            const content = slice(word.startChar, word.endChar);
-                            cursor = word.endChar;
-                            const label = speakerWordLabel(word, labels);
-                            const style = { backgroundColor: speakerFill(labels.get(word.speakerId ?? '')?.accent) };
-                            return (
-                                <React.Fragment key={word.startChar}>
-                                    {gap}
-                                    {word.startSec !== null ? (
-                                        <button
-                                            type="button" className={styles.readingWord} style={style}
-                                            data-regions={word.startSec} tabIndex={wordIndex === firstTimed ? 0 : -1}
-                                            onClick={() => setActiveWord(word)}
-                                            aria-current={word === activeWord ? 'true' : undefined}
-                                            aria-label={`${paragraph.text.slice(word.startChar, word.endChar)} · ${label}`}
-                                            title={`${label} · Play from ${formatSecondsReadable(word.startSec)}`}
-                                        >{content}</button>
-                                    ) : <span className={styles.readingWord} style={style} title={`${label} · No word timestamp`}>{content}</span>}
-                                </React.Fragment>
-                            );
-                        })}
-                        {slice(cursor, paragraph.text.length)}
+                    <p key={paragraph.offset} className={styles.transcriptParagraph} onFocus={focusWord} onKeyDown={navigateWords}>
+                        {passages}{slice(cursor, paragraph.text.length)}
                     </p>
                 );
             })}

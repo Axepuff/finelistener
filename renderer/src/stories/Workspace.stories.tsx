@@ -26,12 +26,17 @@ export const Transcript: Story = {
         await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
         await userEvent.type(canvas.getByRole('textbox', { name: 'Search transcript' }), 'recording');
         await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('1 of 2'));
-        await userEvent.click(canvas.getByRole('button', { name: 'Clear search' }));
+        const search = within(canvas.getByRole('search', { name: 'Transcript' }));
+        await userEvent.keyboard('{Enter}');
+        await expect(search.getByRole('status')).toHaveTextContent('2 of 2');
+        await userEvent.click(search.getByRole('button', { name: 'Previous search result' }));
+        await expect(search.getByRole('status')).toHaveTextContent('1 of 2');
+        await userEvent.click(search.getByRole('button', { name: 'Clear search' }));
         await userEvent.click(canvas.getByRole('radio', { name: 'Timecodes' }));
-        await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
+        await userEvent.click(canvas.getByText('00:00:04 – 00:00:08'));
         await waitFor(() => expect(canvas.getByLabelText('Current position: 00:04.00 / 00:12.00')).toBeVisible());
         await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
-        await userEvent.click(canvas.getByText('[00:00:08 - 00:00:12]'));
+        await userEvent.click(canvas.getByText('00:00:08 – 00:00:12'));
         await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
         await expect(canvas.getByText('Segment 00:04.00 — 00:08.00')).toBeVisible();
         await expect(canvas.getByRole('button', { name: 'Transcribe segment' })).toBeEnabled();
@@ -46,8 +51,8 @@ export const Transcript: Story = {
         await userEvent.keyboard('{ArrowRight}');
         await waitFor(() => expect(canvas.getByRole('radio', { name: 'Optimized' })).toBeChecked());
         await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
-        await userEvent.click(canvas.getByText('[00:00:00 - 00:00:04]'));
-        await userEvent.click(canvas.getByRole('radio', { name: 'Plain Text' }));
+        await userEvent.click(canvas.getByText('00:00:00 – 00:00:04'));
+        await userEvent.click(canvas.getByRole('radio', { name: 'Text' }));
     },
 };
 export const Empty: Story = { parameters: { scenario: 'empty' } };
@@ -66,10 +71,10 @@ export const SegmentResizing: Story = {
         const { adapter } = loaded.workspace as StoryWorkspace;
         await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
         await userEvent.click(canvas.getByRole('radio', { name: 'Timecodes' }));
-        await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
+        await userEvent.click(canvas.getByText('00:00:04 – 00:00:08'));
         await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
         await expect(canvas.getByText('Segment 00:04.00 — …')).toBeVisible();
-        await userEvent.click(canvas.getByText('[00:00:08 - 00:00:12]'));
+        await userEvent.click(canvas.getByText('00:00:08 – 00:00:12'));
         await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
         const waveform = Array.from(canvasElement.querySelectorAll('*'), element => element.shadowRoot)
             .find(root => root?.querySelector('[part~="region"]'));
@@ -113,7 +118,7 @@ export const SegmentResizing: Story = {
             await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
             await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
             await expect(canvas.getByText('Invalid segment: end must follow start')).toBeVisible();
-            await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
+            await userEvent.click(canvas.getByText('00:00:04 – 00:00:08'));
             await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
             await expect(canvas.getByText('Segment 00:04.00 — 00:08.00')).toBeVisible();
             await userEvent.click(canvas.getByRole('button', { name: 'Clear segment' }));
@@ -129,9 +134,9 @@ export const TranscriptionMetadata: Story = {
         const header = within(canvas.getByRole('banner'));
         await expect(header.getByText('English')).toBeVisible();
         await userEvent.click(canvas.getByRole('radio', { name: 'Timecodes' }));
-        await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
+        await userEvent.click(canvas.getByText('00:00:04 – 00:00:08'));
         await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
-        await userEvent.click(canvas.getByText('[00:00:08 - 00:00:12]'));
+        await userEvent.click(canvas.getByText('00:00:08 – 00:00:12'));
         await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
         await userEvent.click(canvas.getByRole('button', { name: 'Transcribe segment' }));
         await waitFor(() => expect(header.getByText('Russian')).toBeVisible());
@@ -163,12 +168,12 @@ export const PlayerStripMinimumWidth: Story = {
         await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
         await expect(within(canvas.getByRole('banner')).getByText('English')).toBeVisible();
         await userEvent.click(canvas.getByRole('radio', { name: 'Timecodes' }));
-        await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
+        await userEvent.click(canvas.getByText('00:00:04 – 00:00:08'));
         await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
         await expect(canvas.getByRole('button', { name: 'Clear segment' })).toBeEnabled();
         await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
         await expect(canvas.getByText('Invalid segment: end must follow start')).toBeVisible();
-        await userEvent.click(canvas.getByText('[00:00:08 - 00:00:12]'));
+        await userEvent.click(canvas.getByText('00:00:08 – 00:00:12'));
         await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
         const player = canvas.getByRole('region', { name: 'Audio player' }).getBoundingClientRect();
         const waveform = canvasElement.querySelector('.player-strip__waveform')!.getBoundingClientRect();
@@ -230,11 +235,11 @@ export const SpeakersBeforeAnalysis: Story = {
         await expect(page.getByRole('textbox', { name: 'Speaker analysis device' })).toHaveValue('CPU');
         await userEvent.keyboard('{Escape}');
         await expect(canvas.getByRole('button', { name: 'Copy transcript' })).toBeDisabled();
-        await expect(canvas.getByRole('button', { name: 'Save .txt' })).toBeDisabled();
+        await expect(canvas.getByRole('button', { name: 'Export' })).toBeDisabled();
         await userEvent.type(canvas.getByRole('textbox', { name: 'Search transcript' }), 'recording');
         await expect(canvas.getByRole('status')).toHaveTextContent('0 results');
         await userEvent.click(canvas.getByRole('button', { name: 'Clear search' }));
-        await userEvent.click(canvas.getByRole('radio', { name: 'Plain Text' }));
+        await userEvent.click(canvas.getByRole('radio', { name: 'Text' }));
         await expect(canvas.getByText(/Let us review the recording workflow/)).toBeVisible();
         await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
     },
@@ -248,15 +253,15 @@ export const Speakers: Story = {
         await expect(canvas.queryByRole('button', { name: "Seek to Alice's turn" })).not.toBeInTheDocument();
         await expect(canvas.queryByRole('button', { name: 'Assign speaker' })).not.toBeInTheDocument();
         await expect(canvas.queryByRole('button', { name: 'Analyze speakers again' })).not.toBeInTheDocument();
-        await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
+        await userEvent.click(canvas.getByText('00:00:04 – 00:00:08'));
         await waitFor(() => expect(canvas.getByLabelText('Current position: 00:04.00 / 00:12.00')).toBeVisible());
         await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
         await expect(canvas.getAllByTitle('Alice · No word timestamp')[0]).toBeVisible();
-        await userEvent.click(canvas.getByRole('radio', { name: 'Turns' }));
+        await userEvent.click(canvas.getByRole('radio', { name: 'Dialogue' }));
         const alice = canvas.getByRole('button', { name: "Seek to Alice's turn" });
         const bob = canvas.getByRole('button', { name: "Seek to Bob's turn" });
         await expect(alice).toBeVisible();
-        await expect(canvas.queryByText(/\[00:00:/)).not.toBeInTheDocument();
+        await expect(canvas.getByText('00:00:08', { exact: true })).toBeVisible();
         await expect(canvas.getAllByRole('button', { name: 'Assign speaker' })).toHaveLength(2);
         await expect(canvas.queryByRole('button', { name: 'Rename speaker' })).not.toBeInTheDocument();
         await expect(canvas.queryByRole('button', { name: 'Merge speakers' })).not.toBeInTheDocument();
@@ -317,9 +322,12 @@ export const SpeakerSettings: Story = {
     play: async ({ canvas, canvasElement }) => {
         const page = within(canvasElement.ownerDocument.body);
         await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
+        await userEvent.click(canvas.getByRole('button', { name: 'Rename speakers' }));
+        await waitFor(() => expect(page.getByRole('dialog', { name: 'Rename speaker' })).toBeVisible());
+        await userEvent.keyboard('{Escape}');
+        await waitFor(() => expect(canvas.getByRole('button', { name: 'Rename speakers' })).toHaveFocus());
         await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
-        await expect(page.getByRole('button', { name: 'Rename speaker' })).toBeEnabled();
-        await userEvent.click(page.getByRole('button', { name: 'Merge speakers' }));
+        await userEvent.click(await page.findByRole('button', { name: 'Merge speakers' }));
         await userEvent.click(page.getByRole('textbox', { name: 'Merge this speaker' }));
         await userEvent.click(page.getByRole('option', { name: 'Unknown speaker' }));
         await expect(page.getByRole('button', { name: 'Confirm merge' })).toBeEnabled();
