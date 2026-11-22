@@ -1,24 +1,27 @@
 import { ActionIcon, Alert, Button, Group, Modal, Paper, Progress, SegmentedControl, Stack, Text, ThemeIcon } from '@mantine/core';
 import { IconHeadphones, IconPlus } from '@tabler/icons-react';
+import { computed } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import React, { useMemo, useState, type MouseEvent } from 'react';
 import type { SessionSpeakerAssignment } from 'electron/src/types/sessions';
-import { formatTranscriptPrefix, formatTranscriptRegionLabel, projectTranscript, transcriptToHtml, transcriptToText, type TranscriptView } from 'renderer/src/stores/transcriptFormat';
+import { formatTranscriptSourcePrefix, projectTranscript, transcriptToHtml, transcriptToText, type TranscriptView } from 'renderer/src/stores/transcriptFormat';
 import { projectSpeakerReading } from 'renderer/src/stores/speakerReading';
-import { speakerLabelsFor, speakerReadingToHtml } from 'renderer/src/stores/speakerReadingFormat';
+import { speakerLabelsFor, speakerReadingToHtml, unknownSpeaker } from 'renderer/src/stores/speakerReadingFormat';
 import { useAppStore } from '../../../../../AppContext';
 import { RecordingSummary } from './RecordingSummary';
 import { TranscribedTextContent } from './TranscribedTextContent';
 import { TranscribedTextControls } from './TranscribedTextControls';
 import { SpeakerAnalysisStatus, SpeakerControls } from './SpeakerControls';
 import { findTranscriptMatches } from './search';
-import { parseTimeToSeconds } from './utils';
+import { formatSecondsReadable } from 'renderer/src/shared/lib';
+import { projectTextSentences } from './plainText';
+import styles from './TranscribedText.module.css';
 
 export const TranscribedText: React.FC = observer(() => {
     const store = useAppStore();
     const { transcription } = store;
     const [view, setView] = useState<TranscriptView | 'summary'>('plain');
-    const [speakerLayout, setSpeakerLayout] = useState<'reading' | 'turns'>('reading');
+    const [speakerLayout, setSpeakerLayout] = useState<'reading' | 'dialogue'>('reading');
     const transcriptView = view === 'summary' ? 'plain' : view;
     const showRegions = transcriptView !== 'plain';
     const showSpeakers = view === 'speakers';
@@ -37,7 +40,8 @@ export const TranscribedText: React.FC = observer(() => {
     const needsSpeakerAnalysis = showSpeakers && transcription.visibleTranscript?.speakers?.status !== 'completed';
     const displayedTranscript = needsSpeakerAnalysis || view === 'summary' ? null : transcription.visibleTranscript;
     const reading = useMemo(() => showReading ? projectSpeakerReading(displayedTranscript) : undefined, [showReading, displayedTranscript]);
-    const currentTextValue = reading ? reading.map((paragraph) => paragraph.text.trim()).join('\n\n') : transcriptToText(displayedTranscript, transcriptView);
+    const currentTextValue = useMemo(() => reading ? reading.map((paragraph) => paragraph.text.trim()).join('\n\n') :
+        transcriptToText(displayedTranscript, transcriptView), [reading, displayedTranscript, transcriptView]);
     const isInitialEmptyState = (
         store.lifecycleState === 'initial'
         || store.lifecycleState === 'importing'
@@ -45,24 +49,51 @@ export const TranscribedText: React.FC = observer(() => {
     const isReadyEmptyState = store.transcriptionWorkflow.state === 'loaded';
     const audioTitle = store.workspace.activeSession?.title;
     const speakerLabels = useMemo(() => speakerLabelsFor(displayedTranscript), [displayedTranscript]);
-    const plainSegments = (reading ? [] : projectTranscript(displayedTranscript, transcriptView)).map((segment, index) => ({
-        id: segment.members.map((member) => member.segment.rawSpan ? `${member.segment.rawSpan.segmentId}:${member.segment.rawSpan?.startChar}:${member.segment.rawSpan?.endChar}` : `legacy-${index}`).join('|'),
-        text: segment.text,
-        prefix: showRegions ? formatTranscriptPrefix(segment, showSpeakers ? displayedTranscript : null) : '',
-        startSeconds: segment.startSec,
-        timecode: formatTranscriptRegionLabel(segment),
-        speaker: showSpeakers ? speakerLabels.get(segment.speakerId ?? '') ?? { name: 'Unknown speaker', color: 'gray' } : undefined,
-        source: segment.source,
-        assignment: showSpeakers && transcription.savedTranscript?.speakers && segment.members.every((member) => member.segment.rawSpan) ? {
-            generation: transcription.savedTranscript.speakers.generation,
-            recognitionRevision: transcription.savedTranscript.speakers.recognitionRevision,
-            spans: segment.members.map((member) => ({ ...member.segment.rawSpan! })),
-        } : undefined,
-        children: showSpeakers ? segment.members.map((member) => ({ segment: member.segment })) : undefined,
-    }));
+    const savedSpeakers = transcription.savedTranscript?.speakers;
+    const plainSegments = useMemo(() => {
+        if (reading) return [];
+        if (!showRegions) return projectTextSentences(displayedTranscript);
+
+        return projectTranscript(displayedTranscript, transcriptView).map((turn, index) => {
+            const startLabel = formatSecondsReadable(turn.startSec);
+            const timecode = transcriptView === 'timecodes' && turn.endSec !== null ?
+                `${startLabel} – ${formatSecondsReadable(turn.endSec)}` : startLabel;
+            return {
+                id: turn.members.map(({ segment: { rawSpan } }) => rawSpan ?
+                     `${rawSpan.segmentId}:${rawSpan.startChar}:${rawSpan.endChar}` : `legacy-${index}`).join('|'),
+                text: turn.text,
+                prefix: formatTranscriptSourcePrefix(turn),
+                startSeconds: turn.startSec,
+                playbackStartSeconds: turn.startSec,
+                endSeconds: turn.endSec,
+                timecode,
+                speaker: showSpeakers ? speakerLabels.get(turn.speakerId ?? '') ?? unknownSpeaker : undefined,
+                source: turn.source,
+                assignment: showSpeakers && savedSpeakers && turn.members.every(({ segment }) => segment.rawSpan) ? {
+                    generation: savedSpeakers.generation,
+                    recognitionRevision: savedSpeakers.recognitionRevision,
+                    spans: turn.members.map(({ segment }) => ({ ...segment.rawSpan! })),
+                } : undefined,
+                children: showSpeakers ? turn.members.map(({ segment }) => ({ segment })) : undefined,
+            };
+        });
+    }, [displayedTranscript, reading, savedSpeakers, showRegions, showSpeakers, speakerLabels, transcriptView]);
     const currentSelectedSpan = selectedSpan?.sessionId === store.workspace.activeSessionId
-        && selectedSpan.generation === transcription.savedTranscript?.speakers?.generation ? selectedSpan.span : null;
-    const matches = findTranscriptMatches(reading ?? plainSegments, searchQuery, reading ? '' : ' ');
+        && selectedSpan.generation === savedSpeakers?.generation ? selectedSpan.span : null;
+    const matches = useMemo(() => findTranscriptMatches(reading ?? plainSegments, searchQuery, reading || !showRegions ? '' : ' '),
+        [reading, plainSegments, searchQuery, showRegions]);
+    const playingRows = useMemo(() => computed(() => {
+        if (!store.workspace.isPlaying || plainSegments.length === 0) return [];
+        const position = store.workspace.playbackPosition;
+        return plainSegments.map((row, index) => {
+            const nextStart = plainSegments[index + 1]?.playbackStartSeconds;
+            const end = row.endSeconds ?? (nextStart > row.playbackStartSeconds ? nextStart : Infinity);
+            return position >= row.playbackStartSeconds && position < end;
+        });
+    }, { equals: (left, right) => left.length === right.length && left.every((value, index) => value === right[index]) }), [store.workspace, plainSegments]).get();
+    const showUnknown = showReading ?
+        reading?.some(({ words }) => words.some(({ speakerId }) => speakerId === null)) ?? false :
+        plainSegments.some((row) => 'speaker' in row && row.speaker === unknownSpeaker);
     const activeMatchIndex = matches.length > 0 ? Math.min(selectedMatchIndex, matches.length - 1) : -1;
 
     const handleSearchChange = (value: string) => {
@@ -76,18 +107,37 @@ export const TranscribedText: React.FC = observer(() => {
     };
 
     const handleRegionClick = (event: MouseEvent<HTMLElement>) => {
-        const regionElement = (event.target as HTMLElement | null)?.closest('[data-regions]');
+        const region = (event.target as HTMLElement).closest<HTMLElement>('[data-regions]')?.dataset.regions;
+        if (region === undefined || (event.detail > 0 && window.getSelection()?.isCollapsed === false)) return;
 
-        if (!regionElement) return;
-
-        const region = regionElement.getAttribute('data-regions');
-        const time = region ? parseTimeToSeconds(region) : null;
-
-        if (time === null) return;
-
-        if (showReading) store.workspace.requestPlaybackTime(time, 'play');
-        else store.workspace.requestPlaybackTime(time);
+        store.workspace.requestPlaybackTime(Number(region), showReading || view === 'plain' ? 'play' : 'seek');
     };
+
+    const speakerControls = showSpeakers ? (
+        <SpeakerControls
+            key={store.workspace.activeSessionId ?? ''}
+            selectedSpan={currentSelectedSpan}
+            onCloseSpan={() => setSelectedSpan(null)}
+            labels={needsSpeakerAnalysis ? undefined : speakerLabels}
+            showUnknown={showUnknown}
+        >
+            {!needsSpeakerAnalysis ? (
+                <SegmentedControl
+                    aria-label="Speaker view"
+                    classNames={{ root: styles.speakerToggle, label: styles.toggleLabel }}
+                    data={[{ value: 'dialogue', label: 'Dialogue' }, { value: 'reading', label: 'Reading' }]}
+                    value={speakerLayout}
+                    onChange={(value) => {
+                        if (value === 'reading' || value === 'dialogue') {
+                            setSpeakerLayout(value);
+                            setSelectedSpan(null);
+                            setSelectedMatchIndex(0);
+                        }
+                    }}
+                />
+            ) : null}
+        </SpeakerControls>
+    ) : undefined;
 
     const handlePick = async () => {
         const result = await store.importAudio();
@@ -138,33 +188,17 @@ export const TranscribedText: React.FC = observer(() => {
                         currentTextValue={currentTextValue}
                         getClipboardHtml={() => reading ? speakerReadingToHtml(reading, speakerLabels) : transcriptToHtml(displayedTranscript, transcriptView)}
                         view={view}
-                        onViewChange={(value) => { setView(value); setSelectedSpan(null); }}
+                        onViewChange={(value) => { setView(value); setSelectedSpan(null); setSelectedMatchIndex(0); }}
                         searchQuery={searchQuery}
                         onSearchChange={handleSearchChange}
                         matchCount={matches.length}
                         activeMatchIndex={activeMatchIndex}
                         onPreviousMatch={() => moveToMatch(-1)}
                         onNextMatch={() => moveToMatch(1)}
-                        speakerControls={showSpeakers ? <SpeakerControls key={store.workspace.activeSessionId ?? ''} selectedSpan={currentSelectedSpan} onCloseSpan={() => setSelectedSpan(null)} /> : undefined}
                     />
                     {view === 'summary' ? <RecordingSummary key={store.workspace.activeSessionId} /> : (
                         <>
-                            {showSpeakers && !needsSpeakerAnalysis ? (
-                                <SegmentedControl
-                                    aria-label="Speaker view"
-                                    size="xs"
-                                    style={{ alignSelf: 'flex-start' }}
-                                    data={[{ value: 'reading', label: 'Reading' }, { value: 'turns', label: 'Turns' }]}
-                                    value={speakerLayout}
-                                    onChange={(value) => {
-                                        if (value === 'reading' || value === 'turns') {
-                                            setSpeakerLayout(value);
-                                            setSelectedSpan(null);
-                                            setSelectedMatchIndex(0);
-                                        }
-                                    }}
-                                />
-                            ) : null}
+                            {needsSpeakerAnalysis || isReadyEmptyState ? speakerControls : null}
                             <SpeakerAnalysisStatus />
 
                             {store.lifecycleState === 'transcribing' ? (
@@ -257,7 +291,10 @@ export const TranscribedText: React.FC = observer(() => {
                             ) : (
                                 <TranscribedTextContent
                                     reading={reading ? { paragraphs: reading, labels: speakerLabels } : undefined}
+                                    speakerHeader={speakerControls}
                                     showRegions={showRegions}
+                                    playingRows={playingRows}
+                                    selectedRange={view === 'timecodes' ? store.workspace.selectedSegment : null}
                                     plainSegments={plainSegments}
                                     matches={matches}
                                     activeMatchIndex={activeMatchIndex}

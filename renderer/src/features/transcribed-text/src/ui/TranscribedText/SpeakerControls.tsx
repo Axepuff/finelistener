@@ -1,14 +1,20 @@
 import type { SessionSpeakerAssignment } from 'electron/src/types/sessions';
-import { ActionIcon, Alert, Button, Divider, Group, Loader, Modal, Popover, Progress, Select, Stack, Text, TextInput } from '@mantine/core';
+import { ActionIcon, Alert, Button, Divider, Group, Loader, Modal, Popover, Progress, Select, Stack, Text, TextInput, UnstyledButton } from '@mantine/core';
 import { IconArrowMerge, IconPencil, IconRefresh, IconSettings } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
-import React, { useState } from 'react';
+import React, { useState, type ReactNode } from 'react';
 import { useAppStore } from 'renderer/src/AppContext';
 import type { CommandResult } from 'renderer/src/stores/types';
+import { unknownSpeaker, type SpeakerLabels } from 'renderer/src/stores/speakerReadingFormat';
+import { speakerStyle } from './speakerStyle';
+import styles from './TranscribedText.module.css';
 
 interface Props {
     selectedSpan: SessionSpeakerAssignment | null;
     onCloseSpan: () => void;
+    labels?: SpeakerLabels;
+    showUnknown: boolean;
+    children?: ReactNode;
 }
 
 const phaseLabels = {
@@ -19,7 +25,7 @@ const phaseLabels = {
     saving: 'Saving speaker labels',
 };
 
-export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onCloseSpan }) => {
+export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onCloseSpan, labels, showUnknown, children }) => {
     const store = useAppStore();
     const speakerState = store.speakers;
     const transcript = store.transcription.savedTranscript;
@@ -70,8 +76,28 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
         else void execute(store.analyzeSpeakers());
     };
 
+    const openRename = () => {
+        const first = speakers[0];
+        if (!first) return;
+        setSettingsOpened(false);
+        setEditError(null);
+        setRenameId(first.id);
+        setRenameValue(first.name);
+    };
+
     return (
-        <>
+        <div className={styles.speakerTools}>
+            {labels ? (
+                <ul className={styles.speakerLegend} aria-label="Speaker colors">
+                    {Array.from(labels, ([id, label]) => (
+                        <li key={id} className={styles.speakerTag} style={speakerStyle(label)}>{label.name}</li>
+                    ))}
+                    {showUnknown ? <li className={styles.speakerTag} style={speakerStyle(unknownSpeaker)}>{unknownSpeaker.name}</li> : null}
+                </ul>
+            ) : null}
+            {labels && speakers.length > 0 ? (
+                <UnstyledButton className={styles.renameSpeakers} disabled={isBusy} onClick={openRename}>Rename speakers</UnstyledButton>
+            ) : null}
             <Popover opened={settingsOpened} onChange={setSettingsOpened} width={260} position="bottom-end" shadow="md" trapFocus={true}>
                 <Popover.Target>
                     <ActionIcon size={30} variant={settingsOpened ? 'light' : 'subtle'} color="gray" aria-label="Speaker settings" title="Speaker settings" onClick={() => setSettingsOpened((opened) => !opened)} style={{ flexShrink: 0 }}>
@@ -93,14 +119,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                         </Button>
                         {hasSpeakers ? (
                             <>
-                                <Button size="compact-sm" variant="subtle" justify="flex-start" leftSection={<IconPencil size={15} />} disabled={isBusy || speakers.length === 0} onClick={() => {
-                                    const first = speakers[0];
-                                    if (!first) return;
-                                    setSettingsOpened(false);
-                                    setEditError(null);
-                                    setRenameId(first.id);
-                                    setRenameValue(first.name);
-                                }}>Rename speaker</Button>
+                                <Button size="compact-sm" variant="subtle" justify="flex-start" leftSection={<IconPencil size={15} />} disabled={isBusy || speakers.length === 0} onClick={openRename}>Rename speaker</Button>
                                 <Button size="compact-sm" variant="subtle" justify="flex-start" leftSection={<IconArrowMerge size={15} />} disabled={isBusy || speakers.length === 0} onClick={() => {
                                     setSettingsOpened(false);
                                     setEditError(null);
@@ -113,6 +132,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                     </Stack>
                 </Popover.Dropdown>
             </Popover>
+            {children}
             <Modal opened={confirmRerun} onClose={() => setConfirmRerun(false)} title="Replace speaker labels?" centered={true}>
                 <Stack gap="sm">
                     <Text size="sm">A successful analysis will replace speaker names, assignments, and merges. The current labels stay in place if analysis fails or is cancelled.</Text>
@@ -176,7 +196,7 @@ export const SpeakerControls: React.FC<Props> = observer(({ selectedSpan, onClos
                     }}>Save assignment</Button>
                 </Stack>
             </Modal>
-        </>
+        </div>
     );
 });
 

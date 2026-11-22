@@ -238,6 +238,18 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
             sessions = sessions.filter((item) => item.id !== id);
             return Promise.resolve(true);
         },
+        renameSpeaker: (id, speakerId, name) => {
+            const saved = session.transcript;
+            if (id !== session.id || !saved?.speakers?.speakers.some((speaker) => speaker.id === speakerId)) {
+                return Promise.reject(new Error('Demo speaker is unavailable'));
+            }
+            const speakers = saved.speakers.speakers.map((speaker) => speaker.id === speakerId ? { ...speaker, name } : speaker);
+            session = { ...session, updatedAt: Date.now(), transcript: {
+                ...saved, speakers: { ...saved.speakers, speakers },
+            } };
+            sessions = sessions.map((item) => item.id === session.id ? session : item);
+            return Promise.resolve(session);
+        },
         mergeSpeakers: (_id, sourceId, targetId) => {
             const saved = session.transcript;
             if (!saved?.speakers) return Promise.reject(new Error('Demo speaker metadata is unavailable'));
