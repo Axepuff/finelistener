@@ -115,7 +115,7 @@ export const RecordingSummary: React.FC<Props> = observer(({ format, onFormatCha
                                 <IconAlertCircle size={14} aria-hidden="true" />{promptError}
                             </span>} />}
                     </div>
-                    {promptError && <ShowInLog />}
+                    {promptError && <ShowInLog details={`Summary prompt validation: characters=${prompt.length}; characterLimit=${maxSummaryPromptLength}; ${promptError}`} />}
                     {!collapsed && !summary.isRunning && !resume && !generationError && <div className={styles.row}>
                         <span className={`${styles.caption} ${styles.grow}`} id={hintId}>{hint}</span>
                         {generateButton}

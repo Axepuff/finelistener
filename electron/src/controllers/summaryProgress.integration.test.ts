@@ -75,7 +75,7 @@ const createSession = async (text: string, oldResult = false, multiRow = false) 
 const controller = (sessions: SessionsService, onProgress?: (event: SummaryProgressEvent) => void) => {
     const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>();
     const ipc = { handle: (name: string, fn: (...args: unknown[]) => Promise<unknown>) => handlers.set(name, fn) } as unknown as IpcMain;
-    const window = { isDestroyed: () => false, webContents: { send: (_channel: string, event: SummaryProgressEvent) => onProgress?.(event) } } as unknown as BrowserWindow;
+    const window = { isDestroyed: () => false, webContents: { isDestroyed: () => false, send: (channel: string, event: SummaryProgressEvent) => { if (channel === 'sessions:summary-progress') onProgress?.(event); } } } as unknown as BrowserWindow;
     const workflow = registerSummaryController(ipc, () => window, sessions, () => false, () => Promise.resolve('fake.gguf'));
     return { ...workflow, stop: workflow.stopAndWait, generate: (options = defaultRecordingSummaryOptions) => handlers.get('sessions:generate-summary')!(undefined, 'speech', options) };
 };

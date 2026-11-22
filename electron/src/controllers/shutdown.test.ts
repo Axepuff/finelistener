@@ -24,7 +24,8 @@ vi.mock('electron', () => ({
     BrowserWindow: class {
         loadURL = () => Promise.resolve();
         on = vi.fn();
-        webContents = { send: vi.fn() };
+        isDestroyed = () => false;
+        webContents = { isDestroyed: () => false, send: vi.fn() };
     },
     screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1200, height: 800 } }) },
     protocol: { registerSchemesAsPrivileged: vi.fn(), handle: vi.fn() },

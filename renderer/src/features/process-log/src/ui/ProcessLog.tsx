@@ -1,10 +1,15 @@
 import { Button, Group, Stack, Text } from '@mantine/core';
 import { observer } from 'mobx-react-lite';
-import { FC } from 'react';
+import { type FC, useEffect, useRef } from 'react';
 import { useAppStore } from 'renderer/src/AppContext';
 
 export const ProcessLog: FC = observer(() => {
     const { activityLog } = useAppStore();
+    const contentRef = useRef<HTMLParagraphElement>(null);
+    const { focusRequest } = activityLog;
+    useEffect(() => {
+        if (contentRef.current) contentRef.current.scrollTop = contentRef.current.scrollHeight;
+    }, [focusRequest]);
 
     return (
         <Stack gap={8} p={12} h="100%" style={{ minHeight: 0 }}>
@@ -15,6 +20,7 @@ export const ProcessLog: FC = observer(() => {
                 </Button>
             </Group>
             <Text
+                ref={contentRef}
                 size="sm"
                 style={{
                     whiteSpace: 'pre-wrap',

@@ -19,6 +19,10 @@ export const ModelCards: Story = {
         await expect(settings.getByText('00:12 · 16 kHz · mono')).toBeVisible();
         await userEvent.click(settings.getByRole('button', { name: 'Download Large' }));
         await waitFor(() => expect(settings.getByRole('alert')).toHaveTextContent('Check your connection'));
+        await userEvent.click(settings.getByRole('button', { name: 'Show in log' }));
+        await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent('Whisper model large download failed');
+        await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent('Illustrative download failure');
+        await userEvent.click(canvas.getByRole('button', { name: 'Log' }));
         await expect(settings.getByRole('radio', { name: 'Base' })).toBeChecked();
         await expect(settings.getByRole('button', { name: 'Transcribe' })).toBeEnabled();
         await expect(within(canvasElement.ownerDocument.body).queryByRole('dialog')).not.toBeInTheDocument();
@@ -40,7 +44,7 @@ export const ModelCards: Story = {
         advanced.focus();
         await userEvent.keyboard('{Enter}');
         await expect(advanced).toHaveAttribute('aria-expanded', 'true');
-        await expect(settings.getByRole('textbox', { name: 'Max context' })).toBeVisible();
+        await expect(await settings.findByRole('textbox', { name: 'Max context' })).toBeVisible();
         await expect(settings.getByRole('textbox', { name: 'Max segment length' })).toBeVisible();
         await expect(settings.getByRole('checkbox', { name: 'Split on words' })).toBeChecked();
         await expect(settings.getByRole('checkbox', { name: 'Use voice activity detection' })).toBeChecked();

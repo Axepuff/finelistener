@@ -1,4 +1,5 @@
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
+import type { ActivityLogStore } from './activityLogStore';
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { RendererAdapter } from './rendererAdapter';
 import { commandFailure, commandSuccess, type CommandResult, type DeepReadonly } from './types';
@@ -22,11 +23,11 @@ export class WhisperModelStore {
 
     private disposed = false;
 
-    constructor(private readonly adapter: RendererAdapter | null) {
-        makeAutoObservable<this, 'adapter' | 'unsubscribeProgress' | 'requestId' | 'lifecycleId' | 'initialized' | 'disposed'>(
+    constructor(private readonly adapter: RendererAdapter | null, private readonly activityLog: ActivityLogStore | null = null) {
+        makeAutoObservable<this, 'adapter' | 'activityLog' | 'unsubscribeProgress' | 'requestId' | 'lifecycleId' | 'initialized' | 'disposed'>(
             this,
             {
-                adapter: false,
+                adapter: false, activityLog: false,
                 unsubscribeProgress: false,
                 requestId: false,
                 lifecycleId: false,
@@ -70,6 +71,7 @@ export class WhisperModelStore {
                 this.downloadErrors[name] = 'Could not cancel the download. Please try again.';
             });
             console.error('Failed to cancel Whisper download', error);
+            if (!this.disposed) this.activityLog?.appendFailure(`Whisper model ${name} cancellation failed`, error);
             return commandFailure('Could not cancel the download. Please try again.');
         } finally {
             runInAction(() => { if (!this.isDownloadActive) this.cancellingValue = false; });
@@ -128,6 +130,7 @@ export class WhisperModelStore {
             }
 
             console.error('Failed to load Whisper models', error);
+            this.activityLog?.appendFailure('Whisper model list refresh failed', error);
 
             return commandFailure('Failed to load the available models.');
         }
@@ -153,6 +156,7 @@ export class WhisperModelStore {
         } catch (error: unknown) {
             if (this.cancellingValue) return commandSuccess(undefined);
             console.error('Failed to download Whisper model', error);
+            if (!this.disposed) this.activityLog?.appendFailure(`Whisper model ${name} download failed`, error);
             const message = 'Failed to download the model. Check your connection and retry.';
             runInAction(() => { if (!this.disposed) this.downloadErrors[name] = message; });
             return commandFailure(message);

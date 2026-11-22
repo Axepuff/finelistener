@@ -80,10 +80,10 @@ export class AppStore {
 
     constructor(private readonly adapter: RendererAdapter | null) {
         this.sessions = new SessionsStore(adapter);
-        this.transcription = new TranscriptionStore(adapter);
+        this.transcription = new TranscriptionStore(adapter, this.activityLog);
         this.speakers = new SpeakerAnalysisStore(adapter);
-        this.summary = new SummaryStore(adapter, this.operations);
-        this.whisperModels = new WhisperModelStore(adapter);
+        this.summary = new SummaryStore(adapter, this.operations, this.activityLog);
+        this.whisperModels = new WhisperModelStore(adapter, this.activityLog);
         this.recording = new SystemAudioRecorderStore({
             adapter,
             activityLog: this.activityLog,
@@ -91,7 +91,7 @@ export class AppStore {
             onSessionImported: (session) => this.acceptSession(session),
             onRecoveryChanged: () => { void this.recordingRecovery.refresh(); },
         });
-        this.recordingRecovery = new RecordingRecoveryStore(adapter, this.operations, (session) => this.acceptSession(session));
+        this.recordingRecovery = new RecordingRecoveryStore(adapter, this.operations, (session) => this.acceptSession(session), this.activityLog);
         makeAutoObservable<this, 'adapter' | 'unsubscribeFunctions' | 'transcriptionRequestId' | 'speakerStopCompletion' | 'speakerStoppingOperationId' | 'speakerAnalysisRequestStartedOperationId'>(this, {
             adapter: false,
             activityLog: false,
@@ -591,6 +591,7 @@ export class AppStore {
             await this.awaitSpeakerStop(operation);
             if (!this.operations.owns(operation) || this.disposed) return commandSuccess(undefined);
             console.error('Speaker analysis failed', error);
+            this.activityLog.appendFailure(`Speaker analysis failed · session ${sessionId}`, error);
             const message = speakerErrorMessage(error) ?? 'Speaker analysis failed. The saved transcript is unchanged.';
             this.speakers.fail(message);
 
@@ -626,7 +627,10 @@ export class AppStore {
         try {
             const stopped = await this.adapter.stopSpeakerAnalysis();
             if (!this.operations.owns(operation)) return commandSuccess(undefined);
-            if (!stopped) return commandFailure('Speaker analysis could not be stopped.');
+            if (!stopped) {
+                this.activityLog.appendFailure(`Speaker stop failed · operation ${operation.id}`, 'The service did not confirm cancellation.');
+                return commandFailure('Speaker analysis could not be stopped.');
+            }
 
             runInAction(() => {
                 this.speakers.cancel();
@@ -636,6 +640,7 @@ export class AppStore {
             return commandSuccess(undefined);
         } catch (error: unknown) {
             console.error('Failed to stop speaker analysis', error);
+            if (this.operations.owns(operation) && !this.disposed) this.activityLog.appendFailure(`Speaker stop failed · operation ${operation.id}`, error);
             return commandFailure('Speaker analysis could not be stopped.');
         } finally {
             this.speakerStopCompletion = null;
@@ -672,6 +677,7 @@ export class AppStore {
             await this.awaitSpeakerStop(operation);
             if (!this.operations.owns(operation) || this.disposed) return commandSuccess(undefined);
             console.error('Failed to prepare speaker analysis assets', error);
+            this.activityLog.appendFailure('Speaker component preparation failed', error);
             const message = speakerErrorMessage(error) ?? 'Speaker analysis assets could not be prepared.';
             this.speakers.fail(message);
             return commandFailure(message);
@@ -875,6 +881,12 @@ export class AppStore {
             console.error('Failed to update the active session', error);
         });
         if (this.workspace.activeSessionId !== session.id) this.speakers.reset();
+        for (const source of session.transcript?.sourceRun?.sources ?? []) {
+            if (source.status !== 'completed') this.activityLog.appendEvent(`Saved transcription result · session ${session.id}: source=${source.source}; status=${source.status}; error=${source.error ?? 'not available'}`);
+        }
+        for (const track of session.tracks ?? []) {
+            if (track.failure) this.activityLog.appendFailure(`Recording source stopped early · session ${session.id} · ${track.source}`, track.failure);
+        }
         this.workspace.replaceWorkspace(session);
         this.transcription.replaceSavedTranscript(session.transcript ?? null);
         void this.sessions.refresh();

@@ -3,9 +3,11 @@ import { IconAlertCircle, IconAlertTriangle } from '@tabler/icons-react';
 import type React from 'react';
 import { useAppStore } from '../AppContext';
 
-export const ShowInLog: React.FC = () => {
+interface ShowInLogProps { details?: string; }
+
+export const ShowInLog: React.FC<ShowInLogProps> = ({ details }) => {
     const { activityLog } = useAppStore();
-    return <Button variant="subtle" size="compact-xs" onClick={() => activityLog.show()}>Show in log</Button>;
+    return <Button variant="subtle" size="compact-xs" onClick={() => { if (details) activityLog.appendEvent(details); activityLog.show(); }}>Show in log</Button>;
 };
 
 interface Props {

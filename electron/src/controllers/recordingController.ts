@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { reportActivityFailure } from './activityLog';
 import path from 'path';
 import { app, shell, type BrowserWindow, type IpcMain } from 'electron';
 import { RecordingService, type RecordingStartOptions } from '../services/RecordingService';
@@ -101,6 +102,7 @@ export function registerRecordingController(
         try {
             return await service.startRecording(options ?? {});
         } catch (error) {
+            reportActivityFailure(getMainWindow(), 'Recording start failed', error);
             if (error instanceof RecordingStorageFullError) return { error: 'recording-storage-full' };
             throw error;
         }

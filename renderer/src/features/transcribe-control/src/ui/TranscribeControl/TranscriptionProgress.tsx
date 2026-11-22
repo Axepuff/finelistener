@@ -81,7 +81,6 @@ export const TranscriptionProgress: React.FC = observer(() => {
             if (!result.ok && operationId === store.operations.active?.id && kind === store.operations.kind
                 && sessionId === store.workspace.activeSessionId) {
                 setStopError({ operationId, kind, sessionId, message: result.message });
-                store.activityLog.appendEvent(result.message);
             }
         } finally {
             setStopPending(false);

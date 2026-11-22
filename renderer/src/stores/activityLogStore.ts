@@ -1,4 +1,5 @@
 import { makeAutoObservable } from 'mobx';
+import { formatActivityFailure } from '../../../electron/src/utils/errorDetails';
 
 export class ActivityLogStore {
     isOpen = false;
@@ -30,6 +31,10 @@ export class ActivityLogStore {
 
     appendProcessOutput(output: string): void {
         this.contentValue += output;
+    }
+
+    appendFailure(action: string, error: unknown): void {
+        this.appendEvent(formatActivityFailure(action, error));
     }
 
     clear(): void {

@@ -25,7 +25,8 @@ export class SummaryModelService {
     private current = status('missing');
     private activeDownload: { controller: AbortController; promise: Promise<SummaryModelStatus> } | null = null;
 
-    constructor(private readonly directory: string, private readonly onChange: (value: SummaryModelStatus) => void) {
+    constructor(private readonly directory: string, private readonly onChange: (value: SummaryModelStatus) => void,
+        private readonly onFailure?: (action: string, error: unknown) => void) {
         this.file = path.join(directory, artifact.fileName);
         // A previous process may have exited with transcript text still on disk.
         this.promptCleanup = fs.readdir(directory, { withFileTypes: true })
@@ -73,6 +74,7 @@ export class SummaryModelService {
         } catch (error) {
             if (before === this.current && !this.shutdown.signal.aborted) {
                 console.error('Could not inspect the summary model', error);
+                this.onFailure?.('Summary model inspection failed', error);
                 if (!interrupted) this.current = status('error', 0, 'storage');
             }
         }
@@ -106,6 +108,7 @@ export class SummaryModelService {
                     return this.publish(this.shutdown.signal.aborted ? status('missing') : status('cancelled', downloadedBytes));
                 }
                 console.error('Could not install the summary model', error);
+                this.onFailure?.(`Summary model download failed · reached ${downloadedBytes} bytes`, error);
                 const diskFull = (error as NodeJS.ErrnoException | undefined)?.code === 'ENOSPC';
                 return this.publish(status('error', downloadedBytes, diskFull ? 'disk-space' : 'download'));
             },

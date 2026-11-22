@@ -58,12 +58,19 @@ export const Downloading: Story = { parameters: { scenario: 'summary-downloading
 export const DownloadFailed: Story = { parameters: { scenario: 'summary-download-error' }, play: async (context) => {
     await openSummary(context);
     await expect(context.canvas.getByText('1.17 / 2.50 GB')).toBeVisible();
+    await userEvent.click(context.canvas.getByRole('button', { name: 'Show in log' }));
+    await expect(context.canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent('reason=download');
+    await expect(context.canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent('reached=1170000000/');
+    await userEvent.click(context.canvas.getByRole('button', { name: 'Log' }));
     await userEvent.click(context.canvas.getByRole('button', { name: 'Retry download' }));
     await waitFor(() => expect(context.canvas.getByRole('button', { name: 'Generate summary' })).toBeEnabled());
     await expect(context.canvas.queryByRole('tabpanel')).not.toBeInTheDocument();
 } };
 export const DiskFull: Story = { parameters: { scenario: 'summary-disk-full' }, play: async (context) => {
     await openSummary(context);
+    await userEvent.click(context.canvas.getByRole('button', { name: 'Show in log' }));
+    await expect(context.canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent('reason=disk-space');
+    await userEvent.click(context.canvas.getByRole('button', { name: 'Log' }));
     await userEvent.click(context.canvas.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(context.canvas.getByRole('button', { name: 'Generate summary' })).toBeEnabled());
     await expect(context.canvas.queryByRole('tabpanel')).not.toBeInTheDocument();
@@ -135,6 +142,10 @@ export const PromptTooLong: Story = {
         await expect(canvas.getByRole('textbox', { name: 'Prompt' })).toHaveValue(longPrompt);
         reply.resolve({ ok: false, reason: 'prompt-too-long' });
         await expect(await canvas.findByText(message)).toBeVisible();
+        await userEvent.click(canvas.getByRole('button', { name: 'Show in log' }));
+        await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent('reason=prompt-too-long');
+        await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent(`characters=${longPrompt.length}`);
+        await userEvent.click(canvas.getByRole('button', { name: 'Log' }));
         await expect(canvas.getByRole('button', { name: 'Generate summary' })).toBeDisabled();
 
         await userEvent.click(canvas.getByRole('radio', { name: 'Text' }));
@@ -216,6 +227,10 @@ export const GenerationFailed: Story = {
         await userEvent.click(await context.canvas.findByRole('button', { name: 'Generate summary' }));
         const error = await context.canvas.findByRole('alert');
         await expect(error).toHaveTextContent('Could not generate the summary.');
+        await userEvent.click(within(error).getByRole('button', { name: 'Show in log' }));
+        await expect(context.canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent('Summary generation failed');
+        await expect(context.canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent('reason=failed');
+        await userEvent.click(context.canvas.getByRole('button', { name: 'Log' }));
         await expect(within(error).getByRole('button', { name: 'Generate summary' })).toBeEnabled();
         await userEvent.click(within(error).getByRole('button', { name: 'Generate summary' }));
         await expect(await context.canvas.findByRole('tabpanel', { name: 'Brief overview' })).toBeVisible();

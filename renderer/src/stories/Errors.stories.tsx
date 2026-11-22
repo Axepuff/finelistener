@@ -26,6 +26,7 @@ export const Incomplete: Story = {
             log.focus();
             await userEvent.keyboard('{Enter}');
             await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveFocus();
+            await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent('source=microphone; status=failed');
             await userEvent.click(canvas.getByRole('button', { name: 'Log' }));
             await userEvent.click(alert.getByRole('button', { name: 'Retry remaining sources' }));
             await waitFor(() => expect(canvas.queryByRole('alert')).not.toBeInTheDocument());
@@ -61,6 +62,9 @@ export const SpeakerFailure: Story = {
         try {
             const alert = within(canvas.getByRole('alert'));
             await expect(alert.getByText(/GPU unavailable. Select CPU/)).toBeVisible();
+            await userEvent.click(alert.getByRole('button', { name: 'Show in log' }));
+            await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent('SPEAKER_GPU_UNAVAILABLE');
+            await userEvent.click(canvas.getByRole('button', { name: 'Log' }));
             await userEvent.click(alert.getByRole('textbox', { name: 'Run on' }));
             await userEvent.click(within(canvasElement.ownerDocument.body).getByRole('option', { name: /^CPU$/ }));
             await expect(retry).not.toHaveBeenCalled();
@@ -78,6 +82,9 @@ export const ComponentFailure: Story = {
         const analyze = spyOn(adapter, 'analyzeSpeakers');
         try {
             const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
+            await userEvent.click(settings.getByRole('button', { name: 'Show in log' }));
+            await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent('Synthetic component failure');
+            await userEvent.click(canvas.getByRole('button', { name: 'Log' }));
             await userEvent.click(settings.getByRole('button', { name: 'Retry download' }));
             await waitFor(() => expect(store.speakers.componentReady).toBe(true));
             await expect(retry).toHaveBeenCalledOnce();
@@ -141,6 +148,7 @@ const recoverActiveStop: NonNullable<Story['play']> = async ({ canvas, loaded })
     const analyzing = store.operations.kind === 'analyzing-speakers';
     const stop = spyOn(adapter, analyzing ? 'stopSpeakerAnalysis' : 'stopTranscription');
     const operationId = store.operations.active?.id;
+    store.activityLog.appendProcessOutput('Earlier diagnostic output\n'.repeat(120));
     try {
         const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
         await userEvent.click(settings.getByRole('button', { name: analyzing ? 'Skip speaker analysis' : 'Stop transcription' }));
@@ -150,7 +158,13 @@ const recoverActiveStop: NonNullable<Story['play']> = async ({ canvas, loaded })
         log.focus();
         await userEvent.keyboard('{Enter}');
         await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveFocus();
-        await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent(analyzing ? 'Speaker analysis could not be stopped.' : 'Failed to stop transcription.');
+        const logRegion = canvas.getByRole('region', { name: 'Process log' });
+        await expect(logRegion).toHaveTextContent('Synthetic stop failure');
+        const logText = within(logRegion).getByText(/Synthetic stop failure/);
+        await expect(logText.scrollTop).toBeGreaterThan(0);
+        await expect(logText.scrollHeight - logText.clientHeight - logText.scrollTop).toBeLessThanOrEqual(1);
+        await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent(analyzing ? 'Speaker stop failed' : 'Transcription stop failed');
+        await expect(alert.queryByText(/Synthetic stop failure/)).not.toBeInTheDocument();
         await userEvent.click(canvas.getByRole('button', { name: 'Log' }));
         await userEvent.click(alert.getByRole('button', { name: analyzing ? 'Retry skipping' : 'Retry stop' }));
         await waitFor(() => expect(store.operations.isBusy).toBe(false));
@@ -181,6 +195,7 @@ export const LateStopFailure: Story = {
             await waitFor(() => expect(canvas.getByRole('button', { name: 'Skip speaker analysis' })).toBeEnabled());
             await expect(canvas.queryByRole('alert')).not.toBeInTheDocument();
             await expect(store.operations.kind).toBe('analyzing-speakers');
+            await expect(store.activityLog.content).not.toContain('Synthetic late stop failure');
         } finally { stop.mockRestore(); }
     },
 };

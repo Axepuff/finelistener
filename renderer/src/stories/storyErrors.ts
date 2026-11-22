@@ -36,8 +36,8 @@ export const createErrorWorkspace = async (scenario: ErrorScenario) => {
     if (scenario === 'source-stopped') session.tracks = [{ source: 'system', filePath: '/synthetic/system.wav', startOffsetMs: 0, failure: 'Synthetic stopped source' }];
     adapter.getSession = (id) => Promise.resolve(structuredClone({ ...session, id }));
     if (scenario !== 'storage') {
-        store.workspace.replaceWorkspace(session);
-        store.transcription.replaceSavedTranscript(session.transcript ?? null);
+        const opened = await store.openSession(session.id);
+        if (!opened.ok) throw new Error(opened.message);
     }
     if (scenario === 'previous') {
         const transcribe = adapter.transcribe;
