@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { SummaryGenerationResult } from 'electron/src/types/sessions';
 import { observer } from 'mobx-react-lite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { Home } from '../Home';
@@ -100,18 +101,43 @@ export const DownloadThenGenerate: Story = {
 };
 
 export const PromptTooLong: Story = {
-    parameters: { scenario: 'summary-prompt-error' },
     play: async (context) => {
-        const { canvas } = context;
+        const { canvas, loaded } = context;
+        const { adapter } = loaded.workspace as StoryWorkspace;
+        const reply = Promise.withResolvers<SummaryGenerationResult>();
+        const generateSummary = adapter.generateSummary;
+        adapter.generateSummary = () => {
+            adapter.generateSummary = generateSummary;
+            return reply.promise;
+        };
+        const longPrompt = 'Explain each topic with examples and quote the original passage in full. '.repeat(42);
+        const message = 'The prompt is too long for the available context. Shorten it and try again.';
         await openSummary(context);
         const prompt = canvas.getByRole('textbox', { name: 'Prompt' });
         await userEvent.clear(prompt);
-        await userEvent.paste('Explain each topic with examples and quote the original passage in full. '.repeat(42));
+        await userEvent.paste(longPrompt);
         await waitFor(async () => expect(await canvas.findByRole('button', { name: 'Generate summary' })).toBeEnabled());
         await userEvent.click(canvas.getByRole('button', { name: 'Generate summary' }));
-        await expect(await canvas.findByText('The prompt is too long for the available context. Shorten it and try again.')).toBeVisible();
-        await expect(prompt).toHaveAttribute('aria-invalid', 'true');
-        await expect(prompt).toHaveAccessibleDescription('The prompt is too long for the available context. Shorten it and try again.');
+        await canvas.findByRole('button', { name: 'Stop generation' });
+        await userEvent.click(canvas.getByRole('radio', { name: 'Text' }));
+        await openSummary(context);
+        await expect(canvas.getByRole('textbox', { name: 'Prompt' })).toHaveValue(longPrompt);
+        reply.resolve({ ok: false, reason: 'prompt-too-long' });
+        await expect(await canvas.findByText(message)).toBeVisible();
+        await expect(canvas.getByRole('button', { name: 'Generate summary' })).toBeDisabled();
+
+        await userEvent.click(canvas.getByRole('radio', { name: 'Text' }));
+        await openSummary(context);
+        const reopenedPrompt = canvas.getByRole('textbox', { name: 'Prompt' });
+        await expect(reopenedPrompt).toHaveValue(longPrompt);
+        await expect(reopenedPrompt).toHaveAttribute('aria-invalid', 'true');
+        await expect(reopenedPrompt).toHaveAccessibleDescription(message);
+        await userEvent.clear(reopenedPrompt);
+        await userEvent.paste('Summarize the decisions.');
+        await expect(canvas.queryByText(message)).not.toBeInTheDocument();
+        await expect(canvas.getByRole('button', { name: 'Generate summary' })).toBeEnabled();
+        await userEvent.clear(reopenedPrompt);
+        await userEvent.paste(longPrompt);
         await expect(canvas.getByRole('button', { name: 'Generate summary' })).toBeDisabled();
     },
 };

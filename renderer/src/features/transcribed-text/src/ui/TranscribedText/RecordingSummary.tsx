@@ -23,8 +23,6 @@ interface Props {
     continuation?: SummaryContinuation;
 }
 
-const contextError = 'The prompt is too long for the available context. Shorten it and try again.';
-
 export const RecordingSummary: React.FC<Props> = observer(({ format, onFormatChange, continuation }) => {
     const store = useAppStore();
     const { summary, transcription } = store;
@@ -35,12 +33,15 @@ export const RecordingSummary: React.FC<Props> = observer(({ format, onFormatCha
         && transcript?.segments.some((segment) => segment.text.trim()));
     const model = summary.modelStatus;
     const modelReady = model?.state === 'ready' && !summary.modelError;
+    const failure = summary.generationFailure;
+    const currentFailure = failure?.sessionId === store.workspace.activeSessionId ? failure : null;
+    const rejectedPrompt = currentFailure?.reason === 'prompt-too-long' ? currentFailure.prompt : undefined;
     const promptId = useId();
     const hintId = useId();
     const promptRef = useRef<HTMLTextAreaElement>(null);
     const [prompt, setPrompt] = useState(() =>
-        summary.runningOptions?.prompt ?? continuation?.options.prompt ?? saved?.options?.prompt ?? defaultRecordingSummaryOptions.prompt);
-    const [submittedPrompt, setSubmittedPrompt] = useState<string>();
+        summary.runningOptions?.prompt ?? rejectedPrompt ?? continuation?.options.prompt ??
+        saved?.options?.prompt ?? defaultRecordingSummaryOptions.prompt);
     const [editing, setEditing] = useState(false);
     const [showInstallation, setShowInstallation] = useState(false);
 
@@ -52,10 +53,8 @@ export const RecordingSummary: React.FC<Props> = observer(({ format, onFormatCha
     }, [editing]);
 
     const options = { ...defaultRecordingSummaryOptions, prompt };
-    // The store retains the message without the rejected input after a run finishes.
-    const rejectedPrompt = summary.error === contextError && submittedPrompt === prompt;
     const promptError = !prompt.trim() ? 'Enter a prompt.' : prompt.length > maxSummaryPromptLength ?
-        `Use ${maxSummaryPromptLength.toLocaleString('en')} characters or fewer.` : rejectedPrompt ? contextError : undefined;
+        `Use ${maxSummaryPromptLength.toLocaleString('en')} characters or fewer.` : rejectedPrompt === prompt ? summary.error : undefined;
     const collapsed = format === 'detailed' && hasSummary && !editing && !promptError;
     const canGenerate = modelReady && store.canSummarize && !store.operations.isBusy
         && isRecordingSummaryOptions(options) && !promptError;
@@ -64,7 +63,7 @@ export const RecordingSummary: React.FC<Props> = observer(({ format, onFormatCha
     const offerInstall = Boolean(saved?.brief && model?.state === 'missing' && !summary.modelError && !showInstallation);
     const resume = continuation?.options.prompt === prompt ? continuation : undefined;
     const stopped = summary.stopped || Boolean(continuation);
-    const generationError = summary.error === contextError ? null : summary.error;
+    const generationError = failure !== currentFailure || rejectedPrompt !== undefined ? null : summary.error;
 
     const hint = !modelReady ? (model?.state === 'downloading' ? 'Wait for the model download to finish.' :
         model?.state === 'ready' || !model ? 'Model availability must be confirmed before generating.' :
@@ -74,7 +73,6 @@ export const RecordingSummary: React.FC<Props> = observer(({ format, onFormatCha
         if (offerInstall) {
             setShowInstallation(true);
         } else if (canGenerate) {
-            setSubmittedPrompt(prompt);
             void store.generateSummary(options);
         }
     };

@@ -5,7 +5,7 @@ import type { RendererAdapter } from '../stores/rendererAdapter';
 
 export type SummaryScenario =
     | 'summary-ready' | 'summary-incomplete' | 'summary-install' | 'summary-downloading' | 'summary-download-error' | 'summary-disk-full'
-    | 'summary-generating' | 'summary-cancel' | 'summary-error' | 'summary-prompt-error'
+    | 'summary-generating' | 'summary-cancel' | 'summary-error'
     | 'summary-short' | 'summary-long' | 'summary-saved' | 'summary-legacy' | 'summary-partial';
 
 export const stoppedSummaryOptions = { ...defaultRecordingSummaryOptions, prompt: 'Describe the conversation in two sentences.' };
@@ -141,7 +141,6 @@ export const createStorySummary = (scenario: string, save: (summary: SessionSumm
         generateSummary: (sessionId, options = defaultRecordingSummaryOptions) => {
             attempts += 1;
             if (attempts === 1 && scenario === 'summary-error') return Promise.resolve({ ok: false, reason: 'failed' });
-            if (attempts === 1 && scenario === 'summary-prompt-error') return Promise.resolve({ ok: false, reason: 'prompt-too-long' });
             if (attempts === 1 && (scenario === 'summary-cancel' || scenario === 'summary-generating')) {
                 progressListener?.({ sessionId, message: 'Reviewing chunk 2 of 2…' });
                 return new Promise<SummaryGenerationResult>((resolve) => {

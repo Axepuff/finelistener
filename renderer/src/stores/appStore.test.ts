@@ -588,3 +588,35 @@ it.each(['none', 'session', 'transcript', 'dispose'])('keeps Summary drafts sepa
     } else expect(store.transcription.savedTranscript).toBe(current);
     store.dispose();
 });
+
+it('keeps a Summary rejection scoped to the current request and clears it on session change', async () => {
+    const oldReply = createDeferred<SummaryGenerationResult>();
+    const currentReply = createDeferred<SummaryGenerationResult>();
+    const { adapter } = createFakeRendererAdapter({
+        getSession: (id) => Promise.resolve(createSession({ id, hasTranscript: true, transcript: sourceTranscript })),
+        getSummaryModelStatus: () => Promise.resolve({ state: 'ready', model: 'model', totalBytes: 1, downloadedBytes: 1 }),
+        generateSummary: (id) => (id === 'session-1' ? oldReply.promise : currentReply.promise),
+    });
+    const store = new AppStore(adapter);
+    store.initialize();
+    await store.summary.refreshModelStatus();
+    await store.openSession('session-1');
+    const oldRequest = store.generateSummary({ ...defaultRecordingSummaryOptions, prompt: 'First prompt.' });
+    store.dispose();
+
+    store.initialize();
+    await store.summary.refreshModelStatus();
+    await store.openSession('session-2');
+    const currentRequest = store.generateSummary({ ...defaultRecordingSummaryOptions, prompt: 'Second prompt.' });
+    currentReply.resolve({ ok: false, reason: 'prompt-too-long' });
+    await currentRequest;
+    oldReply.resolve({ ok: false, reason: 'prompt-too-long' });
+    await oldRequest;
+
+    expect(store.summary.generationFailure).toEqual({
+        sessionId: 'session-2', prompt: 'Second prompt.', reason: 'prompt-too-long',
+    });
+    await store.openSession('session-1');
+    expect(store.summary.generationFailure).toBeNull();
+    store.dispose();
+});

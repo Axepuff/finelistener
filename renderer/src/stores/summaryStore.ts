@@ -1,12 +1,17 @@
 import type { SessionSummary, SessionSummaryDraft, SummaryGenerationFailure } from 'electron/src/types/sessions';
 import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
-import type { RecordingSummaryOptions } from 'electron/src/types/summaryOptions';
 import { makeAutoObservable, runInAction } from 'mobx';
+import { defaultRecordingSummaryOptions, type RecordingSummaryOptions } from '../../../electron/src/types/summaryOptions';
 import type { ForegroundOperationStore } from './foregroundOperationStore';
 import type { RendererAdapter } from './rendererAdapter';
 
-const generationMessages: Record<SummaryGenerationFailure, string | null> = {
-    cancelled: null,
+interface SummaryRequestFailure {
+    sessionId: string;
+    prompt: string;
+    reason: Exclude<SummaryGenerationFailure, 'cancelled'>;
+}
+
+const generationMessages: Record<SummaryRequestFailure['reason'], string> = {
     busy: 'Another operation is in progress.',
     'model-missing': 'Download the summary model to generate a summary.',
     'runtime-unavailable': 'The local summary service is unavailable.',
@@ -20,7 +25,8 @@ const generationMessages: Record<SummaryGenerationFailure, string | null> = {
 export class SummaryStore {
     private progressValue = '';
     private runningOptionsValue?: RecordingSummaryOptions;
-    private errorValue: string | null = null;
+    private generationFailureValue: SummaryRequestFailure | null = null;
+    private stopError: string | null = null;
     private stopping = false;
     private stoppedValue = false;
     private modelValue: SummaryModelStatus | null = null;
@@ -40,7 +46,10 @@ export class SummaryStore {
     get isStopping(): boolean { return this.stopping; }
     get progress(): string { return this.progressValue; }
     get runningOptions(): Readonly<RecordingSummaryOptions> | undefined { return this.runningOptionsValue; }
-    get error(): string | null { return this.errorValue; }
+    get generationFailure(): Readonly<SummaryRequestFailure> | null { return this.generationFailureValue; }
+    get error(): string | null {
+        return this.stopError ?? (this.generationFailureValue ? generationMessages[this.generationFailureValue.reason] : null);
+    }
     get stopped(): boolean { return this.stoppedValue; }
     get modelStatus(): SummaryModelStatus | null { return this.modelValue; }
     get modelError(): string | null {
@@ -130,9 +139,9 @@ export class SummaryStore {
         if (!this.adapter) return;
         const operation = this.operations.begin('summarizing');
         if (!operation) return;
-        this.errorValue = null;
+        const prompt = options?.prompt ?? defaultRecordingSummaryOptions.prompt;
+        this.clearError();
         this.stopping = false;
-        this.stoppedValue = false;
         this.runningOptionsValue = options;
         this.progressValue = 'Preparing summary…';
         try {
@@ -147,15 +156,20 @@ export class SummaryStore {
             if (!this.operations.owns(operation)) return;
             if (result.ok) onSaved(result.summary);
             else {
+                const { reason } = result;
                 runInAction(() => {
-                    this.errorValue = generationMessages[result.reason];
-                    this.stoppedValue = result.reason === 'cancelled';
+                    this.stopError = null;
+                    this.stoppedValue = reason === 'cancelled';
+                    if (reason !== 'cancelled') this.generationFailureValue = { sessionId, prompt, reason };
                 });
-                if (result.reason === 'model-missing') await this.refreshModelStatus();
+                if (reason === 'model-missing') await this.refreshModelStatus();
             }
         } catch (error) {
             console.error('Failed to request the recording summary', error);
-            if (this.operations.owns(operation)) runInAction(() => { this.errorValue = generationMessages.failed; });
+            if (this.operations.owns(operation)) runInAction(() => {
+                this.stopError = null;
+                this.generationFailureValue = { sessionId, prompt, reason: 'failed' };
+            });
         } finally {
             if (this.operations.owns(operation)) {
                 this.unsubscribe?.();
@@ -179,13 +193,14 @@ export class SummaryStore {
             console.error('Failed to stop summary generation', error);
             if (this.operations.owns(operation)) runInAction(() => {
                 this.stopping = false;
-                this.errorValue = 'Could not stop summary generation. Try again.';
+                this.stopError = 'Could not stop summary generation. Try again.';
             });
         }
     }
 
     clearError(): void {
-        this.errorValue = null;
+        this.generationFailureValue = null;
+        this.stopError = null;
         this.stoppedValue = false;
     }
 
@@ -200,6 +215,6 @@ export class SummaryStore {
         this.modelValue = null;
         this.runningOptionsValue = undefined;
         this.modelFailure = null;
-        this.errorValue = null;
+        this.clearError();
     }
 }
