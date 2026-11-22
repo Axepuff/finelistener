@@ -241,7 +241,7 @@ it('summarizes saved speech in speaker and time order without accessing the audi
             speakers: [{ id: 'a', name: 'Alice' }], intervals: [], corrections: [], status: 'completed' },
     });
     const input = await service.readSummaryInput('speech');
-    expect(input.rows).toEqual([
+    expect(input.rows.map(({ startSec, endSec, speaker, text }) => ({ startSec, endSec, speaker, text }))).toEqual([
         { startSec: 1, endSec: 2, speaker: 'Alice', text: 'We agreed' },
         { startSec: 2, endSec: 3, speaker: 'Alice', text: 'on Friday.' },
         { startSec: 4, endSec: 5, speaker: 'Unknown speaker', text: 'Final thought.' },

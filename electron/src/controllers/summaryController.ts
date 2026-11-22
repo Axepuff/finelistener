@@ -18,7 +18,7 @@ export function registerSummaryController(
 
     const generate = async (sessionId: string, options: RecordingSummaryOptions, signal: AbortSignal): Promise<SummaryGenerationResult> => {
         try {
-            const { rows, inputHash, saved, languageHint } = await sessions.readSummaryInput(sessionId);
+            const { rows, inputHash, sourceRevision, saved, languageHint } = await sessions.readSummaryInput(sessionId);
             signal.throwIfAborted();
             const modelPath = await requireInstalled(signal);
             signal.throwIfAborted();
@@ -28,12 +28,18 @@ export function registerSummaryController(
                     window.webContents.send('sessions:summary-progress', { sessionId, message, saved: checkpoint } satisfies SummaryProgressEvent);
                 }
             };
-            const provenance = { inputHash, model: SUMMARY_MODEL, generationVersion: recordingSummaryGenerationVersion, options };
             const canResume = saved?.generationVersion === recordingSummaryGenerationVersion && saved.model === SUMMARY_MODEL && !saved.brief
                 && sameRecordingSummaryOptions(saved.options, options);
+            const exactRevision = canResume ? saved.sourceRevision : sourceRevision;
+            const provenance = { inputHash, model: SUMMARY_MODEL, generationVersion: recordingSummaryGenerationVersion, options,
+                // Legacy cached paragraphs have no exact provenance; never backfill it from current rows.
+                ...(exactRevision ? { sourceRevision: exactRevision } : {}),
+            };
             let reviewedChunks = canResume ? saved.reviewedChunks : undefined;
             const summary = await generateLocalSummary(rows, modelPath, signal, publish, async (chunks) => {
                 reviewedChunks = chunks;
+                // The generator can reject a cache on language checks and review the current rows instead.
+                if (sourceRevision) provenance.sourceRevision = sourceRevision;
                 // Keep an existing complete result readable while a replacement brief is generated.
                 if (saved?.brief) return;
                 const checkpoint = await sessions.saveSummary(sessionId, {
@@ -43,7 +49,7 @@ export function registerSummaryController(
                 publish('Writing the brief summary…', checkpoint);
             }, reviewedChunks, languageHint, options);
             signal.throwIfAborted();
-            const completed = await sessions.saveSummary(sessionId, { ...summary, reviewedChunks, ...provenance }, signal);
+            const completed = await sessions.saveSummary(sessionId, { ...summary, reviewedChunks, ...provenance, generatedAt: Date.now() }, signal);
             return { ok: true, summary: completed };
         } catch (error) {
             if (signal.aborted) return { ok: false, reason: 'cancelled' };

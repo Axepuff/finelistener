@@ -134,12 +134,34 @@ export interface SummarySourceRow {
     endSec: number;
     text: string;
     speaker?: string;
+    sourceRef?: SummarySourceRef;
+    speakerSnapshot?: SummarySpeakerSnapshot;
+    // Transient normalization boundaries, never persisted in a summary or sent to the model.
+    sourceOffsets?: Array<{ offset: number; sourceOffset: number }>;
+}
+
+export interface SummarySourceRef {
+    // Index into transcript.segments in the exact SessionSummary.sourceRevision (not time order).
+    segmentIndex: number;
+    segmentId?: string;
+    source?: RecordingSource;
+    // Half-open UTF-16 offsets into that segment's original text, before whitespace normalization.
+    startChar: number;
+    endChar: number;
+}
+
+export interface SummarySpeakerSnapshot {
+    id: string | null;
+    // Null means no saved label was available. Do not infer a label from the id.
+    name: string | null;
 }
 
 export interface ReviewedSummaryChunk {
     startSec: number;
     endSec: number;
     text: string;
+    sourceRefs?: SummarySourceRef[];
+    speakers?: SummarySpeakerSnapshot[];
 }
 
 export interface SessionSummary {
@@ -150,6 +172,10 @@ export interface SessionSummary {
     generationVersion?: number;
     options?: RecordingSummaryOptions;
     reviewedChunks?: ReviewedSummaryChunk[];
+    // Exact source fingerprint required to resolve sourceRefs; independent of legacy inputHash.
+    sourceRevision?: string;
+    // Unix milliseconds when the completed brief/detailed result was created, including a brief retry.
+    generatedAt?: number;
 }
 
 export interface SummaryProgressEvent {
