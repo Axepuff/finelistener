@@ -474,16 +474,21 @@ export class AppStore {
             this.activityLog.appendEvent(`Processed ${fileName}: ${durationSeconds.toFixed(1)} s.`);
             void this.sessions.refresh();
 
-            if (sessionId && !request.sourceAware && result.status === 'success') {
+            if (sessionId) {
                 try {
                     const savedSession = await this.adapter.getSession(sessionId);
-                    if (isCurrent() && this.workspace.activeSessionId === sessionId
-                        && savedSession.transcript?.recognitionRevision
-                        && savedSession.transcript.recognitionRevision !== this.transcription.savedTranscript?.recognitionRevision) {
-                        runInAction(() => this.transcription.replaceSavedTranscript(savedSession.transcript ?? null));
+                    if (isCurrent() && this.workspace.activeSessionId === sessionId) {
+                        runInAction(() => {
+                            this.workspace.updateSessionMetadata(savedSession);
+                            if (!request.sourceAware && result.status === 'success'
+                                && savedSession.transcript?.recognitionRevision
+                                && savedSession.transcript.recognitionRevision !== this.transcription.savedTranscript?.recognitionRevision) {
+                                this.transcription.replaceSavedTranscript(savedSession.transcript);
+                            }
+                        });
                     }
                 } catch (error: unknown) {
-                    console.error('Failed to reload saved transcript after recognition', error);
+                    console.error('Failed to reload saved session after recognition', error);
                 }
             }
 

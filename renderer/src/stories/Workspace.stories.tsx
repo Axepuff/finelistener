@@ -61,6 +61,22 @@ export const RecordingStartError: Story = {
     },
 };
 export const AudioReady: Story = { parameters: { scenario: 'ready' } };
+export const TranscriptionMetadata: Story = {
+    play: async ({ canvas }) => {
+        await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
+        const header = within(canvas.getByRole('banner'));
+        await expect(header.getByText('English')).toBeVisible();
+        await userEvent.click(canvas.getByRole('radio', { name: 'Timecodes' }));
+        await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
+        await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
+        await userEvent.click(canvas.getByText('[00:00:08 - 00:00:12]'));
+        await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
+        await userEvent.click(canvas.getByRole('button', { name: 'Transcribe segment' }));
+        await waitFor(() => expect(header.getByText('Russian')).toBeVisible());
+        await expect(canvas.getByLabelText('Current position: 00:08.00 / 00:12.00')).toBeVisible();
+        await expect(canvas.getByText('Segment 00:04.00 — 00:08.00')).toBeVisible();
+    },
+};
 export const Transcribing: Story = {
     parameters: { scenario: 'transcribing' },
     play: async ({ canvas }) => {

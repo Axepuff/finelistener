@@ -234,7 +234,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         transcribe: (_path, options) => {
             if (scenario === 'error') return Promise.reject(new Error('Demo transcription failure'));
             if (scenario !== 'transcribing') {
-                session = { ...session, hasTranscript: true, transcript: structuredClone(transcript) };
+                session = { ...session, updatedAt: session.updatedAt + 60_000, transcription: { language: options.language }, hasTranscript: true, transcript: structuredClone(transcript) };
                 sessions = [session];
                 return Promise.resolve(transcriptSource);
             }

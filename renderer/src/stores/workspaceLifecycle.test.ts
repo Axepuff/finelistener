@@ -63,3 +63,95 @@ it('publishes session identity and saved transcript as one workspace transition'
         unsubscribe();
     }
 });
+
+it.each(['imported', 'recorded', 'incomplete'] as const)('refreshes saved metadata after %s transcription without resetting playback', async (kind) => {
+    let savedSession: SessionDetails = {
+        ...session, transcription: { language: 'ru' },
+        ...(kind !== 'imported' ? { tracks: [{ source: 'system', filePath: '/audio/system.wav', startOffsetMs: 0 }] } : {}),
+    };
+    const saveTranscription = () => {
+        savedSession = {
+            ...savedSession, updatedAt: 2, transcription: { language: 'en' },
+            transcript: {
+                version: 1, segments: [{ startSec: 2, endSec: 3, text: 'Final text' }],
+                ...(kind === 'incomplete' ? { sourceRun: {
+                    status: 'incomplete', settings: { language: 'en' },
+                    sources: [
+                        { source: 'system', status: 'completed', segments: [{ startSec: 2, endSec: 3, text: 'Final text' }] },
+                        { source: 'microphone', status: 'failed', segments: [] },
+                    ],
+                } as const } : {}),
+            },
+        };
+        return savedSession;
+    };
+    const fake = createFakeRendererAdapter({
+        getSession: () => Promise.resolve(savedSession),
+        transcribe: () => {
+            saveTranscription();
+            return Promise.resolve('[00:00:02.000 --> 00:00:03.000] Final text\n');
+        },
+        transcribeSession: () => Promise.resolve(saveTranscription()),
+    });
+    const store = new AppStore(fake.adapter);
+    await store.speakers.setEnabled(false);
+    store.initialize();
+    try {
+        expect((await store.openSession(session.id)).ok).toBe(true);
+        store.workspace.setPlaybackPosition(7);
+        store.workspace.setPlaying(true);
+        store.workspace.setSegmentStart(2);
+        store.workspace.setSegmentEnd(9);
+        expect((await store.startTranscription({ language: 'en', model: 'base', splitOnWord: true, useVad: true })).ok).toBe(true);
+        expect(store.transcription.plainText).toBe('Final text');
+        expect(store.workspace.activeSession?.transcription?.language).toBe('en');
+        expect(store.workspace.activeSession?.updatedAt).toBe(2);
+        expect(store.workspace.playbackPosition).toBe(7);
+        expect(store.workspace.isPlaying).toBe(true);
+        expect(store.workspace.selectedSegment).toEqual({ start: 2, end: 9 });
+        expect(store.workspace.audioSourcePath).toBe(session.audioWavPath);
+        expect(store.workspace.audioMode).toBe('original');
+    } finally {
+        store.dispose();
+    }
+});
+
+it('ignores a delayed metadata refresh after another session is opened', async () => {
+    const other: SessionDetails = { ...session, id: 'session-2', updatedAt: 3, transcription: { language: 'de' } };
+    let finishRefresh!: (value: SessionDetails) => void;
+    let refreshStarted!: () => void;
+    let transcribed = false;
+    const refreshing = new Promise<void>((resolve) => { refreshStarted = resolve; });
+    const refreshed = new Promise<SessionDetails>((resolve) => { finishRefresh = resolve; });
+    const fake = createFakeRendererAdapter({
+        getSession: (id) => {
+            if (id === other.id) return Promise.resolve(other);
+            if (!transcribed) return Promise.resolve(session);
+            refreshStarted();
+            return refreshed;
+        },
+        transcribe: () => {
+            transcribed = true;
+            return Promise.resolve('[00:00:00.000 --> 00:00:01.000] Final text\n');
+        },
+    });
+    const store = new AppStore(fake.adapter);
+    await store.speakers.setEnabled(false);
+    store.initialize();
+    try {
+        await store.openSession(session.id);
+        const run = store.startTranscription({ language: 'en', model: 'base', splitOnWord: true, useVad: true });
+        await refreshing;
+        store.dispose();
+        store.initialize();
+        expect((await store.openSession(other.id)).ok).toBe(true);
+        finishRefresh({ ...session, updatedAt: 2, transcription: { language: 'en' } });
+        await run;
+        expect(store.workspace.activeSession?.id).toBe(other.id);
+        expect(store.workspace.activeSession?.updatedAt).toBe(3);
+        expect(store.workspace.activeSession?.transcription?.language).toBe('de');
+        expect(store.transcription.plainText).toBe('Previous transcript');
+    } finally {
+        store.dispose();
+    }
+});

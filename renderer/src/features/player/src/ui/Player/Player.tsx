@@ -6,16 +6,8 @@ import { observer } from 'mobx-react-lite';
 import React, { useEffect, useRef, useState } from 'react';
 import { useAppStore } from 'renderer/src/AppContext';
 import { PlayerAdapter } from './PlayerAdapter';
+import { formatPreciseTime } from './formatPreciseTime';
 import './Player.css';
-
-const formatPreciseTime = (seconds: number) => {
-    if (!Number.isFinite(seconds) || seconds < 0) return '00:00.00';
-
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds - minutes * 60;
-
-    return `${String(minutes).padStart(2, '0')}:${secs.toFixed(2).padStart(5, '0')}`;
-};
 
 const AUDIO_MODE_OPTIONS = [
     { label: 'Original', value: 'original' },

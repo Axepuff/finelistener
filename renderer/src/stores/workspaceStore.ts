@@ -24,7 +24,7 @@ const toWorkspaceSession = (session: DeepReadonly<WorkspaceSession>): WorkspaceS
 });
 
 export class WorkspaceStore {
-    private activeSessionValue: DeepReadonly<WorkspaceSession> | null = null;
+    private activeSessionValue: WorkspaceSession | null = null;
 
     private audioSourcePathValue: string | null = null;
 
@@ -103,6 +103,14 @@ export class WorkspaceStore {
         this.audioModeValue = session.audioMode ?? 'optimized';
         this.audioSourcePathValue = this.audioModeValue === 'optimized' ? session.audioOptimizedWavPath ?? null : session.audioWavPath;
         this.resetPlayback();
+    }
+
+    updateSessionMetadata(session: DeepReadonly<SessionDetails>): void {
+        if (this.activeSessionValue?.id !== session.id) return;
+
+        // Keep the active session identity stable so metadata changes do not reload audio.
+        this.activeSessionValue.updatedAt = session.updatedAt;
+        this.activeSessionValue.transcription = session.transcription ? { ...session.transcription } : undefined;
     }
 
     useOriginalAudio(): void {
