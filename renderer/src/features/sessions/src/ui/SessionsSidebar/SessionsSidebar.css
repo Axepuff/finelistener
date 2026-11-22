@@ -1,0 +1,71 @@
+.sessions-panel {
+    min-height: 0;
+    overflow: hidden;
+    background: var(--brand-color-bg-layout);
+}
+
+.sessions-panel > :not(.sessions-panel__list) {
+    flex-shrink: 0;
+}
+
+.sessions-panel__list {
+    flex: 1;
+    min-height: 0;
+}
+
+.sessions-panel__group-title {
+    padding: 4px 10px 2px;
+}
+
+.session-row {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    border: 1px solid transparent;
+    border-radius: 4px;
+}
+
+.session-row:hover {
+    background: var(--brand-color-fill-secondary);
+}
+
+.session-row[data-current] {
+    background: var(--brand-color-bg-container);
+    border-color: var(--brand-color-border);
+}
+
+.session-row__open {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    text-align: left;
+    border-radius: 4px;
+}
+
+.session-row__title {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.session-row__actions {
+    flex-shrink: 0;
+    margin-right: 4px;
+    opacity: 0;
+}
+
+.session-row:hover .session-row__actions,
+.session-row:focus-within .session-row__actions,
+.session-row[data-menu-open] .session-row__actions {
+    opacity: 1;
+}
+
+@media (hover: none) {
+    .session-row__actions {
+        opacity: 1;
+    }
+}

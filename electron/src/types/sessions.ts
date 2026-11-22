@@ -226,6 +226,8 @@ export interface SessionListItem {
     updatedAt: number;
     sourceKind: SessionSourceKind;
     hasTranscript: boolean;
+    durationMs?: number;
+    speakerCount?: number;
 }
 
 export interface SessionDetails extends SessionListItem {
