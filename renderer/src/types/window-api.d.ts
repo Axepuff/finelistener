@@ -61,6 +61,7 @@ declare global {
             onSummaryProgress: (cb: (event: SummaryProgressEvent) => void) => () => void;
             getSummaryModelStatus: () => Promise<SummaryModelStatus>;
             downloadSummaryModel: () => Promise<SummaryModelStatus>;
+            cancelSummaryModelDownload: () => Promise<SummaryModelStatus>;
             onSummaryModelChanged: (cb: (status: SummaryModelStatus) => void) => () => void;
             onRecordingState: (cb: (state: RecordingState) => void) => () => void;
             onRecordingProgress: (cb: (progress: RecordingProgress) => void) => () => void;

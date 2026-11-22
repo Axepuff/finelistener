@@ -18,6 +18,7 @@ export interface RendererAdapter {
     readonly runtimePlatform: 'darwin' | 'win32' | 'linux';
     getSummaryModelStatus: () => Promise<SummaryModelStatus>;
     downloadSummaryModel: () => Promise<SummaryModelStatus>;
+    cancelSummaryModelDownload: () => Promise<SummaryModelStatus>;
     onSummaryModelChanged: (cb: (status: SummaryModelStatus) => void) => () => void;
     listSessions: () => Promise<SessionListItem[]>;
     getSession: (sessionId: string) => Promise<SessionDetails>;
@@ -85,6 +86,7 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
         runtimePlatform: api.runtime.platform,
         getSummaryModelStatus: () => api.getSummaryModelStatus(),
         downloadSummaryModel: () => api.downloadSummaryModel(),
+        cancelSummaryModelDownload: () => api.cancelSummaryModelDownload(),
         onSummaryModelChanged: (cb) => api.onSummaryModelChanged(cb),
         listSessions: () => api.sessions.list(),
         getSession: (sessionId) => api.sessions.get(sessionId),

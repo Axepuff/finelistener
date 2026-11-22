@@ -72,6 +72,7 @@ export const createFakeRendererAdapter = (
         generateSummary: unavailable,
         getSummaryModelStatus: () => Promise.resolve({ state: 'missing', model: 'Qwen3-4B', totalBytes: 2497281120, downloadedBytes: 0 }),
         downloadSummaryModel: unavailable,
+        cancelSummaryModelDownload: unavailable,
         onSummaryModelChanged: (callback) => subscribe(listeners.summaryModel, callback),
         stopSummary: () => Promise.resolve(false),
         analyzeSpeakers: unavailable,

@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('api', {
     saveText: (content: string) => ipcRenderer.invoke('saveText', content),
     getSummaryModelStatus: (): Promise<SummaryModelStatus> => ipcRenderer.invoke('summary-model:status'),
     downloadSummaryModel: (): Promise<SummaryModelStatus> => ipcRenderer.invoke('summary-model:download'),
+    cancelSummaryModelDownload: (): Promise<SummaryModelStatus> => ipcRenderer.invoke('summary-model:cancel-download'),
     onSummaryModelChanged: (cb: (status: SummaryModelStatus) => void) => {
         const handler = (_e: unknown, status: SummaryModelStatus) => cb(status);
         ipcRenderer.on('summary-model:changed', handler);

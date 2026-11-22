@@ -11,5 +11,6 @@ export function registerSummaryModelController(ipc: IpcMain, getMainWindow: () =
     });
     ipc.handle('summary-model:status', () => service.getStatus());
     ipc.handle('summary-model:download', () => service.download());
+    ipc.handle('summary-model:cancel-download', () => service.cancelDownload());
     return service;
 }
