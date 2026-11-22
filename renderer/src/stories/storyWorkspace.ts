@@ -12,7 +12,7 @@ export type WorkspaceScenario = 'empty' | 'ready' | 'transcript' | 'speakers' | 
     | 'summary-ready' | 'summary-install' | 'summary-downloading' | 'summary-download-error' | 'summary-generating'
     | 'summary-cancel' | 'summary-error' | 'summary-saved' | 'summary-partial'
     | 'nemotron' | 'nemotron-reading' | 'nemotron-downloading' | 'nemotron-analyzing' | 'nemotron-error'
-    | 'sessions' | 'sessions-empty' | 'sessions-recovery' | 'sessions-recovery-error' | 'sessions-transcribing';
+    | 'sessions' | 'sessions-empty' | 'sessions-recovery' | 'sessions-recovery-error' | 'sessions-transcribing' | 'sessions-speaker-edit';
 
 export interface StoryWorkspace {
     store: AppStore;
@@ -147,6 +147,11 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         const now = new Date();
         const date = (days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, 10).getTime();
         session = { ...session, updatedAt: date(0), createdAt: date(0), durationMs: 12000, speakerCount: 2 };
+        if (scenario === 'sessions-speaker-edit') {
+            const labeled = structuredClone(speakerTranscript);
+            labeled.speakers!.speakers.push({ id: 'carol', name: 'Carol' });
+            session = { ...session, updatedAt: date(1), createdAt: date(1), speakerCount: 3, transcript: labeled };
+        }
         sessions = scenario === 'sessions-empty' ? [] : [session,
             { ...session, id: 'weekly', title: 'Weekly sync', updatedAt: date(0) - 1000, sourceKind: 'recorded' },
             { ...session, id: 'interview', title: 'Customer interview', updatedAt: date(1), speakerCount: 1 },
@@ -222,6 +227,17 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         deleteSession: (id) => {
             sessions = sessions.filter((item) => item.id !== id);
             return Promise.resolve(true);
+        },
+        mergeSpeakers: (_id, sourceId, targetId) => {
+            const saved = session.transcript;
+            if (!saved?.speakers) return Promise.reject(new Error('Demo speaker metadata is unavailable'));
+            const speakers = saved.speakers.speakers.filter(({ id }) => id !== sourceId);
+            session = { ...session, updatedAt: Date.now(), speakerCount: speakers.length, transcript: {
+                ...saved, segments: saved.segments.map((segment) => segment.speakerId === sourceId ? { ...segment, speakerId: targetId } : segment),
+                speakers: { ...saved.speakers, speakers },
+            } };
+            sessions = sessions.map((item) => item.id === session.id ? session : item);
+            return Promise.resolve(session);
         },
         optimizeAudio: (_id, mode) => {
             session = { ...session, audioMode: mode ?? 'optimized' };

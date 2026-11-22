@@ -60,6 +60,24 @@ export const DeleteSession: Story = {
 };
 
 export const Empty: Story = { parameters: { scenario: 'sessions-empty' } };
+export const SpeakerEdits: Story = { parameters: { scenario: 'sessions-speaker-edit', docs: { description: { story: 'A merge through the public AppStore service boundary updates the rendered sidebar and preserves player state before clearing the workspace.' } } }, play: async ({ canvas, loaded }) => {
+    const { store } = loaded.workspace as StoryWorkspace;
+    const panel = within(canvas.getByRole('navigation', { name: 'Sessions' }));
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
+    await expect(within(panel.getByRole('region', { name: 'Yesterday' })).getByRole('button', { name: 'Design discussion.wav' })).toHaveAccessibleDescription('00:12 · 3 speakers');
+    await userEvent.click(canvas.getByRole('radio', { name: 'Timecodes' }));
+    await userEvent.click(canvas.getByText('[00:00:04 - 00:00:08]'));
+    await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
+    await userEvent.click(canvas.getByText('[00:00:08 - 00:00:12]'));
+    await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
+    await expect((await store.mergeSpeakers('alice', 'bob')).ok).toBe(true);
+    await waitFor(() => expect(within(panel.getByRole('region', { name: 'Today' })).getByRole('button', { name: 'Design discussion.wav' })).toHaveAccessibleDescription('00:12 · 2 speakers'));
+    await expect(canvas.getByLabelText('Current position: 00:08.00 / 00:12.00')).toBeVisible();
+    await expect(canvas.getByText('Segment 00:04.00 — 00:08.00')).toBeVisible();
+    await expect(store.clearWorkspace().ok).toBe(true);
+    await waitFor(() => expect(within(panel.getByRole('region', { name: 'Today' })).getByRole('button', { name: 'Design discussion.wav' })).toHaveAccessibleDescription('00:12 · 2 speakers'));
+    await expect(panel.getByRole('button', { name: 'Design discussion.wav' })).not.toHaveAttribute('aria-current');
+} };
 export const UnfinishedRecording: Story = { parameters: { scenario: 'sessions-recovery' } };
 export const DiscardRecording: Story = { parameters: { scenario: 'sessions-recovery' }, play: async ({ canvas, canvasElement }) => {
     const panel = within(canvas.getByRole('navigation', { name: 'Sessions' }));

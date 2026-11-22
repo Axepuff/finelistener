@@ -8,6 +8,7 @@ import { TranscribeControl } from '../features/transcribe-control';
 import { AppStore } from './appStore';
 import { createFakeRendererAdapter } from './testing/fakeRendererAdapter';
 import { formatTranscriptPrefix, transcriptToText } from './transcriptFormat';
+import { groupSessions } from '../features/sessions/src/model/sessionList';
 
 const transcript: SessionTranscriptV1 = {
     version: 1,
@@ -39,6 +40,99 @@ const session = (savedTranscript: SessionTranscriptV1, sourceKind: SessionDetail
 });
 
 describe('speaker analysis in the renderer', () => {
+    it.each(['merge', 'assign', 'rename'] as const)('refreshes persisted session rows after %s before they become inactive', async (edit) => {
+        const now = new Date(2026, 10, 22, 12);
+        const yesterday = new Date(2026, 10, 21, 12).getTime();
+        let persisted: SessionDetails = { ...session({ ...labeledTranscript, speakers: {
+            ...labeledTranscript.speakers!, speakers: [{ id: 'mic', name: 'Alice' }, { id: 'bob', name: 'Bob' }, { id: 'carol', name: 'Carol' }],
+        } }), createdAt: yesterday, updatedAt: yesterday };
+        const save = (next: SessionTranscriptV1) => {
+            persisted = { ...persisted, updatedAt: now.getTime(), transcript: next };
+            return Promise.resolve(structuredClone(persisted));
+        };
+        const fake = createFakeRendererAdapter({
+            getSession: () => Promise.resolve(structuredClone(persisted)),
+            listSessions: () => Promise.resolve([{ ...persisted, speakerCount: persisted.transcript!.speakers!.speakers.length }]),
+            mergeSpeakers: (_id, source) => save({ ...persisted.transcript!, speakers: {
+                ...persisted.transcript!.speakers!, speakers: persisted.transcript!.speakers!.speakers.filter(({ id }) => id !== source),
+            } }),
+            assignSpeaker: (_id, _span, speakerId) => save({ ...persisted.transcript!, segments: persisted.transcript!.segments.map((segment) => ({ ...segment, speakerId })) }),
+            renameSpeaker: (_id, speakerId, name) => save({ ...persisted.transcript!, speakers: {
+                ...persisted.transcript!.speakers!, speakers: persisted.transcript!.speakers!.speakers.map((speaker) => speaker.id === speakerId ? { ...speaker, name } : speaker),
+            } }),
+        });
+        const store = new AppStore(fake.adapter);
+        store.initialize();
+        try {
+            await store.openSession(persisted.id);
+            await store.sessions.refresh();
+            expect(store.sessions.items[0].speakerCount).toBe(3);
+            expect(groupSessions(store.sessions.items, '', now)[0].label).toBe('Yesterday');
+            store.workspace.setPlaybackPosition(7);
+            store.workspace.setPlaying(true);
+            store.workspace.setSegmentStart(2);
+            store.workspace.setSegmentEnd(9);
+            const result = edit === 'merge' ? await store.mergeSpeakers('mic', 'bob') :
+                edit === 'assign' ? await store.assignSpeaker(transcript.segments[0].rawSpan!, 'bob') : await store.renameSpeaker('mic', 'Renamed speaker');
+            expect(result.ok).toBe(true);
+            expect(store.workspace.activeSession?.updatedAt).toBe(now.getTime());
+            expect(store.workspace.playbackPosition).toBe(7);
+            expect(store.workspace.isPlaying).toBe(true);
+            expect(store.workspace.selectedSegment).toEqual({ start: 2, end: 9 });
+            expect(store.clearWorkspace().ok).toBe(true);
+            expect(store.sessions.items[0].speakerCount).toBe(edit === 'merge' ? 2 : 3);
+            expect(store.sessions.items[0].updatedAt).toBe(now.getTime());
+            expect(groupSessions(store.sessions.items, '', now)[0].label).toBe('Today');
+        } finally { store.dispose(); }
+    });
+
+    it.each(['edit', 'list'] as const)('ignores a delayed speaker %s response after another session is opened', async (phase) => {
+        const original = session(labeledTranscript);
+        const updated = { ...original, updatedAt: 2 };
+        const other = { ...original, id: 'session-2', title: 'Other session', updatedAt: 3 };
+        let finishEdit!: (value: SessionDetails) => void;
+        let finishList!: (value: SessionDetails[]) => void;
+        let listStarted!: () => void;
+        const editing = new Promise<SessionDetails>((resolve) => { finishEdit = resolve; });
+        const listing = new Promise<SessionDetails[]>((resolve) => { finishList = resolve; });
+        const refreshing = new Promise<void>((resolve) => { listStarted = resolve; });
+        let delayNextList = false;
+        const fake = createFakeRendererAdapter({
+            getSession: (id) => Promise.resolve(id === other.id ? other : original),
+            renameSpeaker: () => phase === 'edit' ? editing : Promise.resolve(updated),
+            listSessions: () => {
+                if (delayNextList) { delayNextList = false; listStarted(); return listing; }
+                return Promise.resolve([other, original]);
+            },
+        });
+        const store = new AppStore(fake.adapter);
+        store.initialize();
+        try {
+            await store.openSession(original.id);
+            await store.sessions.refresh();
+            delayNextList = phase === 'list';
+            const run = store.renameSpeaker('mic', 'Alice');
+            if (phase === 'list') {
+                await refreshing;
+                expect(store.clearWorkspace().ok).toBe(false);
+                expect(store.operations.kind).toBe('editing-speakers');
+            }
+            store.dispose();
+            store.initialize();
+            expect((await store.openSession(other.id)).ok).toBe(true);
+            store.workspace.setPlaybackPosition(5);
+            store.workspace.setPlaying(true);
+            finishEdit(updated);
+            finishList([original]);
+            expect((await run).ok).toBe(false);
+            expect(store.workspace.activeSessionId).toBe(other.id);
+            expect(store.workspace.activeSession?.updatedAt).toBe(3);
+            expect(store.workspace.playbackPosition).toBe(5);
+            expect(store.workspace.isPlaying).toBe(true);
+            expect(store.sessions.items.map(({ id }) => id)).toEqual([other.id, original.id]);
+        } finally { store.dispose(); }
+    });
+
     it('offers component preparation before transcription when speaker labels are enabled', async () => {
         const store = new AppStore(createFakeRendererAdapter().adapter);
         void store.speakers.setEnabled(false);

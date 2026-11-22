@@ -685,14 +685,20 @@ export class AppStore {
         }
         const operation = this.operations.begin('editing-speakers');
         if (!operation) return commandFailure('Another workspace operation is already running.');
+        const isCurrent = () => this.operations.owns(operation) && !this.disposed && this.workspace.activeSessionId === sessionId;
 
         try {
             const session = await call(sessionId);
-            if (!this.operations.owns(operation) || this.disposed || this.workspace.activeSessionId !== sessionId) {
+            if (!isCurrent()) {
                 return commandFailure('The session changed before the speaker edit finished.');
             }
             if (!session.transcript?.speakers) throw new Error('Speaker edit returned no speaker metadata');
-            runInAction(() => this.transcription.replaceSavedTranscript(session.transcript ?? null));
+            runInAction(() => {
+                this.transcription.replaceSavedTranscript(session.transcript ?? null);
+                this.workspace.updateSessionMetadata(session);
+            });
+            await this.sessions.refresh();
+            if (!isCurrent()) return commandFailure('The session changed before the speaker edit finished.');
 
             return commandSuccess(undefined);
         } catch (error: unknown) {
