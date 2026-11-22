@@ -298,6 +298,8 @@ export class SessionsService {
             ...toListItem(resolvedSession),
             audioMode,
             audioOriginalPath,
+            sourceFileName: resolvedSession.audio.originalFileName,
+            sourceMetadata: await this.audioPreprocessor.readSourceMetadata(audioOriginalPath),
             audioWavPath,
             audioOptimizedWavPath,
             transcript,

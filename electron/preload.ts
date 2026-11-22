@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('api', {
     stopTranscription: () => ipcRenderer.invoke('stop-transcription'),
     getWhisperModels: () => ipcRenderer.invoke('whisper-models:list'),
     downloadWhisperModel: (modelName: string) => ipcRenderer.invoke('whisper-models:download', modelName),
+    cancelWhisperModelDownload: (modelName: string) => ipcRenderer.invoke('whisper-models:cancel-download', modelName),
     importWhisperModelFromFile: () => ipcRenderer.invoke('whisper-models:import-from-file'),
     openDevTools: () => ipcRenderer.invoke('debug:open-devtools'),
     getUiPreference: <K extends UiPreferenceKey>(key: K): Promise<UiPreferenceValueMap[K]> =>

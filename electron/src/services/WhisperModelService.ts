@@ -2,6 +2,8 @@ import fs from 'fs';
 import fsPromises from 'fs/promises';
 import https from 'https';
 import path from 'path';
+import type { IncomingMessage } from 'http';
+import { pipeline } from 'stream/promises';
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from '../types/whisper';
 import {
     getModelDownloadUrl,
@@ -16,7 +18,7 @@ import {
 type ProgressHandler = (progress: WhisperModelDownloadProgress) => void;
 
 export class WhisperModelService {
-    private readonly activeDownloads = new Map<WhisperModelName, Promise<void>>();
+    private activeDownload: { name: WhisperModelName; controller: AbortController; promise: Promise<void> } | null = null;
 
     public listModels(): WhisperModelInfo[] {
         return getWhisperModelNames().map((name) => ({
@@ -62,11 +64,8 @@ export class WhisperModelService {
             return;
         }
 
-        const existing = this.activeDownloads.get(name);
-
-        if (existing) {
-            return existing;
-        }
+        if (this.activeDownload?.name === name) return this.activeDownload.promise;
+        if (this.activeDownload) throw new Error('A model download is already in progress.');
 
         const url = getModelDownloadUrl(name);
 
@@ -77,21 +76,32 @@ export class WhisperModelService {
         const modelsDir = getUserModelsDir();
         const fileName = getModelFileName(name);
         const targetPath = path.join(modelsDir, fileName);
-        const downloadPromise = downloadToFile(url, targetPath, (progress) => {
+        const controller = new AbortController();
+        const downloadPromise = downloadToFile(url, targetPath, controller.signal, (progress) => {
             onProgress?.({ ...progress, name });
         }).finally(() => {
-            this.activeDownloads.delete(name);
+            this.activeDownload = null;
         });
 
-        this.activeDownloads.set(name, downloadPromise);
+        this.activeDownload = { name, controller, promise: downloadPromise };
 
         return downloadPromise;
+    }
+
+    public async cancelDownload(name: WhisperModelName): Promise<void> {
+        const active = this.activeDownload;
+        if (active?.name !== name) return;
+        active.controller.abort();
+        try { await active.promise; } catch (error) {
+            if (!active.controller.signal.aborted) throw error;
+        }
     }
 }
 
 const downloadToFile = async (
     url: string,
     targetPath: string,
+    signal: AbortSignal,
     onProgress?: (progress: Omit<WhisperModelDownloadProgress, 'name'>) => void,
 ): Promise<void> => {
     await fsPromises.mkdir(path.dirname(targetPath), { recursive: true });
@@ -100,72 +110,39 @@ const downloadToFile = async (
 
     await fsPromises.rm(tempPath, { force: true });
 
-    await new Promise<void>((resolve, reject) => {
-        const handleError = (error: Error) => {
-            void fsPromises.rm(tempPath, { force: true }).finally(() => reject(error));
-        };
-
-        const request = https.get(url, (response) => {
-            if (
-                response.statusCode
-                && response.statusCode >= 300
-                && response.statusCode < 400
-                && response.headers.location
-            ) {
-                response.resume();
-                void downloadToFile(response.headers.location, targetPath, onProgress).then(resolve).catch(reject);
-
-                return;
-            }
-
-            if (response.statusCode !== 200) {
-                response.resume();
-                handleError(
-                    new Error(`Failed to download model from ${url} (status ${response.statusCode ?? 'unknown'})`),
-                );
-
-                return;
-            }
-
-            const totalHeader = response.headers['content-length'];
-            const totalBytes = totalHeader ? Number(totalHeader) : null;
-            const total = Number.isFinite(totalBytes) && totalBytes && totalBytes > 0 ? totalBytes : null;
-            let downloadedBytes = 0;
-
-            const fileStream = fs.createWriteStream(tempPath);
-
-            response.on('data', (chunk: Buffer) => {
-                downloadedBytes += chunk.length;
-                const percent = total ? Math.min(100, Math.round((downloadedBytes / total) * 100)) : null;
-
-                onProgress?.({
-                    percent,
-                    downloadedBytes,
-                    totalBytes: total,
-                });
-            });
-
-            response.on('error', (error) => {
-                fileStream.destroy();
-                handleError(error);
-            });
-
-            fileStream.on('error', (error) => {
-                response.destroy();
-                handleError(error);
-            });
-
-            fileStream.on('finish', () => {
-                fileStream.close(() => {
-                    void fsPromises.rename(tempPath, targetPath).then(resolve).catch(reject);
-                });
-            });
-
-            response.pipe(fileStream);
+    try {
+        const response = await openDownload(url, signal);
+        const length = Number(response.headers['content-length']);
+        const totalBytes = Number.isFinite(length) && length > 0 ? length : null;
+        let downloadedBytes = 0;
+        response.on('data', (chunk: Buffer) => {
+            downloadedBytes += chunk.length;
+            onProgress?.({ downloadedBytes, totalBytes, percent: totalBytes ? Math.min(100, Math.round(downloadedBytes / totalBytes * 100)) : null });
         });
+        await pipeline(response, fs.createWriteStream(tempPath), { signal });
+        signal.throwIfAborted();
+        await fsPromises.rename(tempPath, targetPath);
+    } catch (error) {
+        await fsPromises.rm(tempPath, { force: true });
+        throw error;
+    }
+};
 
-        request.on('error', handleError);
+const openDownload = async (url: string, signal: AbortSignal, redirects = 0): Promise<IncomingMessage> => {
+    signal.throwIfAborted();
+    if (redirects > 10) throw new Error('Too many model download redirects.');
+    const response = await new Promise<IncomingMessage>((resolve, reject) => {
+        https.get(url, { signal }, resolve).on('error', reject);
     });
+    if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        response.resume();
+        return openDownload(new URL(response.headers.location, url).href, signal, redirects + 1);
+    }
+    if (response.statusCode !== 200) {
+        response.resume();
+        throw new Error(`Model download failed (HTTP ${response.statusCode ?? 'unknown'}).`);
+    }
+    return response;
 };
 
 const pickAvailableTargetPath = async (preferredPath: string): Promise<string> => {

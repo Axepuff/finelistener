@@ -90,6 +90,28 @@ export const cleanupAudioTempDirs = async (): Promise<void> => {
 };
 
 export class AudioPreprocessor {
+    public async readSourceMetadata(filePath: string): Promise<{ durationMs?: number; sampleRate?: number; channels?: number } | undefined> {
+        // Input inspection exits without an output file; it does not decode the recording.
+        return new Promise((resolve) => {
+            const child = spawn(this.getFfmpegExecutable(), ['-hide_banner', '-i', filePath], { windowsHide: true, timeout: 10_000 });
+            let output = '';
+            child.stderr.on('data', (chunk: Buffer) => { output = (output + chunk.toString('utf8')).slice(-64_000); });
+            child.on('error', (error) => { console.error('Could not inspect audio source', error); resolve(undefined); });
+            child.on('close', () => {
+                const duration = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(output);
+                const audio = /Audio:[^\r\n]*?, (\d+) Hz, ([^,\r\n]+)/.exec(output);
+                if (!audio && !duration) { resolve(undefined); return; }
+                const layout = audio?.[2].trim();
+                const channelCount = layout === 'mono' ? 1 : layout === 'stereo' ? 2 : layout?.match(/^(\d+) channels?$/)?.[1];
+                resolve({
+                    durationMs: duration ? Math.round((Number(duration[1]) * 3600 + Number(duration[2]) * 60 + Number(duration[3])) * 1000) : undefined,
+                    sampleRate: audio ? Number(audio[1]) : undefined,
+                    channels: channelCount ? Number(channelCount) : undefined,
+                });
+            });
+        });
+    }
+
     private ffmpegExecutable: string | null;
     private readonly tmpDirPrefix: string;
     private readonly loudnessNormalizer: Loudnorm;

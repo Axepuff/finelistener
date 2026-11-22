@@ -231,6 +231,8 @@ export interface SessionListItem {
 }
 
 export interface SessionDetails extends SessionListItem {
+    sourceFileName?: string;
+    sourceMetadata?: { durationMs?: number; sampleRate?: number; channels?: number };
     audioMode?: SessionAudioMode;
     audioOriginalPath: string;
     audioWavPath: string;

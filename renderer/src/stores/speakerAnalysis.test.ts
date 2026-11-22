@@ -295,39 +295,23 @@ describe('speaker analysis in the renderer', () => {
         expect(analyzeSpeakers).toHaveBeenCalledWith('session-1', expect.objectContaining({ compute: 'cpu', audioMode: 'original' }));
     });
 
-    it('requires a new replacement confirmation after a model download changes sessions', async () => {
+    it('requires fresh speaker replacement consent after an independent model download', async () => {
         const transcribe = vi.fn(() => Promise.resolve('New text'));
         const fake = createFakeRendererAdapter({
             transcribe,
             getSession: () => Promise.resolve({ ...session(labeledTranscript), id: 'session-2' }),
-            downloadWhisperModel: () => Promise.resolve(),
+            getWhisperModels: () => Promise.resolve([{ name: 'large', sizeLabel: '874 MB', isDownloaded: true, isBundled: false }]),
         });
         const store = new AppStore(fake.adapter);
         void store.speakers.setEnabled(false);
         store.workspace.replaceWorkspace(session(labeledTranscript));
         store.transcription.replaceSavedTranscript(labeledTranscript);
-
-        expect((await store.requestTranscriptionStart(true)).ok).toBe(true);
-        expect(store.transcriptionControl.pendingDownloadModel).toBe('large');
+        expect((await store.requestTranscriptionStart(true)).ok).toBe(false);
+        expect((await store.downloadWhisperModel('large')).ok).toBe(true);
         expect((await store.openSession('session-2')).ok).toBe(true);
-        expect((await store.confirmPendingTranscriptionDownload()).ok).toBe(false);
+        expect((await store.requestTranscriptionStart()).ok).toBe(false);
         expect(transcribe).not.toHaveBeenCalled();
-    });
-
-    it('honors a replacement confirmation through a model download for the same session', async () => {
-        const transcribe = vi.fn(() => Promise.resolve('New text'));
-        const fake = createFakeRendererAdapter({
-            transcribe,
-            getSession: () => Promise.resolve(session(labeledTranscript)),
-            downloadWhisperModel: () => Promise.resolve(),
-        });
-        const store = new AppStore(fake.adapter);
-        void store.speakers.setEnabled(false);
-        store.workspace.replaceWorkspace(session(labeledTranscript));
-        store.transcription.replaceSavedTranscript(labeledTranscript);
-
         expect((await store.requestTranscriptionStart(true)).ok).toBe(true);
-        expect((await store.confirmPendingTranscriptionDownload()).ok).toBe(true);
         expect(transcribe).toHaveBeenCalledOnce();
     });
 

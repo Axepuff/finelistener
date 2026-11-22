@@ -1,24 +1,17 @@
 import type { WhisperModelName } from 'electron/src/types/whisper';
 import { makeAutoObservable } from 'mobx';
 import type { StartTranscriptionOptions } from 'renderer/src/stores/transcriptionStore';
-import type { CommandResult } from 'renderer/src/stores/types';
 
 export interface CustomModelFile {
     path: string;
     fileName: string;
 }
 
-export interface PendingModelDownload {
-    readonly id: number;
-    readonly model: WhisperModelName;
-}
-
 export type TranscriptionStartPreparation =
     | { readonly status: 'ready'; readonly options: StartTranscriptionOptions }
-    | { readonly status: 'awaiting-download' }
     | { readonly status: 'failed'; readonly message: string };
 
-/** Owns control settings and identifies one confirmed download that may continue a transcription request. */
+/** Owns transcription settings and prepares explicit starts for ready models. */
 export class TranscriptionControlStore {
     private languageValue = 'ru';
     private modelValue: WhisperModelName = 'large';
@@ -29,9 +22,6 @@ export class TranscriptionControlStore {
     private splitOnWordValue = true;
     private useVadValue = true;
     private microphoneGateEnabledValue = true;
-    private pendingStartIntent: PendingModelDownload | null = null;
-    private isDownloadingPendingModelValue = false;
-    private nextIntentId = 1;
 
     constructor() {
         makeAutoObservable(this, {}, { autoBind: true });
@@ -73,14 +63,6 @@ export class TranscriptionControlStore {
         return this.microphoneGateEnabledValue;
     }
 
-    get pendingDownloadModel(): WhisperModelName | null {
-        return this.pendingStartIntent?.model ?? null;
-    }
-
-    get isDownloadingPendingModel(): boolean {
-        return this.isDownloadingPendingModelValue;
-    }
-
     setLanguage(language: string): void {
         this.languageValue = language;
     }
@@ -118,44 +100,10 @@ export class TranscriptionControlStore {
     }
 
     requestStart(isModelDownloaded: boolean): TranscriptionStartPreparation {
-        if (this.pendingStartIntent) return { status: 'awaiting-download' };
-        if (this.useCustomModelFileValue || isModelDownloaded) return this.prepareStart(this.modelValue);
-
-        this.pendingStartIntent = { id: this.nextIntentId, model: this.modelValue };
-        this.nextIntentId += 1;
-
-        return { status: 'awaiting-download' };
-    }
-
-    beginPendingDownload(): PendingModelDownload | null {
-        if (!this.pendingStartIntent || this.isDownloadingPendingModelValue) return null;
-
-        this.modelValue = this.pendingStartIntent.model;
-        this.isDownloadingPendingModelValue = true;
-
-        return this.pendingStartIntent;
-    }
-
-    completePendingDownload(
-        intent: PendingModelDownload,
-        downloadResult: CommandResult,
-    ): TranscriptionStartPreparation | null {
-        if (!this.isCurrentIntent(intent)) return null;
-
-        this.isDownloadingPendingModelValue = false;
-        this.pendingStartIntent = null;
-
-        if (!downloadResult.ok) return { status: 'failed', message: downloadResult.message };
-
-        return this.prepareStart(intent.model);
-    }
-
-    cancelPendingDownload(): void {
-        this.invalidatePendingIntent();
-    }
-
-    dispose(): void {
-        this.invalidatePendingIntent();
+        if (!this.useCustomModelFileValue && !isModelDownloaded) {
+            return { status: 'failed', message: 'Download the selected model to transcribe.' };
+        }
+        return this.prepareStart(this.modelValue);
     }
 
     private prepareStart(model: WhisperModelName): TranscriptionStartPreparation {
@@ -176,15 +124,5 @@ export class TranscriptionControlStore {
                 microphoneGateEnabled: this.microphoneGateEnabledValue,
             },
         };
-    }
-
-    private isCurrentIntent(intent: PendingModelDownload): boolean {
-        return this.pendingStartIntent?.id === intent.id
-            && this.isDownloadingPendingModelValue;
-    }
-
-    private invalidatePendingIntent(): void {
-        this.pendingStartIntent = null;
-        this.isDownloadingPendingModelValue = false;
     }
 }

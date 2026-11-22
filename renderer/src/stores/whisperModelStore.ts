@@ -10,6 +10,10 @@ export class WhisperModelStore {
 
     private unsubscribeProgress: (() => void) | null = null;
 
+    private downloadErrors: Partial<Record<WhisperModelName, string>> = {};
+
+    private cancellingValue = false;
+
     private requestId = 0;
 
     private lifecycleId = 0;
@@ -47,6 +51,29 @@ export class WhisperModelStore {
 
     getModel(name: WhisperModelName): DeepReadonly<WhisperModelInfo> | undefined {
         return this.modelsValue.find((model) => model.name === name);
+    }
+
+    get isCancelling(): boolean { return this.cancellingValue; }
+
+    getDownloadError(name: WhisperModelName): string | undefined { return this.downloadErrors[name]; }
+
+    async cancelDownload(): Promise<CommandResult> {
+        const name = this.downloadProgressValue?.name;
+        if (!name || !this.adapter || this.cancellingValue) return commandSuccess(undefined);
+        this.cancellingValue = true;
+        try {
+            await this.adapter.cancelWhisperModelDownload(name);
+            return commandSuccess(undefined);
+        } catch (error) {
+            runInAction(() => {
+                this.cancellingValue = false;
+                this.downloadErrors[name] = 'Could not cancel the download. Please try again.';
+            });
+            console.error('Failed to cancel Whisper download', error);
+            return commandFailure('Could not cancel the download. Please try again.');
+        } finally {
+            runInAction(() => { if (!this.isDownloadActive) this.cancellingValue = false; });
+        }
     }
 
     isDownloaded(name: WhisperModelName): boolean {
@@ -110,6 +137,7 @@ export class WhisperModelStore {
         if (!this.adapter || this.disposed) return commandFailure('Model download is not available.');
         if (this.isDownloadActive) return commandFailure('Model download is already in progress.');
 
+        delete this.downloadErrors[name];
         this.downloadProgressValue = {
             name,
             percent: 0,
@@ -119,14 +147,19 @@ export class WhisperModelStore {
 
         try {
             await this.adapter.downloadWhisperModel(name);
-            return await this.refresh();
+            const result = await this.refresh();
+            if (!result.ok && !this.disposed) runInAction(() => { this.downloadErrors[name] = result.message; });
+            return result;
         } catch (error: unknown) {
+            if (this.cancellingValue) return commandSuccess(undefined);
             console.error('Failed to download Whisper model', error);
-
-            return commandFailure('Failed to download the model. Please try again.');
+            const message = 'Failed to download the model. Check your connection and retry.';
+            runInAction(() => { if (!this.disposed) this.downloadErrors[name] = message; });
+            return commandFailure(message);
         } finally {
             runInAction(() => {
                 this.downloadProgressValue = null;
+                this.cancellingValue = false;
             });
         }
     }

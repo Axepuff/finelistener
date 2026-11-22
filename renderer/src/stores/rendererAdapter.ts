@@ -53,6 +53,7 @@ export interface RendererAdapter {
     revealDevAppInFinder: () => Promise<boolean>;
     getWhisperModels: () => Promise<WhisperModelInfo[]>;
     downloadWhisperModel: (modelName: WhisperModelName) => Promise<void>;
+    cancelWhisperModelDownload: (modelName: WhisperModelName) => Promise<void>;
     importWhisperModelFromFile: () => Promise<
         | { ok: true; path: string; fileName: string }
         | { ok: false; error: string }
@@ -119,6 +120,7 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
         revealDevAppInFinder: () => api.revealDevAppInFinder(),
         getWhisperModels: () => api.getWhisperModels(),
         downloadWhisperModel: (modelName) => api.downloadWhisperModel(modelName),
+        cancelWhisperModelDownload: (modelName) => api.cancelWhisperModelDownload(modelName),
         importWhisperModelFromFile: () => api.importWhisperModelFromFile(),
         openDevTools: () => api.openDevTools(),
         getUiPreference: (key) => api.getUiPreference(key),
