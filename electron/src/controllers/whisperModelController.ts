@@ -30,6 +30,11 @@ export function registerWhisperModelController(ipc: IpcMain, getMainWindow: () =
         }
     });
 
+    ipc.handle('whisper-models:cancel-download', async (_event, modelName: unknown) => {
+        if (!isWhisperModelName(modelName)) throw new Error('Unknown model name');
+        await service.cancelDownload(modelName);
+    });
+
     ipc.handle('whisper-models:download', async (_event, modelName: unknown) => {
         if (!isWhisperModelName(modelName)) {
             throw new Error('Unknown model name');

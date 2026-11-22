@@ -1,5 +1,5 @@
-import { Box, LoadingOverlay, ScrollArea, Stack } from '@mantine/core';
-import { FileSelect, Player } from '@~/player';
+import { Box, LoadingOverlay } from '@mantine/core';
+import { Player } from '@~/player';
 import { ProcessLog } from '@~/process-log';
 import { SessionsSidebar } from '@~/sessions';
 import { TranscribeControl } from '@~/transcribe-control';
@@ -64,12 +64,7 @@ export const Home: React.FC = observer(() => {
                             bg="var(--brand-color-bg-layout)"
                             style={{ minHeight: 0, overflow: 'hidden' }}
                         >
-                            <ScrollArea h="100%" type="auto">
-                                <Stack gap={16} p={16}>
-                                    <FileSelect />
-                                    <TranscribeControl />
-                                </Stack>
-                            </ScrollArea>
+                            <TranscribeControl />
                         </Box>
                     ),
                 } : undefined}

@@ -1,4 +1,6 @@
 import fs from 'fs/promises';
+import { execFileSync } from 'child_process';
+import ffmpegPath from 'ffmpeg-static';
 import { tmpdir } from 'os';
 import path from 'path';
 import { expect, it } from 'vitest';
@@ -87,4 +89,28 @@ it('prepares an unselected speaker range without speech-altering filters', async
     } finally {
         await prepared.cleanup();
     }
+});
+
+
+it('reports the original source format without converting or changing it', async () => {
+    const directory = await fs.mkdtemp(path.join(tmpdir(), 'finelistener-source-test-'));
+    const file = path.join(directory, 'source.wav');
+    const source = Buffer.alloc(44 + 48_000 * 2 * 2);
+    makeWav().copy(source, 0, 0, 44);
+    source.writeUInt32LE(source.length - 8, 4);
+    source.writeUInt16LE(2, 22);
+    source.writeUInt32LE(48_000, 24);
+    source.writeUInt32LE(48_000 * 4, 28);
+    source.writeUInt16LE(4, 32);
+    source.writeUInt32LE(source.length - 44, 40);
+    try {
+        await fs.writeFile(file, source);
+        const service = new AudioPreprocessor();
+        expect(await service.readSourceMetadata(file)).toEqual({ durationMs: 1000, sampleRate: 48_000, channels: 2 });
+        expect(await fs.readFile(file)).toEqual(source);
+        const compressed = path.join(directory, 'source.mp3');
+        execFileSync(ffmpegPath!, ['-hide_banner', '-loglevel', 'error', '-i', file, compressed], { windowsHide: true });
+        expect(await service.readSourceMetadata(compressed)).toMatchObject({ sampleRate: 48_000, channels: 2 });
+        expect(await service.readSourceMetadata(path.join(directory, 'missing.wav'))).toBeUndefined();
+    } finally { await fs.rm(directory, { recursive: true, force: true }); }
 });
