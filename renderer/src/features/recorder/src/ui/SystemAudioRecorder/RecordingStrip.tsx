@@ -64,6 +64,9 @@ export const RecordingStrip: React.FC = observer(() => {
                         <SourceMeter key={source} label={source === 'system' ? 'System audio' : 'Microphone'}
                             level={sourceLevels[source] ?? (store.runtimePlatform !== 'win32' ? recordingLevel : null)} />
                     ))}
+                    {store.recording.silentSources.map((source) => <Text key={source} size="xs" c="yellow.8" role="status">
+                        No audio from {source === 'system' ? 'system audio' : 'microphone'} for 30 s. Check the selected recording devices. Recording continues.
+                    </Text>)}
                 </div>
             ) : null}
             <Text size="xs" className={styles.placeholder}>The waveform and player appear after you stop recording.</Text>

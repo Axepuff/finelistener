@@ -26,22 +26,16 @@ import {
 
 const RECORDING_STORAGE_FULL_MESSAGE = 'Recording storage is full. Recover or delete an unfinished recording before starting a new one.';
 
-const SILENCE_PEAK_THRESHOLD = 0.0005;
-const SILENCE_RMS_THRESHOLD = 0.0005;
-const SILENCE_WARNING_AFTER_MS = 2000;
+// Peak and RMS are normalized linear amplitudes. Both below 0.0005 is effectively silent (about −66 dBFS).
+const silenceThreshold = 0.0005;
 
 interface RecordingSessionDependencies extends RecordingDependencies {
     logService: RecordingLogService;
     availabilityStore: RecordingAvailabilityStore;
     devicesStore: RecordingDevicesStore;
     operations: ForegroundOperationStore;
-    onSessionImported: (session: SessionDetails) => void;
+    onSessionImported: (session: SessionDetails, transcribe: boolean) => void;
     onRecoveryChanged: () => void;
-}
-
-interface LevelProcessingResult {
-    nextState: RecordingSessionState;
-    logMessage: string | null;
 }
 
 const clearSessionBeforeStart = (previous: RecordingSessionState): RecordingSessionState => ({
@@ -49,13 +43,11 @@ const clearSessionBeforeStart = (previous: RecordingSessionState): RecordingSess
     recordingError: null,
     recordingLevel: null,
     sourceLevels: {},
-    showSilenceWarning: false,
+    sourceSilenceSinceMs: {},
     recordingDurationMs: 0,
     recordingBytesWritten: null,
     recordingStartAt: null,
     lastProgressAt: null,
-    silenceStartedAt: null,
-    silenceLogged: false,
 });
 
 const applyRecordingState = (previous: RecordingSessionState, state: RecordingState): RecordingSessionState => {
@@ -68,9 +60,7 @@ const applyRecordingState = (previous: RecordingSessionState, state: RecordingSt
     if (state !== 'recording') {
         next.recordingStartAt = null;
         next.lastProgressAt = null;
-        next.showSilenceWarning = false;
-        next.silenceStartedAt = null;
-        next.silenceLogged = false;
+        next.sourceSilenceSinceMs = {};
     }
 
     return next;
@@ -88,60 +78,12 @@ const applyRecordingProgress = (
         recordingStartAt: previous.recordingState === 'recording' ? lastProgressAt - recordingDurationMs : previous.recordingStartAt,
         sourceLevels: Object.fromEntries(Object.entries(previous.sourceLevels).filter(([source]) =>
             !progress.sourceFailures?.some((failure) => failure.source === source))),
+        sourceSilenceSinceMs: Object.fromEntries(Object.entries(previous.sourceSilenceSinceMs).filter(([source]) =>
+            !progress.sourceFailures?.some((failure) => failure.source === source))),
         recordingBytesWritten: typeof progress.bytesWritten === 'number' ? progress.bytesWritten : null,
         lastProgressAt,
         recordingError: progress.sourceFailures?.length ? progress.sourceFailures.map((failure) =>
             `${failure.source === 'microphone' ? 'Microphone' : 'System audio'} stopped recording.`).join(' ') : previous.recordingError,
-    };
-};
-
-const getSilenceWarningMessage = (platform: string | null): string => {
-    if (platform === 'darwin') {
-        return 'No system audio detected. On macOS you may need to grant \'System Audio Recording\' permission in System Settings' +
-            ' > Privacy & Security > Screen & System Audio Recording (System Audio Recording Only). In dev mode (`npm run dev`),' +
-            ' the entry may show up as \'FineListener Dev\' or \'Electron\'. If you\'re running from an IDE terminal, add' +
-            ' that terminal app there as well.';
-    }
-
-    return 'No audio detected. Check the selected recording devices.';
-};
-
-const applyRecordingLevel = (
-    previous: RecordingSessionState,
-    level: RecordingLevel,
-    platform: string | null,
-): LevelProcessingResult => {
-    const now = Date.now();
-    const isSilent = level.peak <= SILENCE_PEAK_THRESHOLD && level.rms <= SILENCE_RMS_THRESHOLD;
-    let silenceStartedAt = previous.silenceStartedAt;
-    let silenceLogged = previous.silenceLogged;
-    let showSilenceWarning = previous.showSilenceWarning;
-    let logMessage: string | null = null;
-
-    if (!isSilent) {
-        silenceStartedAt = null;
-        silenceLogged = false;
-        showSilenceWarning = false;
-    } else if (!silenceStartedAt) {
-        silenceStartedAt = now;
-    } else if (now - silenceStartedAt >= SILENCE_WARNING_AFTER_MS) {
-        showSilenceWarning = true;
-
-        if (!silenceLogged) {
-            silenceLogged = true;
-            logMessage = getSilenceWarningMessage(platform);
-        }
-    }
-
-    return {
-        nextState: {
-            ...previous,
-            recordingLevel: level,
-            showSilenceWarning,
-            silenceStartedAt,
-            silenceLogged,
-        },
-        logMessage,
     };
 };
 
@@ -180,6 +122,12 @@ export class RecordingSessionStore {
 
     private lifecycleId = 0;
 
+    transcribeWhenRecordingStops = false;
+
+    private preferenceRevision = 0;
+
+    private lastFinishedRecordingId: string | null = null;
+
     constructor(private readonly dependencies: RecordingSessionDependencies) {
         makeAutoObservable<
             this,
@@ -207,6 +155,13 @@ export class RecordingSessionStore {
         const api = this.dependencies.adapter;
 
         if (!api) return;
+
+        const preferenceRevision = this.preferenceRevision;
+        void api.getUiPreference('transcribeWhenRecordingStops').then((enabled) => {
+            if (lifecycleId === this.lifecycleId && preferenceRevision === this.preferenceRevision) {
+                runInAction(() => { this.transcribeWhenRecordingStops = enabled; });
+            }
+        }).catch((error: unknown) => console.error('Failed to load automatic transcription preference', error));
 
         // Protect an ongoing capture while its current state is being restored.
         this.handleRecordingState(this.stateValue.recordingState);
@@ -240,6 +195,7 @@ export class RecordingSessionStore {
         this.disposed = true;
         this.lifecycleId += 1;
         this.pendingStart = null;
+        this.stateValue = { ...this.stateValue, isProcessingRecording: false };
         this.unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
         this.unsubscribeFunctions = [];
 
@@ -343,8 +299,19 @@ export class RecordingSessionStore {
         return this.finishRecording();
     }
 
+    async setTranscribeWhenRecordingStops(enabled: boolean): Promise<void> {
+        this.preferenceRevision += 1;
+        this.transcribeWhenRecordingStops = enabled;
+        try {
+            await this.dependencies.adapter?.setUiPreference('transcribeWhenRecordingStops', enabled);
+        } catch (error: unknown) {
+            this.dependencies.logService.append('Could not save the automatic transcription preference.');
+            console.error('Failed to save automatic transcription preference', error);
+        }
+    }
+
     private async finishAutomaticRecording(result: FinalizeRecordingResult): Promise<void> {
-        if (this.disposed || this.stateValue.isProcessingRecording) return;
+        if (this.disposed || this.stateValue.isProcessingRecording || this.lastFinishedRecordingId === result.recordingId) return;
         if (!this.activeOperation) this.activeOperation = this.dependencies.operations.begin('recording');
         if (!this.activeOperation) return;
 
@@ -364,6 +331,8 @@ export class RecordingSessionStore {
         this.dependencies.operations.transition(operation, 'processing-recording');
         this.stateValue = { ...this.stateValue, isProcessingRecording: true };
         let captureStopped = false;
+        let savedSession: SessionDetails | undefined;
+        let transcribe = false;
 
         try {
             const result = completedResult ?? await api.stopSystemRecording();
@@ -379,9 +348,10 @@ export class RecordingSessionStore {
                 return commandFailure('The recorded session was replaced before it finished loading.');
             }
 
-            runInAction(() => {
-                this.dependencies.onSessionImported(session);
-            });
+            savedSession = session;
+            transcribe = this.transcribeWhenRecordingStops && !this.stateValue.recordingError && !result.sourceWarnings.length
+                && !session.tracks?.some((track) => track.failure);
+            runInAction(() => { this.lastFinishedRecordingId = result.recordingId; });
             this.dependencies.logService.append('Recording was saved as a session and loaded into the player.');
 
             return commandSuccess(session);
@@ -400,12 +370,14 @@ export class RecordingSessionStore {
             return commandFailure('Failed to finish the recording.');
         } finally {
             runInAction(() => {
+                if (!this.dependencies.operations.owns(operation)) return;
                 this.stateValue = { ...this.stateValue, isProcessingRecording: false };
 
                 // Import failure must not retain the lock after capture has stopped.
                 if (captureStopped) {
                     this.dependencies.operations.finish(operation);
                     this.activeOperation = null;
+                    if (savedSession) this.dependencies.onSessionImported(savedSession, transcribe);
                 } else {
                     this.dependencies.operations.transition(operation, 'recording');
                 }
@@ -464,13 +436,16 @@ export class RecordingSessionStore {
         } : level;
         const recordingSources = level.source && !this.stateValue.recordingSources.includes(level.source) ?
             [...this.stateValue.recordingSources, level.source] : this.stateValue.recordingSources;
-        const { nextState, logMessage } = applyRecordingLevel({ ...this.stateValue, sourceLevels, recordingSources }, combinedLevel, platform);
-
-        this.stateValue = nextState;
-
-        if (logMessage) {
-            this.dependencies.logService.append(logMessage);
+        const source = level.source ?? (platform === 'darwin' ? 'system' : undefined);
+        const sourceSilenceSinceMs = { ...this.stateValue.sourceSilenceSinceMs };
+        if (source && this.stateValue.recordingState === 'recording') {
+            if (level.peak <= silenceThreshold && level.rms <= silenceThreshold) {
+                sourceSilenceSinceMs[source] ??= this.stateValue.recordingDurationMs;
+            } else {
+                delete sourceSilenceSinceMs[source];
+            }
         }
+        this.stateValue = { ...this.stateValue, recordingLevel: combinedLevel, sourceLevels, recordingSources, sourceSilenceSinceMs };
     }
 
     private handleRecordingError(payload: { message: string }): void {

@@ -18,7 +18,7 @@ interface SystemAudioRecorderStoreDependencies {
     adapter: RendererAdapter | null;
     activityLog: ActivityLogStore;
     operations: ForegroundOperationStore;
-    onSessionImported: (session: SessionDetails) => void;
+    onSessionImported: (session: SessionDetails, transcribe: boolean) => void;
     onRecoveryChanged: () => void;
 }
 
@@ -64,6 +64,22 @@ export class SystemAudioRecorderStore {
 
     get session(): Readonly<RecordingSessionState> {
         return this.sessionStore.state;
+    }
+
+    get transcribeWhenRecordingStops(): boolean {
+        return this.sessionStore.transcribeWhenRecordingStops;
+    }
+
+    get silentSources() {
+        const { recordingSources, sourceSilenceSinceMs, recordingDurationMs } = this.session;
+        return recordingSources.filter((source) => {
+            const since = sourceSilenceSinceMs[source];
+            return since !== undefined && recordingDurationMs - since >= 30_000;
+        });
+    }
+
+    setTranscribeWhenRecordingStops(enabled: boolean): Promise<void> {
+        return this.sessionStore.setTranscribeWhenRecordingStops(enabled);
     }
 
     initialize(): void {

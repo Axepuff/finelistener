@@ -7,19 +7,19 @@ import { useAppStore } from '../../../../../AppContext';
 export const RecordingSettings: React.FC = observer(() => {
     const { recording, recordingInProgress } = useAppStore();
     const disclosure = useRef<HTMLDetailsElement>(null);
-    const { recordingState, recordingError, showSilenceWarning } = recording.session;
+    const { recordingState, recordingError } = recording.session;
     const { deviceError } = recording.devices;
     const { isRecordingAvailable } = recording.availability;
 
     useEffect(() => {
         // Title-bar recording actions must also reveal the existing controls and alerts.
-        if (recordingState !== 'idle' || recordingError || showSilenceWarning || deviceError || !isRecordingAvailable) {
+        if (recordingState !== 'idle' || recordingError || deviceError || !isRecordingAvailable) {
             if (disclosure.current) {
                 disclosure.current.open = true;
                 disclosure.current.lastElementChild?.scrollIntoView({ block: 'nearest' });
             }
         }
-    }, [recordingInProgress, recordingState, recordingError, showSilenceWarning, deviceError, isRecordingAvailable]);
+    }, [recordingInProgress, recordingState, recordingError, deviceError, isRecordingAvailable]);
 
     return (
         <>

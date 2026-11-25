@@ -5,6 +5,7 @@ import React, { useState, type ReactNode } from 'react';
 import { useAppStore } from 'renderer/src/AppContext';
 import { formatSecondsReadable } from 'renderer/src/shared/lib';
 import { InlineAlert } from 'renderer/src/shared/InlineAlert';
+import { RemainingTime } from 'renderer/src/shared/RemainingTime';
 import type { ForegroundOperationKind } from 'renderer/src/stores/types';
 
 const speakerPhases = {
@@ -97,6 +98,7 @@ export const TranscriptionProgress: React.FC = observer(() => {
         <Box className="settings-panel">
             <Stack gap={20} className="settings-panel__scroll">
                 <Text component="h2" size="lg" fw={600} m={0}>{settings ? 'Transcription' : 'Speaker analysis'}</Text>
+                {!isAnalyzing && transcription.isRunning && <RemainingTime estimate={transcription.estimate} showStart={true} />}
                 <ol className="transcription-progress__steps">
                     <Step number={1} label="Prepare audio" status={recognitionStarted ? 'done' : 'current'}>
                         <Text size="xs" c="dimmed">{recognitionStarted ? 'Done' : 'Getting audio ready…'}</Text>

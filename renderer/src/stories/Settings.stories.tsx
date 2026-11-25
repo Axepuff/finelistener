@@ -112,6 +112,7 @@ export const RecorderWithOpenSession: Story = {
             await userEvent.click(page.getByRole('option', { name: 'Default device' }));
             await userEvent.click(recorder.getByRole('button', { name: 'Start recording' }));
             const sources = within(settings.getByRole('group', { name: 'Recording sources' }));
+            await expect(settings.getByRole('checkbox', { name: 'Transcribe when recording stops' })).not.toBeChecked();
             await expect(sources.getByRole('textbox', { name: 'System audio' })).toBeDisabled();
             await expect(settings.getByRole('button', { name: 'Transcribe' })).toHaveAccessibleDescription('Stop recording to transcribe.');
             await expect(settings.getByRole('button', { name: 'Clear workspace' })).toBeDisabled();
@@ -137,6 +138,7 @@ export const RecorderWarningInWorkspace: Story = {
             await userEvent.click(header.getByRole('button', { name: 'Start recording' }));
             const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
             await waitFor(() => expect(settings.getByText(/No system audio detected/)).toBeVisible(), { timeout: 5000 });
+            await expect(canvas.getByText(/No audio from system audio for 30 s/)).toBeVisible();
             await userEvent.click(settings.getByRole('button', { name: 'Open privacy settings' }));
             await expect(privacy).toHaveBeenCalledOnce();
             await userEvent.click(header.getByRole('button', { name: 'Stop recording' }));

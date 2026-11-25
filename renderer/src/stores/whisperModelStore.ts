@@ -1,10 +1,12 @@
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
 import type { ActivityLogStore } from './activityLogStore';
+import { ProgressEstimate } from './progressEstimate';
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { RendererAdapter } from './rendererAdapter';
 import { commandFailure, commandSuccess, type CommandResult, type DeepReadonly } from './types';
 
 export class WhisperModelStore {
+    readonly estimate = new ProgressEstimate();
     private modelsValue: WhisperModelInfo[] = [];
 
     private downloadProgressValue: WhisperModelDownloadProgress | null = null;
@@ -141,6 +143,7 @@ export class WhisperModelStore {
         if (this.isDownloadActive) return commandFailure('Model download is already in progress.');
 
         delete this.downloadErrors[name];
+        this.estimate.start();
         this.downloadProgressValue = {
             name,
             percent: 0,
@@ -169,7 +172,10 @@ export class WhisperModelStore {
     }
 
     private updateDownloadProgress(progress: WhisperModelDownloadProgress): void {
-        if (progress.name === this.downloadProgressValue?.name) this.downloadProgressValue = progress;
+        if (progress.name !== this.downloadProgressValue?.name) return;
+        this.downloadProgressValue = progress;
+        if (progress.totalBytes) this.estimate.update(progress.downloadedBytes / progress.totalBytes);
+        else if (progress.percent !== null) this.estimate.update(progress.percent / 100);
     }
 
     private isCurrentLifecycle(lifecycleId: number): boolean {

@@ -125,6 +125,20 @@ export const ComponentFailure: Story = {
         } finally { retry.mockRestore(); analyze.mockRestore(); }
     },
 };
+export const SkipAfterComponentFailure: Story = {
+    parameters: { errorScenario: 'preparation' },
+    play: async ({ canvas, canvasElement, loaded }) => {
+        const { store } = loaded.workspace as StoryWorkspace;
+        const transcript = store.transcription.plainText;
+        await userEvent.click(canvas.getByRole('button', { name: 'Skip speakers' }));
+        await expect(canvas.getByText(/Identify speakers · Skipped/)).toBeVisible();
+        await expect(store.transcription.plainText).toBe(transcript);
+        await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
+        await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
+        await expect(within(canvasElement.ownerDocument.body).getByRole('button', { name: 'Analyze speakers' })).toBeEnabled();
+    },
+};
+
 export const MacPermission: Story = {
     parameters: { errorScenario: 'permission' },
     play: async ({ canvas, loaded }) => {
