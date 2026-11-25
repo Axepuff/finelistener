@@ -54,7 +54,51 @@ export const IncompleteTranscript: Story = {
 };
 
 export const DownloadRequired: Story = { parameters: { scenario: 'summary-install' }, play: openSummary };
-export const Downloading: Story = { parameters: { scenario: 'summary-downloading' }, play: openSummary };
+export const PromptPresets: Story = {
+    play: async (context) => {
+        await openSummary(context);
+        const { canvas, canvasElement } = context;
+        const page = within(canvasElement.ownerDocument.body);
+        const prompt = canvas.getByRole('textbox', { name: 'Prompt' });
+        await userEvent.click(canvas.getByRole('button', { name: 'Meeting notes' }));
+        await expect((prompt as HTMLTextAreaElement).value).toContain('meeting topics');
+        await userEvent.click(canvas.getByRole('button', { name: 'New preset' }));
+        await expect(prompt).toHaveValue('');
+        const instruction = 'List each agreed deadline.';
+        await userEvent.type(prompt, instruction);
+        await userEvent.click(canvas.getByRole('button', { name: 'Save as preset' }));
+        await userEvent.type(page.getByRole('textbox', { name: 'Preset name' }), 'Deadlines');
+        await userEvent.click(page.getByRole('button', { name: 'Save' }));
+        await expect(await canvas.findByRole('button', { name: 'Deadlines' })).toHaveAttribute('aria-pressed', 'true');
+        await userEvent.click(canvas.getByRole('button', { name: 'Rename preset' }));
+        const name = page.getByRole('textbox', { name: 'Preset name' });
+        await userEvent.clear(name);
+        await userEvent.type(name, 'Due dates');
+        await userEvent.click(page.getByRole('button', { name: 'Save' }));
+        await expect(await canvas.findByRole('button', { name: 'Due dates' })).toBeVisible();
+        await userEvent.click(canvas.getByRole('button', { name: 'Generate summary' }));
+        await userEvent.click(await canvas.findByRole('tab', { name: 'Detailed notes' }));
+        await expect(canvas.getByText('Due dates')).toBeVisible();
+        await userEvent.click(canvas.getByRole('button', { name: 'Edit prompt' }));
+        await userEvent.click(canvas.getByRole('button', { name: 'Delete preset' }));
+        await userEvent.click(page.getByRole('button', { name: 'Delete' }));
+        await waitFor(() => expect(canvas.queryByRole('button', { name: 'Due dates' })).not.toBeInTheDocument());
+        await expect(canvas.getByRole('textbox', { name: 'Prompt' })).toHaveValue(instruction);
+        await expect((context.loaded.workspace as StoryWorkspace).store.transcription.savedTranscript?.summary?.options?.prompt).toBe(instruction);
+    },
+};
+export const Downloading: Story = {
+    parameters: { scenario: 'summary-downloading' },
+    play: async (context) => {
+        await openSummary(context);
+        const optIn = context.canvas.getByRole('checkbox', { name: 'Generate automatically when the download finishes' });
+        await expect(optIn).not.toBeChecked();
+        await userEvent.click(optIn);
+        await userEvent.click(context.canvas.getByRole('radio', { name: 'Text' }));
+        await openSummary(context);
+        await expect(context.canvas.getByRole('checkbox', { name: 'Generate automatically when the download finishes' })).toBeChecked();
+    },
+};
 export const DownloadFailed: Story = { parameters: { scenario: 'summary-download-error' }, play: async (context) => {
     await openSummary(context);
     await expect(context.canvas.getByText('1.17 / 2.50 GB')).toBeVisible();
@@ -253,7 +297,10 @@ export const SavedShortBrief: Story = {
     parameters: { scenario: 'summary-short' }, render: panel(780), play: openSummary,
 };
 export const SavedShortDetailed: Story = {
-    ...SavedShortBrief, play: openDetailed,
+    ...SavedShortBrief, play: async (context) => {
+        await openDetailed(context);
+        await expect(context.canvas.getByRole('heading', { name: 'Friday pilot' })).toBeVisible();
+    },
 };
 export const SavedLongBrief: Story = { parameters: { scenario: 'summary-long' }, play: openSummary };
 export const SavedLongDetailed: Story = { ...SavedLongBrief, play: openDetailed };

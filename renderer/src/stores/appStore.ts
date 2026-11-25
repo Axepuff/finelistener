@@ -1,5 +1,5 @@
 import type { SessionDetails, SessionRawSpan, SessionSpeakerAssignment } from 'electron/src/types/sessions';
-import { isRecordingSummaryOptions, recordingSummaryGenerationVersion, sameRecordingSummaryOptions, type RecordingSummaryOptions } from '../../../electron/src/types/summaryOptions';
+import { defaultRecordingSummaryOptions, isRecordingSummaryOptions, recordingSummaryGenerationVersion, sameRecordingSummaryOptions, type RecordingSummaryOptions } from '../../../electron/src/types/summaryOptions';
 import { SUMMARY_MODEL_ARTIFACT } from '../../../electron/src/types/summaryModel';
 import type { AnalyzeSpeakersOptions } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
@@ -82,7 +82,14 @@ export class AppStore {
         this.sessions = new SessionsStore(adapter);
         this.transcription = new TranscriptionStore(adapter, this.activityLog);
         this.speakers = new SpeakerAnalysisStore(adapter);
-        this.summary = new SummaryStore(adapter, this.operations, this.activityLog);
+        this.summary = new SummaryStore(adapter, this.operations, this.activityLog, (sessionId, prompt) => {
+            const options = { ...defaultRecordingSummaryOptions, prompt };
+            const failure = this.summary.generationFailure;
+            if (sessionId === this.workspace.activeSessionId && !this.operations.isBusy && isRecordingSummaryOptions(options)
+                && !(failure?.reason === 'prompt-too-long' && failure.sessionId === sessionId && failure.prompt === prompt)) {
+                void this.generateSummary(options);
+            }
+        });
         this.whisperModels = new WhisperModelStore(adapter, this.activityLog);
         this.recording = new SystemAudioRecorderStore({
             adapter,
@@ -299,6 +306,7 @@ export class AppStore {
 
                 if (this.workspace.activeSessionId === sessionId) {
                     this.workspace.clearWorkspace();
+                    this.summary.leaveSession();
                     this.transcription.clear();
                 }
             });
@@ -751,7 +759,7 @@ export class AppStore {
             console.error('Failed to clear the active session', error);
         });
         this.workspace.clearWorkspace();
-        this.summary.clearError();
+        this.summary.leaveSession();
         this.transcription.clear();
 
         return commandSuccess(undefined);
@@ -884,7 +892,8 @@ export class AppStore {
     }
 
     private acceptSession(session: SessionDetails): void {
-        this.summary.clearError();
+        if (this.workspace.activeSessionId !== session.id) this.summary.leaveSession();
+        else this.summary.clearError();
         void this.adapter?.setActiveSession(session.id).catch((error: unknown) => {
             console.error('Failed to update the active session', error);
         });

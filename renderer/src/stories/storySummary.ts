@@ -58,6 +58,7 @@ export const createStorySummary = (scenario: string, save: (summary: SessionSumm
         const startChar = index === 1 ? segment.text.indexOf(excerpt) : 0;
         return {
             startSec: segment.startSec, endSec: segment.endSec!, text, speakers: [speakers[index % 2]],
+            title: ['Finding answers in saved interviews', 'Friday pilot'][index],
             sourceRefs: [{ segmentIndex, segmentId: segment.id, startChar, endChar: index === 1 ? startChar + excerpt.length : segment.text.length }],
         };
     });

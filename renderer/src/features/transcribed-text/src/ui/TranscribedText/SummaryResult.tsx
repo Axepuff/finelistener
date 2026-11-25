@@ -78,6 +78,7 @@ const SummaryChunk: React.FC<ChunkProps> = ({ chunk, transcript, labels, current
                 </Button>}
             </div>
         </div>
+        {typeof chunk.title === 'string' && chunk.title && <h3 className={styles.chunkTitle}>{chunk.title}</h3>}
         <p className={styles.paragraph}>{chunk.text}</p>
         {sourceLines && <div id={sourceId} hidden={!showSource} className={styles.source}>
             {showSource && sourceLines.map((line, index) => <p key={index}>{line}</p>)}

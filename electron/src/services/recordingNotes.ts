@@ -119,6 +119,23 @@ const generate = async (
     return null;
 };
 
+const generateChunkTitle = async (text: string, model: SummaryInference, language: SummaryLanguage): Promise<string | undefined> => {
+    // The reviewed paragraph already fits the 512-token answer budget; its title never enters the next prompt.
+    const prompt = promptFor('Return only the title, on one line, without Markdown.', `REVIEWED PARAGRAPH\n${text}`, {
+        language, prompt: 'Give this reviewed paragraph a descriptive title of at most eight words in the same language.',
+    });
+    try {
+        const title = (await model.complete(prompt, 48))?.trim();
+        if (!title || /[\r\n]/u.test(title) || title.length > 160 || !language.accepts(title)) return undefined;
+        const words = wordCount(title);
+        return words > 0 && words <= 8 ? title : undefined;
+    } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') throw error;
+        console.warn('Could not generate a detailed note title', error);
+        return undefined;
+    }
+};
+
 const condenseNotes = async (source: string, model: SummaryInference, task: SummaryTask): Promise<string> => {
     const words = wordCount(source);
     const maxWords = Math.min(words, 150, Math.max(12, Math.floor(words * 2 / 3)));
@@ -221,7 +238,8 @@ export const generateRecordingNotes = async (
                     progress(`Checking chunk ${chunks.length + 1} against the transcript…`);
                     const text = await generate(model, reviewInstruction, `DRAFT\n${draft}\n\n${overlap}ORIGINAL LINES\n${lines}`, paragraphLimit, task);
                     if (!text) continue;
-                    chunks.push({ ...passageMetadata(passage), text });
+                    const title = await generateChunkTitle(text, model, task.language);
+                    chunks.push({ ...passageMetadata(passage), text, ...(title ? { title } : {}) });
                     group.splice(0, group.length, ...candidate);
                     previous = passage;
                     first += passage.length;

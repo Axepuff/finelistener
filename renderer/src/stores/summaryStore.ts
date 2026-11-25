@@ -6,6 +6,7 @@ import { defaultRecordingSummaryOptions, type RecordingSummaryOptions } from '..
 import type { ForegroundOperationStore } from './foregroundOperationStore';
 import type { RendererAdapter } from './rendererAdapter';
 import { ProgressEstimate } from './progressEstimate';
+import { SummaryPresetStore } from './summaryPresetStore';
 
 interface SummaryRequestFailure {
     sessionId: string;
@@ -26,6 +27,9 @@ const generationMessages: Record<SummaryRequestFailure['reason'], string> = {
 
 export class SummaryStore {
     readonly downloadEstimate = new ProgressEstimate();
+    readonly presets: SummaryPresetStore;
+    editedPrompt: string | undefined;
+    private generateAfterDownloadFor: string | null = null;
     private progressValue = '';
     private runningOptionsValue?: RecordingSummaryOptions;
     private generationFailureValue: SummaryRequestFailure | null = null;
@@ -39,9 +43,13 @@ export class SummaryStore {
     private unsubscribeModel: (() => void) | null = null;
     private unsubscribe: (() => void) | null = null;
 
-    constructor(private readonly adapter: RendererAdapter | null, private readonly operations: ForegroundOperationStore, private readonly activityLog: ActivityLogStore | null = null) {
-        makeAutoObservable<this, 'adapter' | 'activityLog' | 'operations' | 'unsubscribe' | 'unsubscribeModel' | 'modelRequest'>(this, {
+    constructor(private readonly adapter: RendererAdapter | null, private readonly operations: ForegroundOperationStore,
+        private readonly activityLog: ActivityLogStore | null = null,
+        private readonly onDownloadReady?: (sessionId: string, prompt: string) => void) {
+        this.presets = new SummaryPresetStore(adapter);
+        makeAutoObservable<this, 'adapter' | 'activityLog' | 'operations' | 'unsubscribe' | 'unsubscribeModel' | 'modelRequest' | 'onDownloadReady'>(this, {
             adapter: false, activityLog: false, operations: false, unsubscribe: false, unsubscribeModel: false, modelRequest: false,
+            onDownloadReady: false,
         }, { autoBind: true });
     }
 
@@ -55,6 +63,21 @@ export class SummaryStore {
     }
     get stopped(): boolean { return this.stoppedValue; }
     get modelStatus(): SummaryModelStatus | null { return this.modelValue; }
+    get automaticGenerationSession(): string | null { return this.generateAfterDownloadFor; }
+
+    setPrompt(value: string): void { this.editedPrompt = value; }
+
+    setGenerateAfterDownload(sessionId: string, prompt: string, enabled: boolean): void {
+        if (this.modelValue?.state !== 'downloading') return;
+        this.generateAfterDownloadFor = enabled ? sessionId : null;
+        if (enabled) this.editedPrompt = prompt;
+    }
+
+    leaveSession(): void {
+        this.editedPrompt = undefined;
+        this.generateAfterDownloadFor = null;
+        this.clearError();
+    }
     get modelError(): string | null {
         if (this.modelFailure) return this.modelFailure;
         if (this.modelValue?.state !== 'error') return null;
@@ -74,15 +97,23 @@ export class SummaryStore {
             this.activityLog?.appendFailure('Summary model download failed', `reason=${status.error}; model=${status.model}; reached=${status.downloadedBytes}/${status.totalBytes} bytes`);
         }
         this.modelValue = status;
+        this.modelFailure = null;
+        if (status.state !== 'downloading') {
+            const sessionId = this.generateAfterDownloadFor;
+            this.generateAfterDownloadFor = null;
+            if (sessionId && previous?.state === 'downloading' && status.state === 'ready' && this.editedPrompt !== undefined) {
+                this.onDownloadReady?.(sessionId, this.editedPrompt);
+            }
+        }
     }
 
     initialize(): void {
         if (!this.adapter || this.unsubscribeModel) return;
+        void this.presets.load();
         this.unsubscribeModel = this.adapter.onSummaryModelChanged((status) => {
             runInAction(() => {
                 this.modelRequest += 1;
                 this.setModelStatus(status);
-                this.modelFailure = null;
             });
         });
     }
@@ -94,12 +125,12 @@ export class SummaryStore {
             const status = await this.adapter.getSummaryModelStatus();
             if (request === this.modelRequest) runInAction(() => {
                 this.setModelStatus(status);
-                this.modelFailure = null;
             });
         } catch (error) {
             console.error('Failed to read the summary model status', error);
             if (request === this.modelRequest) runInAction(() => {
                 this.modelValue = null;
+                this.generateAfterDownloadFor = null;
                 this.modelFailure = 'Could not check whether the model is installed.';
                 this.activityLog?.appendFailure('Summary model availability check failed', error);
             });
@@ -123,6 +154,7 @@ export class SummaryStore {
             console.error('Failed to install the summary model', error);
             if (this.downloadPending === attempt) runInAction(() => {
                 this.modelFailure = 'Could not download the model. Try again.';
+                this.generateAfterDownloadFor = null;
                 this.activityLog?.appendFailure('Summary model download failed', error);
             });
         } finally {
@@ -133,6 +165,7 @@ export class SummaryStore {
     async cancelModelDownload(): Promise<void> {
         if (!this.adapter || !this.unsubscribeModel || (!this.downloadPending && this.modelValue?.state !== 'downloading')) return;
         const attempt = this.downloadPending;
+        this.generateAfterDownloadFor = null;
         const request = ++this.modelRequest;
         try {
             const status = await this.adapter.cancelSummaryModelDownload();
@@ -141,7 +174,6 @@ export class SummaryStore {
                 if (attempt && this.downloadPending === attempt && status.state !== 'downloading') this.downloadPending = null;
                 if (request === this.modelRequest) {
                     this.setModelStatus(status);
-                    this.modelFailure = null;
                 }
             });
         } catch (error) {
@@ -227,6 +259,7 @@ export class SummaryStore {
     }
 
     dispose(): void {
+        this.presets.dispose();
         if (this.isRunning) void this.stop();
         this.unsubscribe?.();
         this.unsubscribe = null;
@@ -237,6 +270,6 @@ export class SummaryStore {
         this.modelValue = null;
         this.runningOptionsValue = undefined;
         this.modelFailure = null;
-        this.clearError();
+        this.leaveSession();
     }
 }

@@ -160,6 +160,7 @@ export interface ReviewedSummaryChunk {
     startSec: number;
     endSec: number;
     text: string;
+    title?: string;
     sourceRefs?: SummarySourceRef[];
     speakers?: SummarySpeakerSnapshot[];
 }

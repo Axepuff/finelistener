@@ -7,6 +7,22 @@ import { generateRecordingNotes, summaryContext, type SummaryInference } from '.
 const countTokens = (text: string) => Promise.resolve(Array.from(text).length);
 const bodyOf = (prompt: string) => prompt.split('<|im_start|>user\n')[1].split('\n<|im_end|>')[0];
 
+it.each(['Delivery date', null, 'A title with far too many words to use here', new Error('Title unavailable')])(
+    'keeps reviewed text byte-for-byte when generating the optional title %s', async (answer) => {
+        const text = 'Delivery  is due Friday.';
+        const saved: ReviewedSummaryChunk[] = [];
+        const result = await generateRecordingNotes([{ startSec: 1, endSec: 4, text }], {
+            countTokens,
+            complete: (prompt) => {
+                if (!bodyOf(prompt).includes('REVIEWED PARAGRAPH\n')) return Promise.resolve(text);
+                return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
+            },
+        }, () => {}, (chunks) => { saved.push(...chunks); return Promise.resolve(); }, undefined, 'en');
+        expect(saved[0].title).toBe(answer === 'Delivery date' ? answer : undefined);
+        expect(Buffer.from(result.detailed)).toEqual(Buffer.from(text));
+        expect(result.brief).toBe(text);
+    });
+
 it.each([
     { hint: 'en', source: 'Мы обсудили обновление в GitHub. Проверку завершили сегодня утром и договорились отправить готовый отчёт в пятницу.',
         notes: 'Команда завершила проверку обновления сегодня утром и договорилась отправить готовый отчёт в пятницу.', brief: 'Отчёт отправят в пятницу.' },
@@ -18,6 +34,7 @@ it.each([
     const attempts = new Set<string>();
     const complete = (prompt: string) => {
         const body = bodyOf(prompt);
+        if (body.includes('REVIEWED PARAGRAPH\n')) return Promise.resolve(null);
         const stage = ['ORIGINAL LINES', 'NEW LINES', 'DRAFT BRIEF', ''].find((label) => body.includes(label))!;
         if (!attempts.has(stage)) {
             attempts.add(stage);
@@ -67,6 +84,7 @@ it('reviews original timed turns independently with zero overlap and joins the r
     const complete: SummaryInference['complete'] = async (prompt, maxTokens) => {
         expect(await countTokens(prompt) + maxTokens).toBeLessThanOrEqual(summaryContext);
         const body = bodyOf(prompt);
+        if (body.includes('REVIEWED PARAGRAPH\n')) return null;
         if (body.includes('NEW LINES\n')) {
             const [history, source] = body.split('NEW LINES\n');
             expect(history).toBe('');
@@ -108,6 +126,7 @@ it.each([
     let briefCalls = 0;
     await generateRecordingNotes(rows, { countTokens, complete: async (prompt, limit) => {
         expect(await countTokens(prompt) + limit).toBeLessThanOrEqual(summaryContext);
+        if (bodyOf(prompt).includes('REVIEWED PARAGRAPH\n')) return null;
         expect(prompt.split('<|im_start|>user')[0]).toContain(userPrompt.replace('<|', '< '));
         const body = bodyOf(prompt);
         if (body.includes('NEW LINES\n')) drafts.push(body);
