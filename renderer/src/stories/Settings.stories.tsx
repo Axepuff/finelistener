@@ -58,7 +58,7 @@ export const CancelDownload: Story = {
         const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
         await expect(settings.getByText('Downloading… 38%')).toBeVisible();
         await expect(settings.getByRole('radio', { name: 'Small' })).toBeDisabled();
-        await expect(settings.getByRole('button', { name: 'Transcribe' })).toBeDisabled();
+        await expect(settings.getByRole('button', { name: 'Transcribe with Large' })).toBeDisabled();
         await expect(settings.getByText('The selected model is downloading.')).toBeVisible();
         await userEvent.click(settings.getByRole('button', { name: 'Cancel download' }));
         await waitFor(() => expect(settings.getByRole('button', { name: 'Download Large' })).toBeEnabled());
@@ -69,7 +69,19 @@ export const CancelDownload: Story = {
 };
 export const Failed: Story = { parameters: { scenario: 'settings-failed' } };
 
-export const Downloading: Story = { parameters: { scenario: 'settings-downloading' } };
+export const Downloading: Story = {
+    parameters: { scenario: 'settings-downloading' },
+    play: async ({ canvas, loaded }) => {
+        const { store } = loaded.workspace as StoryWorkspace;
+        const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
+        await userEvent.click(settings.getByRole('button', { name: 'Use Base now' }));
+        await expect(settings.getByRole('radio', { name: 'Base' })).toBeChecked();
+        await expect(settings.getByText('Downloading… 38%')).toBeVisible();
+        await userEvent.click(settings.getByRole('button', { name: 'Transcribe' }));
+        await waitFor(() => expect(store.transcription.runOutcome).toBe('success'));
+        await expect(settings.getByText('Downloading… 38%')).toBeVisible();
+    },
+};
 
 
 export const RecorderWithOpenSession: Story = {
