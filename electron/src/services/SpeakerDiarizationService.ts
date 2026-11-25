@@ -148,6 +148,7 @@ export class SpeakerDiarizationService {
     private async component(): Promise<ComponentManifest | null> {
         try {
             const manifest = await readJson<ComponentManifest>(path.join(this.bundleRoot(), 'component.json'));
+            const releaseTag = new URL(manifest.url).pathname.split('/')[5];
             const runtime = NEMOTRON_RUNTIMES[manifest.variant];
             const expectedPlatform = process.platform === 'win32' ? manifest.variant.startsWith('win-x64-') :
                 process.platform === 'darwin' && manifest.variant === 'mac-arm64';
@@ -160,7 +161,8 @@ export class SpeakerDiarizationService {
                 && manifest.files[manifest.model]?.sha256 === NEMOTRON_COMPONENT.modelSha256
                 && Object.hasOwn(manifest.files, manifest.executable) && Object.hasOwn(manifest.files, 'notices/model-LICENSE')
                 && Number.isSafeInteger(manifest.bytes) && manifest.bytes > 0 && /^[a-f0-9]{64}$/i.test(manifest.sha256)
-                && manifest.url === 'https://github.com/Axepuff/finelistener/releases/download/v' + app.getVersion() +
+                && Boolean(releaseTag)
+                && manifest.url === 'https://github.com/Axepuff/finelistener/releases/download/' + releaseTag +
                     '/finelistener-' + manifest.version + '-' + manifest.variant + '.zip' ? manifest : null;
         } catch { return null; }
     }
