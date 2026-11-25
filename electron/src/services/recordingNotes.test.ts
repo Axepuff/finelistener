@@ -7,21 +7,24 @@ import { generateRecordingNotes, summaryContext, type SummaryInference } from '.
 const countTokens = (text: string) => Promise.resolve(Array.from(text).length);
 const bodyOf = (prompt: string) => prompt.split('<|im_start|>user\n')[1].split('\n<|im_end|>')[0];
 
-it.each(['Delivery date', null, 'A title with far too many words to use here', new Error('Title unavailable')])(
-    'keeps reviewed text byte-for-byte when generating the optional title %s', async (answer) => {
-        const text = 'Delivery  is due Friday.';
-        const saved: ReviewedSummaryChunk[] = [];
-        const result = await generateRecordingNotes([{ startSec: 1, endSec: 4, text }], {
-            countTokens,
-            complete: (prompt) => {
-                if (!bodyOf(prompt).includes('REVIEWED PARAGRAPH\n')) return Promise.resolve(text);
-                return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
-            },
-        }, () => {}, (chunks) => { saved.push(...chunks); return Promise.resolve(); }, undefined, 'en');
-        expect(saved[0].title).toBe(answer === 'Delivery date' ? answer : undefined);
-        expect(Buffer.from(result.detailed)).toEqual(Buffer.from(text));
-        expect(result.brief).toBe(text);
-    });
+it.each([
+    ['Delivery date', 'Delivery date'], ['"\r\nDelivery date"', 'Delivery date'], [':\r\nDelivery date', 'Delivery date'],
+    ['Delivery date\nA second heading', undefined], ['A title with far too many words to use here', undefined],
+    [null, undefined], [new Error('Title unavailable'), undefined],
+] as const)('keeps reviewed text byte-for-byte when generating the optional title %s', async (answer, expected) => {
+    const text = 'Delivery  is due Friday.';
+    const saved: ReviewedSummaryChunk[] = [];
+    const result = await generateRecordingNotes([{ startSec: 1, endSec: 4, text }], {
+        countTokens,
+        complete: (prompt) => {
+            if (!bodyOf(prompt).includes('REVIEWED PARAGRAPH\n')) return Promise.resolve(text);
+            return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
+        },
+    }, () => {}, (chunks) => { saved.push(...chunks); return Promise.resolve(); }, undefined, 'en');
+    expect(saved[0].title).toBe(expected);
+    expect(Buffer.from(result.detailed)).toEqual(Buffer.from(text));
+    expect(result.brief).toBe(text);
+});
 
 it.each([
     { hint: 'en', source: 'Мы обсудили обновление в GitHub. Проверку завершили сегодня утром и договорились отправить готовый отчёт в пятницу.',

@@ -16,6 +16,7 @@ const briefInstruction = 'Apply the summary request to these notes as a whole. W
 const briefReviewInstruction = 'Verify the brief against the source notes and the summary request. Correct unsupported claims and preserve the requested format. Keep the result shorter than the notes. Return only the checked brief.';
 const wordSegmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
 const sentenceSegmenter = new Intl.Segmenter(undefined, { granularity: 'sentence' });
+const titleQuotes: Record<string, string> = { '"': '"', '“': '”', '«': '»' };
 const wordCount = (text: string): number => Array.from(wordSegmenter.segment(text)).filter((part) => part.isWordLike).length;
 
 export interface SummaryInference {
@@ -125,7 +126,10 @@ const generateChunkTitle = async (text: string, model: SummaryInference, languag
         language, prompt: 'Give this reviewed paragraph a descriptive title of at most eight words in the same language.',
     });
     try {
-        const title = (await model.complete(prompt, 48))?.trim();
+        const answer = (await model.complete(prompt, 48))?.trim().replace(/^:[ \t]*\r?\n\s*/u, '');
+        if (!answer) return undefined;
+        // Qwen can put the opening quotation mark on a line of its own.
+        const title = titleQuotes[answer[0]] === answer.at(-1) ? answer.slice(1, -1).trim() : answer;
         if (!title || /[\r\n]/u.test(title) || title.length > 160 || !language.accepts(title)) return undefined;
         const words = wordCount(title);
         return words > 0 && words <= 8 ? title : undefined;

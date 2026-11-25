@@ -70,6 +70,7 @@ export const SummaryModelCard: React.FC<Props> = ({ model, error, onCheck, onDow
             aria-label="Summary model download" />
         <RemainingTime estimate={summary.downloadEstimate} />
         <Checkbox label="Generate automatically when the download finishes" checked={generateAfterDownload}
+            description="Switching sessions clears this choice."
             onChange={(event) => onGenerateAfterDownloadChange(event.currentTarget.checked)} />
         <div className={styles.row}>
             {error ? <span role="alert" className={styles.grow}>{error}</span> :
