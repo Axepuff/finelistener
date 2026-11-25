@@ -56,7 +56,8 @@ const applyRecordingState = (previous: RecordingSessionState, state: RecordingSt
     if (state === 'recording' && !previous.recordingStartAt) {
         next.recordingStartAt = Date.now();
         // A live capture helper may emit no samples at all while its source is silent.
-        next.lastSourceSignalMs = Object.fromEntries(previous.recordingSources.map((source) => [source, previous.recordingDurationMs]));
+        const now = performance.now();
+        next.lastSourceSignalMs = Object.fromEntries(previous.recordingSources.map((source) => [source, now]));
     }
 
     if (state !== 'recording') {
@@ -110,6 +111,8 @@ const applyFallbackDuration = (previous: RecordingSessionState): RecordingSessio
 export class RecordingSessionStore {
     private stateValue: RecordingSessionState = initialSessionState;
 
+    private levelClockMs = 0;
+
     private activeOperation: ForegroundOperation | null = null;
 
     private pendingStart: { operation: ForegroundOperation; idleReceived: boolean } | null = null;
@@ -144,6 +147,14 @@ export class RecordingSessionStore {
 
     get state(): Readonly<RecordingSessionState> {
         return this.stateValue;
+    }
+
+    get silentSources(): RecordingSourceKind[] {
+        const { recordingSources, lastSourceSignalMs } = this.stateValue;
+        return recordingSources.filter((source) => {
+            const lastSignal = lastSourceSignalMs[source];
+            return lastSignal !== undefined && this.levelClockMs - lastSignal >= 30_000;
+        });
     }
 
     initialize(): void {
@@ -427,6 +438,7 @@ export class RecordingSessionStore {
     }
 
     private handleRecordingProgress(progress: RecordingProgress): void {
+        this.levelClockMs = performance.now();
         this.stateValue = applyRecordingProgress(this.stateValue, progress);
     }
 
@@ -445,7 +457,7 @@ export class RecordingSessionStore {
         const lastSourceSignalMs = { ...this.stateValue.lastSourceSignalMs };
         if (source && this.stateValue.recordingState === 'recording') {
             if (level.peak > silenceThreshold || level.rms > silenceThreshold || lastSourceSignalMs[source] === undefined) {
-                lastSourceSignalMs[source] = this.stateValue.recordingDurationMs;
+                lastSourceSignalMs[source] = performance.now();
             }
         }
         this.stateValue = { ...this.stateValue, recordingLevel: combinedLevel, sourceLevels, recordingSources, lastSourceSignalMs };
@@ -457,6 +469,7 @@ export class RecordingSessionStore {
     }
 
     private updateFallbackDuration(): void {
+        if (this.stateValue.recordingState === 'recording') this.levelClockMs = performance.now();
         this.stateValue = applyFallbackDuration(this.stateValue);
     }
 }

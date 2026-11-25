@@ -47,6 +47,7 @@ const settle = async () => { for (let i = 0; i < 12; i += 1) await Promise.resol
 
 describe('recording sources', () => {
     it('warns only for sources silent for 30 seconds and clears the warning when signal returns', async () => {
+        vi.useFakeTimers();
         let level!: (sample: RecordingLevel) => void;
         let progress!: (sample: RecordingProgress) => void;
         const fake = createFakeRendererAdapter({
@@ -60,22 +61,26 @@ describe('recording sources', () => {
             await settle();
             level({ source: 'microphone', rms: 0, peak: 0, clipped: false });
             level({ source: 'system', rms: 0.1, peak: 0.2, clipped: false });
+            await vi.advanceTimersByTimeAsync(29_999);
             progress({ durationMs: 29_999 });
             level({ source: 'system', rms: 0.1, peak: 0.2, clipped: false });
             expect(store.recording.silentSources).toEqual([]);
+            await vi.advanceTimersByTimeAsync(1);
             progress({ durationMs: 30_000 });
             expect(store.recording.silentSources).toEqual(['microphone']);
             level({ source: 'microphone', rms: 0, peak: 0.02, clipped: false });
             expect(store.recording.silentSources).toEqual([]);
             expect(store.operations.kind).toBe('recording');
-        } finally { store.dispose(); }
+        } finally { store.dispose(); vi.useRealTimers(); }
     });
-    it('warns when macOS sends no PCM and restarts the silence timer on signal', async () => {
+    it('warns for macOS silence before the first PCM buffer and after audio progress starts late', async () => {
         vi.useFakeTimers();
         let level!: (sample: RecordingLevel) => void;
+        let progress!: (sample: RecordingProgress) => void;
         const { adapter } = createFakeRendererAdapter({
             runtimePlatform: 'darwin', getRecordingState: () => Promise.resolve('recording'),
             onRecordingLevel: (callback) => { level = callback; return () => undefined; },
+            onRecordingProgress: (callback) => { progress = callback; return () => undefined; },
         });
         const store = new AppStore(adapter);
         store.initialize();
@@ -83,10 +88,15 @@ describe('recording sources', () => {
             await settle();
             await vi.advanceTimersByTimeAsync(30_000);
             expect(store.recording.silentSources).toEqual(['system']);
+            await vi.advanceTimersByTimeAsync(30_000);
             level({ rms: 0.1, peak: 0.2, clipped: false });
             expect(store.recording.silentSources).toEqual([]);
-            await vi.advanceTimersByTimeAsync(30_000);
-            expect(store.recording.silentSources).toEqual(['system']);
+            for (let elapsed = 500; elapsed <= 30_000; elapsed += 500) {
+                await vi.advanceTimersByTimeAsync(500);
+                progress({ durationMs: elapsed });
+                level({ rms: 0, peak: 0, clipped: false });
+                expect(store.recording.silentSources).toEqual(elapsed < 30_000 ? [] : ['system']);
+            }
         } finally { store.dispose(); vi.useRealTimers(); }
     });
 

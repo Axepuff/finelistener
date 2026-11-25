@@ -71,11 +71,7 @@ export class SystemAudioRecorderStore {
     }
 
     get silentSources() {
-        const { recordingSources, lastSourceSignalMs, recordingDurationMs } = this.session;
-        return recordingSources.filter((source) => {
-            const since = lastSourceSignalMs[source];
-            return since !== undefined && recordingDurationMs - since >= 30_000;
-        });
+        return this.sessionStore.silentSources;
     }
 
     setTranscribeWhenRecordingStops(enabled: boolean): Promise<void> {
