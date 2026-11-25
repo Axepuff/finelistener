@@ -148,11 +148,12 @@ def main():
     destination = ROOT / 'build-assets' / args.variant / 'nemotron'
     destination.mkdir(parents=True, exist_ok=True)
     (destination / 'component.json').write_text(json.dumps(manifest, indent=2))
+    shutil.copyfile(archive_path, destination / 'component.zip')
     (output / f'{args.variant}-nemotron-component.json').write_text(json.dumps(manifest, indent=2))
     shutil.copytree(stage / 'notices', destination / 'notices', dirs_exist_ok=True)
     shutil.copytree(stage / 'share/licenses', destination / 'notices/runtime', dirs_exist_ok=True)
     print(json.dumps({'variant': args.variant, 'compressedBytes': manifest['bytes'],
-                      'installedBytes': sum(f['bytes'] for f in files.values()), 'externalComponent': True}))
+                      'installedBytes': sum(f['bytes'] for f in files.values()), 'externalComponent': False}))
 
 
 if __name__ == '__main__':

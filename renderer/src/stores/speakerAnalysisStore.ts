@@ -3,8 +3,11 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import type { RendererAdapter } from './rendererAdapter';
 import { SPEAKER_ERROR_MESSAGES } from '../../../electron/src/types/transcription';
 
-export const speakerErrorMessage = (error: unknown): string | undefined => error instanceof Error ?
-    Object.entries(SPEAKER_ERROR_MESSAGES).find(([code]) => error.message === code || error.message.endsWith(`: ${code}`))?.[1] : undefined;
+const hasSpeakerErrorCode = (error: unknown, code: string): boolean =>
+    error instanceof Error && (error.message === code || error.message.endsWith(`: ${code}`));
+
+export const speakerErrorMessage = (error: unknown): string | undefined =>
+    Object.entries(SPEAKER_ERROR_MESSAGES).find(([code]) => hasSpeakerErrorCode(error, code))?.[1];
 
 export class SpeakerAnalysisStore {
     enabled = true;
@@ -104,6 +107,11 @@ export class SpeakerAnalysisStore {
             }
         } catch (error: unknown) {
             console.error('Failed to read speaker analysis assets', error);
+            const assets = this.assets;
+            if (!this.disposed && requestId === this.assetRequestId && assets?.ready
+                && hasSpeakerErrorCode(error, 'SPEAKER_ASSETS_UNAVAILABLE')) {
+                runInAction(() => { this.assets = { ...assets, ready: false, gpuAvailable: undefined }; });
+            }
         }
     }
 

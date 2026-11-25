@@ -182,7 +182,11 @@ export class SpeakerDiarizationService {
     public async getAssetStatus(signal?: AbortSignal): Promise<SpeakerAssetStatus> {
         signal?.throwIfAborted();
         const component = await this.component();
-        const root = component ? await this.readyRoot(component, signal) : null;
+        let root = component ? await this.readyRoot(component, signal) : null;
+        if (component && !root && fs.existsSync(path.join(this.bundleRoot(), 'component.zip'))) {
+            await this.prepareAssets(signal ?? new AbortController().signal);
+            root = await this.readyRoot(component, signal);
+        }
         let ready = Boolean(root);
         let gpuAvailable: boolean | undefined;
         if (root && component) {
@@ -205,13 +209,19 @@ export class SpeakerDiarizationService {
         if (await this.readyRoot(component, signal)) return;
         const target = this.installedRoot(component);
         const parent = path.dirname(target);
-        await fsp.mkdir(parent, { recursive: true });
-        const temporary = await fsp.mkdtemp(path.join(parent, 'install-'));
-        const archive = path.join(temporary, 'component.zip');
-        const extracted = path.join(temporary, 'extracted');
+        let temporary: string | undefined;
         try {
-            onProgress?.({ downloadedBytes: 0, totalBytes: component.bytes });
-            await download(component.url, archive, signal, onProgress);
+            await fsp.mkdir(parent, { recursive: true });
+            temporary = await fsp.mkdtemp(path.join(parent, 'install-'));
+            const archive = path.join(temporary, 'component.zip');
+            const extracted = path.join(temporary, 'extracted');
+            const bundledArchive = path.join(this.bundleRoot(), 'component.zip');
+            if (fs.existsSync(bundledArchive)) {
+                await fsp.copyFile(bundledArchive, archive);
+            } else {
+                onProgress?.({ downloadedBytes: 0, totalBytes: component.bytes });
+                await download(component.url, archive, signal, onProgress);
+            }
             if ((await fsp.stat(archive)).size !== component.bytes || await hashFile(archive, signal) !== component.sha256) throw new Error('Speaker component integrity check failed');
             await fsp.mkdir(extracted);
             const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe') : '/usr/bin/tar';
@@ -233,7 +243,9 @@ export class SpeakerDiarizationService {
         } catch (error) {
             signal.throwIfAborted();
             throw new SpeakerAnalysisError('SPEAKER_ASSETS_UNAVAILABLE', { cause: error });
-        } finally { await fsp.rm(temporary, { recursive: true, force: true }); }
+        } finally {
+            if (temporary) await fsp.rm(temporary, { recursive: true, force: true });
+        }
     }
 
     public async analyze(audioPath: string, options: SpeakerAnalysisOptions, signal: AbortSignal,
