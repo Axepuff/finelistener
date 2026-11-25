@@ -74,12 +74,14 @@ const TranscribeControl: React.FC = observer(() => {
     const showProgress = store.operations.kind === 'transcribing' || store.operations.kind === 'analyzing-speakers';
     const modelReady = useCustomModelFile ? Boolean(customModelFile) : store.whisperModels.isDownloaded(model);
     const downloadingSelectedModel = !useCustomModelFile && store.whisperModels.downloadProgress?.name === model;
+    const modelName = model[0].toUpperCase() + model.slice(1);
+    const canUseBase = downloadingSelectedModel && model !== 'base' && store.whisperModels.isDownloaded('base');
     const blockReason = store.operations.kind === 'recording' ? 'Stop recording to transcribe.' : store.operationBlockReason ??
         (
         !store.workspace.hasAudioSource ? 'Choose an audio source to transcribe.' :
         store.workspace.hasIncompleteSegment ? 'Complete or clear the selected segment.' :
         !modelReady ? (useCustomModelFile ? 'Choose a local model file to transcribe.' :
-            downloadingSelectedModel ? 'The selected model is downloading.' :
+            downloadingSelectedModel ? `${modelName} can transcribe once it is downloaded.${canUseBase ? ' You can start now with Base or wait.' : ''}` :
             'Download the selected model to transcribe.') : null);
     const canStart = blockReason === null;
     const hasSystemAudio = store.workspace.activeSession?.sourceKind === 'imported'
@@ -87,7 +89,7 @@ const TranscribeControl: React.FC = observer(() => {
     const preparingSpeakerAssets = store.operations.kind === 'preparing-speaker-assets';
     const hasTranscript = Boolean(store.transcription.savedTranscript?.segments.length);
     const canPrepareSpeakerComponent = hasSystemAudio && !store.speakers.componentReady
-        && (store.speakers.enabled || (hasTranscript && store.speakers.status === 'error'));
+        && (preparingSpeakerAssets || store.speakers.enabled || (hasTranscript && store.speakers.status === 'error'));
 
     if (showProgress) return <TranscriptionProgress />;
 
@@ -226,10 +228,10 @@ const TranscribeControl: React.FC = observer(() => {
                         aria-describedby="settings-transcription-status"
                         leftSection={<IconHeadphones size={16} />}
                     >
-                        {downloadingSelectedModel ? `Transcribe with ${model[0].toUpperCase()}${model.slice(1)}` :
+                        {downloadingSelectedModel ? `Transcribe with ${modelName}` :
                             !store.recordingInProgress && store.workspace.selectedSegment ? 'Transcribe segment' : 'Transcribe'}
                     </Button>
-                    {downloadingSelectedModel && model !== 'base' && store.whisperModels.isDownloaded('base') ? (
+                    {canUseBase ? (
                         <Button variant="default" onClick={() => control.setModel('base')}>Use Base now</Button>
                     ) : null}
                     <ActionIcon onClick={handleClear} aria-label="Clear workspace" title={store.operations.isBusy ? blockReason ?? undefined : 'Clear workspace'}

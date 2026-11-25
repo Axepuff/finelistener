@@ -71,9 +71,9 @@ export class SystemAudioRecorderStore {
     }
 
     get silentSources() {
-        const { recordingSources, sourceSilenceSinceMs, recordingDurationMs } = this.session;
+        const { recordingSources, lastSourceSignalMs, recordingDurationMs } = this.session;
         return recordingSources.filter((source) => {
-            const since = sourceSilenceSinceMs[source];
+            const since = lastSourceSignalMs[source];
             return since !== undefined && recordingDurationMs - since >= 30_000;
         });
     }

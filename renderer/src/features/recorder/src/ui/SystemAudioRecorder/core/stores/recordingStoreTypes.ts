@@ -24,7 +24,7 @@ export interface RecordingSessionState {
     recordingLevel: RecordingLevel | null;
     sourceLevels: Partial<Record<RecordingSourceKind, RecordingLevel>>;
     recordingSources: RecordingSourceKind[];
-    sourceSilenceSinceMs: Partial<Record<RecordingSourceKind, number>>;
+    lastSourceSignalMs: Partial<Record<RecordingSourceKind, number>>;
     recordingError: string | null;
     isProcessingRecording: boolean;
     recordingStartAt: number | null;
@@ -56,7 +56,7 @@ export const initialSessionState: RecordingSessionState = {
     recordingLevel: null,
     sourceLevels: {},
     recordingSources: [],
-    sourceSilenceSinceMs: {},
+    lastSourceSignalMs: {},
     recordingError: null,
     isProcessingRecording: false,
     recordingStartAt: null,

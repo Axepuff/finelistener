@@ -93,12 +93,15 @@ export class SummaryModelService {
         const controller = new AbortController();
         let downloadedBytes = 0;
         let percent = 0;
+        let lastPublishedAt = Date.now();
         const promise = this.install(controller.signal, (bytes, notifyProgress = true) => {
             downloadedBytes = bytes;
             if (!notifyProgress) return;
             const next = Math.floor(bytes * 100 / artifact.bytes);
-            if (percent !== next) {
+            const now = Date.now();
+            if (percent !== next || now - lastPublishedAt >= 1_000) {
                 percent = next;
+                lastPublishedAt = now;
                 this.publish(status('downloading', bytes));
             }
         }).then(

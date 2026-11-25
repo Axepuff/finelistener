@@ -61,6 +61,7 @@ describe('recording sources', () => {
             level({ source: 'microphone', rms: 0, peak: 0, clipped: false });
             level({ source: 'system', rms: 0.1, peak: 0.2, clipped: false });
             progress({ durationMs: 29_999 });
+            level({ source: 'system', rms: 0.1, peak: 0.2, clipped: false });
             expect(store.recording.silentSources).toEqual([]);
             progress({ durationMs: 30_000 });
             expect(store.recording.silentSources).toEqual(['microphone']);
@@ -69,6 +70,26 @@ describe('recording sources', () => {
             expect(store.operations.kind).toBe('recording');
         } finally { store.dispose(); }
     });
+    it('warns when macOS sends no PCM and restarts the silence timer on signal', async () => {
+        vi.useFakeTimers();
+        let level!: (sample: RecordingLevel) => void;
+        const { adapter } = createFakeRendererAdapter({
+            runtimePlatform: 'darwin', getRecordingState: () => Promise.resolve('recording'),
+            onRecordingLevel: (callback) => { level = callback; return () => undefined; },
+        });
+        const store = new AppStore(adapter);
+        store.initialize();
+        try {
+            await settle();
+            await vi.advanceTimersByTimeAsync(30_000);
+            expect(store.recording.silentSources).toEqual(['system']);
+            level({ rms: 0.1, peak: 0.2, clipped: false });
+            expect(store.recording.silentSources).toEqual([]);
+            await vi.advanceTimersByTimeAsync(30_000);
+            expect(store.recording.silentSources).toEqual(['system']);
+        } finally { store.dispose(); vi.useRealTimers(); }
+    });
+
     it('defaults both sources on, persists Off, rejects both Off, and accepts the finalized session', async () => {
         const startSystemRecording = vi.fn(() => Promise.resolve({
             recordingId: 'capture', startedAt: 1,
@@ -123,6 +144,34 @@ describe('recording sources', () => {
             await settle();
             expect(transcribeSession).toHaveBeenCalledTimes(starts);
             if (starts) expect(transcribeSession).toHaveBeenCalledWith(session.id, expect.objectContaining({ language: 'en', model: 'base' }));
+        } finally { store.dispose(); }
+    });
+
+    it('keeps auto-transcription available when a previous lifecycle fails to load its finalized session', async () => {
+        const previous = Promise.withResolvers<SessionDetails>();
+        const getSession = vi.fn(() => Promise.resolve(session)).mockImplementationOnce(() => previous.promise);
+        const transcribeSession = vi.fn(() => Promise.resolve({ ...session, transcript: partial }));
+        const { adapter } = createFakeRendererAdapter({
+            getRecordingState: () => Promise.resolve('recording'), stopSystemRecording: () => Promise.resolve(captured),
+            getWhisperModels: () => Promise.resolve([{ name: 'base', sizeLabel: '148 MB', isBundled: true, isDownloaded: true }]),
+            getSession, transcribeSession,
+        });
+        const store = new AppStore(adapter);
+        store.initialize();
+        try {
+            await settle();
+            const first = store.recording.stopRecording();
+            await vi.waitFor(() => expect(getSession).toHaveBeenCalledOnce());
+            store.dispose();
+            store.initialize();
+            await settle();
+            await store.recording.setTranscribeWhenRecordingStops(true);
+            store.transcriptionControl.setModel('base');
+            previous.reject(new Error('Previous session was removed'));
+            expect((await first).ok).toBe(false);
+            expect((await store.recording.stopRecording()).ok).toBe(true);
+            await settle();
+            expect(transcribeSession).toHaveBeenCalledOnce();
         } finally { store.dispose(); }
     });
 
