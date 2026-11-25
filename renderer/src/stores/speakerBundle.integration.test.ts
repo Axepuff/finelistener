@@ -25,11 +25,14 @@ vi.mock('../../../electron/src/services/NemotronDiarizer', async (original) => {
 const archive = Buffer.from('UEsDBBQAAAAAAAAAIQAMfn/YBAAAAAQAAAATAAAAYmluL25lbW8tc3BlZWNoLmV4ZXRlc3RQSwMEFAAAAAAAAAAhAAx+f9gEAAAABAAAABYAAABtb2RlbC9kaWFyaXphdGlvbi5nZ3VmdGVzdFBLAwQUAAAAAAAAACEADH5/2AQAAAAEAAAAFQAAAG5vdGljZXMvbW9kZWwtTElDRU5TRXRlc3RQSwECFAMUAAAAAAAAACEADH5/2AQAAAAEAAAAEwAAAAAAAAAAAAAApIEAAAAAYmluL25lbW8tc3BlZWNoLmV4ZVBLAQIUAxQAAAAAAAAAIQAMfn/YBAAAAAQAAAAWAAAAAAAAAAAAAACkgTUAAABtb2RlbC9kaWFyaXphdGlvbi5nZ3VmUEsBAhQDFAAAAAAAAAAhAAx+f9gEAAAABAAAABUAAAAAAAAAAAAAAKSBbQAAAG5vdGljZXMvbW9kZWwtTElDRU5TRVBLBQYAAAAAAwADAMgAAACkAAAAAAA=', 'base64');
 const hash = (value: Buffer | string) => createHash('sha256').update(value).digest('hex');
 
-it.skipIf(process.platform !== 'win32')('clears speaker readiness when offline repair fails and restores it on retry', async () => {
+const repairFailures = ['a corrupt bundle', 'a file blocking the cache directory'];
+it.skipIf(process.platform !== 'win32').each(repairFailures)('clears and restores readiness when %s prevents repair', async (failure) => {
+    const corruptBundle = failure === 'a corrupt bundle';
     const directory = await fs.mkdtemp(path.join(tmpdir(), 'finelistener-bundle-'));
     const originalResources = Object.getOwnPropertyDescriptor(process, 'resourcesPath');
     const network = vi.spyOn(https, 'get').mockImplementation(() => { throw new Error('Network is offline'); });
     const data = path.join(directory, 'user-data');
+    const cache = path.join(data, 'nemotron');
     vi.spyOn(app, 'getPath').mockReturnValue(data);
     Object.defineProperty(process, 'resourcesPath', { value: directory, configurable: true });
     const bundle = path.join(directory, 'nemotron');
@@ -60,21 +63,31 @@ it.skipIf(process.platform !== 'win32')('clears speaker readiness when offline r
         await fs.writeFile(bundledArchive, archive);
         await store.refreshAssets();
         expect(store.componentReady).toBe(true);
-        const [installed] = await fs.readdir(path.join(data, 'nemotron'));
-        const model = path.join(data, 'nemotron', installed, manifest.model);
+        const [installed] = await fs.readdir(cache);
+        const model = path.join(cache, installed, manifest.model);
         expect(await fs.readFile(model, 'utf8')).toBe('test');
 
-        await fs.writeFile(model, 'bad!');
-        await fs.utimes(model, 0, 0);
-        await fs.writeFile(bundledArchive, 'corrupt');
+        if (corruptBundle) {
+            await fs.writeFile(model, 'bad!');
+            await fs.utimes(model, 0, 0);
+            await fs.writeFile(bundledArchive, 'corrupt');
+        } else {
+            await fs.rename(cache, path.join(data, 'nemotron-backup'));
+            await fs.writeFile(cache, 'blocking file');
+        }
         await store.refreshAssets();
-        await expect(getSpeakerAssets.mock.results.at(-1)?.value)
+        expect.soft(store.componentReady).toBe(false);
+        await expect.soft(getSpeakerAssets.mock.results.at(-1)?.value)
             .rejects.toMatchObject({ message: 'SPEAKER_ASSETS_UNAVAILABLE' });
-        expect(store.componentReady).toBe(false);
         expect(store.assets?.downloadBytes).toBe(archive.length);
-        expect(await fs.readdir(path.join(data, 'nemotron'))).toEqual([installed]);
 
-        await fs.writeFile(bundledArchive, archive);
+        if (corruptBundle) {
+            expect(await fs.readdir(cache)).toEqual([installed]);
+            await fs.writeFile(bundledArchive, archive);
+        } else {
+            expect(await fs.readFile(cache, 'utf8')).toBe('blocking file');
+            await fs.unlink(cache);
+        }
         await store.refreshAssets();
         expect(store.componentReady).toBe(true);
         expect(await fs.readFile(model, 'utf8')).toBe('test');

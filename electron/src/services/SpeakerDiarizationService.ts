@@ -209,11 +209,12 @@ export class SpeakerDiarizationService {
         if (await this.readyRoot(component, signal)) return;
         const target = this.installedRoot(component);
         const parent = path.dirname(target);
-        await fsp.mkdir(parent, { recursive: true });
-        const temporary = await fsp.mkdtemp(path.join(parent, 'install-'));
-        const archive = path.join(temporary, 'component.zip');
-        const extracted = path.join(temporary, 'extracted');
+        let temporary: string | undefined;
         try {
+            await fsp.mkdir(parent, { recursive: true });
+            temporary = await fsp.mkdtemp(path.join(parent, 'install-'));
+            const archive = path.join(temporary, 'component.zip');
+            const extracted = path.join(temporary, 'extracted');
             const bundledArchive = path.join(this.bundleRoot(), 'component.zip');
             if (fs.existsSync(bundledArchive)) {
                 await fsp.copyFile(bundledArchive, archive);
@@ -242,7 +243,9 @@ export class SpeakerDiarizationService {
         } catch (error) {
             signal.throwIfAborted();
             throw new SpeakerAnalysisError('SPEAKER_ASSETS_UNAVAILABLE', { cause: error });
-        } finally { await fsp.rm(temporary, { recursive: true, force: true }); }
+        } finally {
+            if (temporary) await fsp.rm(temporary, { recursive: true, force: true });
+        }
     }
 
     public async analyze(audioPath: string, options: SpeakerAnalysisOptions, signal: AbortSignal,
