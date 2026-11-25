@@ -10,9 +10,15 @@ vi.mock('electron', () => ({ app: {
     isPackaged: false, getAppPath: vi.fn(), getPath: vi.fn(), getVersion: () => '1.6.0-beta.1',
 } }));
 
-it('accepts compatible components from older releases but rejects invalid sources and incompatible runtimes', async () => {
+it.each([
+    { platform: 'win32', arch: 'x64', variant: 'win-x64-gpu' },
+    { platform: 'win32', arch: 'x64', variant: 'win-x64-cpu' },
+    { platform: 'darwin', arch: 'arm64', variant: 'mac-arm64' },
+    { platform: 'linux', arch: 'x64', variant: 'mac-arm64' },
+] as const)('$platform/$arch ($variant): preserves release compatibility and platform restrictions', async ({ platform, arch, variant }) => {
+    const originalPlatform = process.platform;
+    const originalArch = process.arch;
     const directory = await fs.mkdtemp(path.join(tmpdir(), 'finelistener-component-'));
-    const variant = process.platform === 'win32' ? 'win-x64-gpu' : 'mac-arm64';
     const runtime = NEMOTRON_RUNTIMES[variant];
     const filename = `finelistener-${NEMOTRON_COMPONENT.version}-${variant}.zip`;
     const url = `https://github.com/Axepuff/finelistener/releases/download/v1.3.0/${filename}`;
@@ -34,8 +40,15 @@ it('accepts compatible components from older releases but rejects invalid source
     const bundle = path.join(directory, 'build-assets', variant, 'nemotron');
     const service = new SpeakerDiarizationService();
     try {
+        Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+        Object.defineProperty(process, 'arch', { value: arch, configurable: true });
         await fs.mkdir(bundle, { recursive: true });
         await fs.writeFile(path.join(bundle, 'component.json'), JSON.stringify(manifest));
+        if (platform === 'linux') {
+            expect((await service.getAssetStatus()).downloadBytes).toBeUndefined();
+            await expect(service.prepareAssets(new AbortController().signal)).rejects.toMatchObject({ code: 'SPEAKER_ASSETS_UNAVAILABLE' });
+            return;
+        }
         expect(await service.getAssetStatus()).toMatchObject({ ready: false, downloadBytes: 123 });
         for (const override of [
             { url: url.replace('https:', 'http:') },
@@ -58,6 +71,8 @@ it('accepts compatible components from older releases but rejects invalid source
             await expect(service.prepareAssets(new AbortController().signal)).rejects.toMatchObject({ code: 'SPEAKER_ASSETS_UNAVAILABLE' });
         }
     } finally {
+        Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+        Object.defineProperty(process, 'arch', { value: originalArch, configurable: true });
         vi.unstubAllEnvs();
         await fs.rm(directory, { recursive: true, force: true });
     }
