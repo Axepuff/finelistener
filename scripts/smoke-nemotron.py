@@ -22,7 +22,7 @@ def main():
     if (args.variant == 'mac-arm64') != (sys.platform == 'darwin'):
         raise ValueError('Run the smoke check on the target operating system')
     manifest = json.loads((ROOT / f'build-assets/{args.variant}/nemotron/component.json').read_text())
-    archive = ROOT / 'build-assets/release-components' / manifest['url'].rsplit('/', 1)[1]
+    archive = ROOT / f'build-assets/{args.variant}/nemotron/component.zip'
     with tempfile.TemporaryDirectory(prefix='finelistener-Немо-') as temporary:
         work = Path(temporary)
         runtime = work / 'runtime with spaces'

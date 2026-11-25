@@ -182,7 +182,11 @@ export class SpeakerDiarizationService {
     public async getAssetStatus(signal?: AbortSignal): Promise<SpeakerAssetStatus> {
         signal?.throwIfAborted();
         const component = await this.component();
-        const root = component ? await this.readyRoot(component, signal) : null;
+        let root = component ? await this.readyRoot(component, signal) : null;
+        if (component && !root && fs.existsSync(path.join(this.bundleRoot(), 'component.zip'))) {
+            await this.prepareAssets(signal ?? new AbortController().signal);
+            root = await this.readyRoot(component, signal);
+        }
         let ready = Boolean(root);
         let gpuAvailable: boolean | undefined;
         if (root && component) {
@@ -210,8 +214,13 @@ export class SpeakerDiarizationService {
         const archive = path.join(temporary, 'component.zip');
         const extracted = path.join(temporary, 'extracted');
         try {
-            onProgress?.({ downloadedBytes: 0, totalBytes: component.bytes });
-            await download(component.url, archive, signal, onProgress);
+            const bundledArchive = path.join(this.bundleRoot(), 'component.zip');
+            if (fs.existsSync(bundledArchive)) {
+                await fsp.copyFile(bundledArchive, archive);
+            } else {
+                onProgress?.({ downloadedBytes: 0, totalBytes: component.bytes });
+                await download(component.url, archive, signal, onProgress);
+            }
             if ((await fsp.stat(archive)).size !== component.bytes || await hashFile(archive, signal) !== component.sha256) throw new Error('Speaker component integrity check failed');
             await fsp.mkdir(extracted);
             const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe') : '/usr/bin/tar';

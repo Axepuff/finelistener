@@ -33,6 +33,10 @@ def verify(manifest_file, directory, tag):
                                     or any(part in ('..', '') for part in name.split('/')) for name in manifest['files']):
         raise ValueError('Unsafe file manifest')
     archive = directory / Path(urlparse(manifest['url']).path).name
+    if manifest_file.name == 'component.json':
+        bundled = manifest_file.parent / 'component.zip'
+        if bundled.stat().st_size != manifest['bytes'] or digest(bundled) != manifest['sha256']:
+            raise ValueError('Bundled component archive integrity mismatch')
     if archive.stat().st_size != manifest['bytes'] or digest(archive) != manifest['sha256']:
         raise ValueError('Archive integrity mismatch')
     with zipfile.ZipFile(archive) as package:
