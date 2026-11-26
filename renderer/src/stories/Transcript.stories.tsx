@@ -139,14 +139,24 @@ export const LongSpeakerReading: Story = {
             first.scrollIntoView({ block: 'start' });
             await frame();
             await frame();
-            const cursor = document.createTreeWalker(last, NodeFilter.SHOW_TEXT);
-            let node = cursor.nextNode();
-            while (node && !node.textContent?.includes(text)) node = cursor.nextNode();
-            if (!node?.textContent) throw new Error('The end of the transcript is missing.');
-            const offset = node.textContent.indexOf(text) + start;
+            const match = last.textContent?.indexOf(text) ?? -1;
+            if (match === -1) throw new Error('The end of the transcript is missing.');
+            // Nearby words may already be expanded into separate text nodes.
+            const boundaryAt = (position: number) => {
+                const cursor = document.createTreeWalker(last, NodeFilter.SHOW_TEXT);
+                let offset = position;
+                for (let node = cursor.nextNode(); node; node = cursor.nextNode()) {
+                    const size = node.textContent?.length ?? 0;
+                    if (offset <= size) return { node, offset };
+                    offset -= size;
+                }
+                throw new Error('The text position is outside the transcript.');
+            };
+            const from = boundaryAt(match + start);
+            const to = boundaryAt(match + start + length);
             const range = document.createRange();
-            range.setStart(node, offset);
-            range.setEnd(node, offset + length);
+            range.setStart(from.node, from.offset);
+            range.setEnd(to.node, to.offset);
             last.scrollIntoView({ block: 'end' });
             const rect = range.getBoundingClientRect();
             const point = { clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2, bubbles: true };
