@@ -1,3 +1,4 @@
+import { summaryDraftProgressVersion } from '../types/sessions';
 import type { ReviewedSummaryChunk, SummarySourceRow, SummaryDraftProgress } from '../types/sessions';
 import { defaultRecordingSummaryOptions, type RecordingSummaryOptions } from '../types/summaryOptions';
 import { getSummaryLanguage, type SummaryLanguage } from './summaryLanguage';
@@ -251,7 +252,7 @@ export const generateRecordingNotes = async (
                     cursors.push({ groupIndex, startChar: offset, endChar });
                     offset = endChar;
                     const phase = groupIndex === groups.length - 1 && offset === size ? 'brief' : 'chunks';
-                    const checkpoint: SummaryDraftProgress = { version: 1, phase, cursors: [...cursors] };
+                    const checkpoint: SummaryDraftProgress = { version: summaryDraftProgressVersion, phase, cursors: [...cursors] };
                     await onReviewed([...chunks], checkpoint);
                     progress(`Writing a title for chunk ${chunks.length}…`);
                     const title = await generateChunkTitle(text, model, task.language);

@@ -1,3 +1,4 @@
+import { summaryDraftProgressVersion } from '../types/sessions';
 import type { ReviewedSummaryChunk, SessionSummaryDraft, SummarySourceRow, SummaryDraftProgress } from '../types/sessions';
 import { isRecordingSummaryOptions } from '../types/summaryOptions';
 
@@ -85,7 +86,7 @@ export const sliceGroup = (rows: SummarySourceRow[], start: number, end: number)
 export const validSummaryProgress = (
     rows: SummarySourceRow[], chunks: ReviewedSummaryChunk[], progress: SummaryDraftProgress, chunkCount: number,
 ): boolean => {
-    if (!progress || progress.version !== 1 || !['chunks', 'brief'].includes(progress.phase)
+    if (!progress || progress.version !== summaryDraftProgressVersion || !['chunks', 'brief'].includes(progress.phase)
         || !Array.isArray(progress.cursors) || !chunks.length || chunks.length !== progress.cursors.length) return false;
     const groups = groupRows(rows, chunkCount);
     const sizes = groups.map((group) => group.reduce((sum, row) => sum + row.text.length, 0));
