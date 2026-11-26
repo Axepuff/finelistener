@@ -25,6 +25,12 @@
     font-weight: var(--brand-font-weight-strong);
 }
 
+.chunkTitle {
+    margin: 0;
+    font-size: 14px;
+    line-height: 20px;
+}
+
 .panel button[data-size='compact-sm'] {
     font-size: 12px;
 }

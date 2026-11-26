@@ -5,10 +5,16 @@ Tested on Windows x64 with an NVIDIA GeForce GTX 1070. All conversations used fo
 ## What to verify
 
 1. Open a completed transcript in a fresh profile and choose **Summary**. It should offer **Download model** and show the 2.50 GB transfer size.
-2. Start the download. After integrity verification, **Generate summary** should become available. Reopen the session before selecting it and confirm there is still no generated text.
-3. Generate the two formats. In the saved transcript, joining the reviewed paragraphs with a blank line must reproduce **Detailed notes** exactly. **Brief overview** should give a shorter account of the main topics.
+2. Start the download and leave automatic generation unchecked. After the download is verified, reopen the session and confirm **Generate summary** is available and the session has no summary. In a separate fresh profile, opt in during the download, change the prompt and check that the resulting summary stores the new prompt.
+3. Generate the two formats. Joining the reviewed paragraphs with a blank line must reproduce **Detailed notes** exactly. Short titles belong above the paragraphs. Show the source and play a passage from its card. **Brief overview** should give a shorter account of the main topics.
 4. Quit and reopen the packaged app offline. Read both formats again with the weights absent. In a profile with the weights installed, generate a summary for a different session offline.
-5. For a partial result, interrupt generation after the detailed paragraphs have been saved. Reopen the session and choose **Generate brief summary**. The detailed text should survive the interruption and retry.
+5. Stop generation after a reviewed paragraph has been saved. Restart the app, reopen the session and choose **Continue**. Compare the saved paragraph, title and source references with the finished result. For older results with only the detailed text, use **Generate brief summary**.
+
+## Packaged workflow check, November 25, 2026
+
+The Windows x64 GPU package downloaded and verified 2,497,281,120 bytes in an isolated profile. On a synthetic shipment recording, opting in and switching presets during the download started generation with the newly selected prompt. Qwen's heading was “Shipment and Report Deadlines”. Normalizing the quotation marks around that heading preserved the detailed text byte for byte. The brief identified nine boxes and a Friday deadline, with a stray colon before the first line.
+
+The user preset survived an app restart. Deleting it preserved the saved prompt and both results. A separate offline profile containing only the session reopened the brief and detailed cards with the model absent. A second session used the installed model offline. After stopping between the detailed and brief stages, **Continue** survived a restart and completed the brief with the same reviewed paragraph, title and source references.
 
 ## Model and runtime
 

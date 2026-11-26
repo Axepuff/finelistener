@@ -3,7 +3,7 @@ import type { SummarySourceRow } from '../types/sessions';
 export interface SummaryLanguage {
     instruction: string;
     reference: string;
-    accepts: (text: string) => boolean;
+    accepts: (text: string, reviewedParagraph?: string) => boolean;
 }
 
 // A quoted email or a product name can be in a different language from the people discussing it.
@@ -19,6 +19,17 @@ const sampleAcrossRecording = (text: string): string => {
         const start = Math.round((text.length - 192) * i / 4);
         return text.slice(start, start + 192);
     }).join(' ');
+};
+
+const reusesParagraphWords = (title: string, paragraph: string): boolean => {
+    const words = (value: string) => value.normalize('NFC').toLowerCase().match(/[\p{L}\p{M}]+/gu) ?? [];
+    const sourceWords = words(paragraph);
+    return words(title).every((word) => sourceWords.some((source) => {
+        if (word === source) return true;
+        // A short grammatical ending may change between the paragraph and its heading, as in "note" and "notes".
+        const [shorter, longer] = word.length < source.length ? [word, source] : [source, word];
+        return shorter.length >= 4 && longer.length - shorter.length <= 2 && longer.startsWith(shorter);
+    }));
 };
 
 export const getSummaryLanguage = async (rows: SummarySourceRow[], hint?: string): Promise<SummaryLanguage> => {
@@ -50,11 +61,13 @@ export const getSummaryLanguage = async (rows: SummarySourceRow[], hint?: string
         instruction: name ? `Write all narrative prose in ${name}, the language of the original transcript. Keep names and quoted terms when needed.` :
             'Write in the language the speakers use in the original transcript sample. Keep that language throughout the answer.',
         reference: name ? '' : sample.slice(0, 200),
-        accepts: (text) => {
+        accepts: (text, reviewedParagraph) => {
             const prose = narrative(text);
             const actual = eld.detect(prose);
-            if (code && (actual.language === code || plausible(prose, actual, code))) return true;
+            if (code && actual.language === code) return true;
+            if (!reviewedParagraph && code && plausible(prose, actual, code)) return true;
             if (sourceScript && actual.language && scriptOf(actual.language) !== sourceScript) return false;
+            if (reviewedParagraph && canCheck) return reusesParagraphWords(prose, reviewedParagraph);
             return !canCheck || !actual.isReliable();
         },
     };

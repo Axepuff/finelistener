@@ -138,6 +138,26 @@ const stopAndReopen = async () => {
     return openRuntime();
 };
 
+it('resumes saved chunking and overlap after an opted-in model download', async () => {
+    const app = await stopAndReopen();
+    const checkpoint = (await readDisk()).summaryDraft!;
+    await fs.rm(path.join(bridge.root, 'summary-models', SUMMARY_MODEL_ARTIFACT.fileName));
+    await app.summary.refreshModelStatus();
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    bridge.fetch.mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ start(controller) { stream = controller; } })));
+    const transfer = app.summary.downloadModel();
+    await vi.waitFor(() => expect(app.summary.modelStatus?.state).toBe('downloading'));
+    app.summary.setGenerateAfterDownload('speech', options.prompt, true);
+    stream.enqueue(Buffer.from('abc'));
+    stream.close();
+    await transfer;
+    await drain();
+    const completed = (await readDisk()).summary!;
+    expect(completed.options).toEqual(options);
+    expect(vi.mocked(generateLocalSummary).mock.calls.at(-1)?.[8]).toEqual(checkpoint.progress);
+    expect(new Set(inputs).size).toBe(inputs.length);
+});
+
 it('wires explicit install, stop/reopen/Continue and brief retry to real session persistence with complete options', async () => {
     const first = await openRuntime();
     expect(first.summary.modelStatus?.state).toBe('missing');

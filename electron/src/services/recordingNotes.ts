@@ -16,6 +16,7 @@ const briefInstruction = 'Apply the summary request to these notes as a whole. W
 const briefReviewInstruction = 'Verify the brief against the source notes and the summary request. Correct unsupported claims and preserve the requested format. Keep the result shorter than the notes. Return only the checked brief.';
 const wordSegmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
 const sentenceSegmenter = new Intl.Segmenter(undefined, { granularity: 'sentence' });
+const titleQuotes: Record<string, string> = { '"': '"', '“': '”', '«': '»' };
 const wordCount = (text: string): number => Array.from(wordSegmenter.segment(text)).filter((part) => part.isWordLike).length;
 
 export interface SummaryInference {
@@ -117,6 +118,26 @@ const generate = async (
         retry = answer?.trim() ? ` Rewrite the answer. ${task.language.instruction}` : ' Give a shorter answer within the requested format.';
     }
     return null;
+};
+
+const generateChunkTitle = async (text: string, model: SummaryInference, language: SummaryLanguage): Promise<string | undefined> => {
+    // The reviewed paragraph already fits the 512-token answer budget; its title never enters the next prompt.
+    const prompt = promptFor('Return only the title, on one line, without Markdown.', `REVIEWED PARAGRAPH\n${text}`, {
+        language, prompt: 'Give this reviewed paragraph a descriptive title of at most eight words in the same language.',
+    });
+    try {
+        const answer = (await model.complete(prompt, 48))?.trim().replace(/^:[ \t]*\r?\n\s*/u, '');
+        if (!answer) return undefined;
+        // Qwen can put the opening quotation mark on a line of its own.
+        const title = titleQuotes[answer[0]] === answer.at(-1) ? answer.slice(1, -1).trim() : answer;
+        if (!title || /[\r\n]/u.test(title) || title.length > 160 || !language.accepts(title, text)) return undefined;
+        const words = wordCount(title);
+        return words > 0 && words <= 8 ? title : undefined;
+    } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') throw error;
+        console.warn('Could not generate a detailed note title', error);
+        return undefined;
+    }
 };
 
 const condenseNotes = async (source: string, model: SummaryInference, task: SummaryTask): Promise<string> => {
@@ -221,7 +242,8 @@ export const generateRecordingNotes = async (
                     progress(`Checking chunk ${chunks.length + 1} against the transcript…`);
                     const text = await generate(model, reviewInstruction, `DRAFT\n${draft}\n\n${overlap}ORIGINAL LINES\n${lines}`, paragraphLimit, task);
                     if (!text) continue;
-                    chunks.push({ ...passageMetadata(passage), text });
+                    const chunk = { ...passageMetadata(passage), text };
+                    chunks.push(chunk);
                     group.splice(0, group.length, ...candidate);
                     previous = passage;
                     first += passage.length;
@@ -229,7 +251,14 @@ export const generateRecordingNotes = async (
                     cursors.push({ groupIndex, startChar: offset, endChar });
                     offset = endChar;
                     const phase = groupIndex === groups.length - 1 && offset === size ? 'brief' : 'chunks';
-                    await onReviewed([...chunks], { version: 1, phase, cursors: [...cursors] });
+                    const checkpoint: SummaryDraftProgress = { version: 1, phase, cursors: [...cursors] };
+                    await onReviewed([...chunks], checkpoint);
+                    progress(`Writing a title for chunk ${chunks.length}…`);
+                    const title = await generateChunkTitle(text, model, task.language);
+                    if (title) {
+                        chunks[chunks.length - 1] = { ...chunk, title };
+                        await onReviewed([...chunks], checkpoint);
+                    }
                     accepted = true;
                     break;
                 }

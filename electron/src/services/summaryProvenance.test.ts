@@ -91,6 +91,7 @@ it.each([
     expect(chunks.length).toBeGreaterThan(2);
     expect(Buffer.from(summary.detailed)).toEqual(Buffer.from(chunks.map((chunk) => chunk.text).join('\n\n')));
     expect(chunks.every((chunk) => chunk.text === reviewedText)).toBe(true);
+    expect(chunks.every((chunk) => chunk.title === 'Garden notes.')).toBe(true);
     // Each card resolves only NEW LINES. Overlap must never add another reference.
     for (const [index, chunk] of chunks.entries()) {
         expect(chunk.sourceRefs).toBeDefined();

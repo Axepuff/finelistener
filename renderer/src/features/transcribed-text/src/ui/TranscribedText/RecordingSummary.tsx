@@ -1,5 +1,5 @@
 import { InlineAlert, ShowInLog } from 'renderer/src/shared/InlineAlert';
-import { Button, Loader, Textarea } from '@mantine/core';
+import { Badge, Button, Loader, Textarea } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -9,6 +9,7 @@ import {
 } from '../../../../../../../electron/src/types/summaryOptions';
 import { useAppStore } from 'renderer/src/AppContext';
 import { SummaryModelCard } from './SummaryModelCard';
+import { SummaryPresets } from './SummaryPresets';
 import { SummaryResult, type SummaryFormat } from './SummaryResult';
 import styles from './RecordingSummary.module.css';
 
@@ -40,9 +41,8 @@ export const RecordingSummary: React.FC<Props> = observer(({ format, onFormatCha
     const promptId = useId();
     const hintId = useId();
     const promptRef = useRef<HTMLTextAreaElement>(null);
-    const [prompt, setPrompt] = useState(() =>
-        summary.runningOptions?.prompt ?? rejectedPrompt ?? continuation?.options.prompt ??
-        saved?.options?.prompt ?? defaultRecordingSummaryOptions.prompt);
+    const prompt = summary.runningOptions?.prompt ?? summary.editedPrompt ?? rejectedPrompt ?? continuation?.options.prompt ??
+        saved?.options?.prompt ?? defaultRecordingSummaryOptions.prompt;
     const [editing, setEditing] = useState(false);
     const [showInstallation, setShowInstallation] = useState(false);
 
@@ -57,6 +57,7 @@ export const RecordingSummary: React.FC<Props> = observer(({ format, onFormatCha
     const promptError = !prompt.trim() ? 'Enter a prompt.' : prompt.length > maxSummaryPromptLength ?
         `Use ${maxSummaryPromptLength.toLocaleString('en')} characters or fewer.` : rejectedPrompt === prompt ? summary.error : undefined;
     const collapsed = format === 'detailed' && hasSummary && !editing && !promptError;
+    const preset = summary.presets.presets.find((item) => item.prompt === prompt);
     const canGenerate = modelReady && store.canSummarize && !store.operations.isBusy
         && isRecordingSummaryOptions(options) && !promptError;
     const canGenerateBrief = Boolean(!saved?.brief && saved?.generationVersion === recordingSummaryGenerationVersion
@@ -95,11 +96,16 @@ export const RecordingSummary: React.FC<Props> = observer(({ format, onFormatCha
             {hasCompleteTranscript && <>
                 {!modelReady && !offerInstall && <SummaryModelCard model={model} error={summary.modelError}
                     onCheck={() => { void summary.refreshModelStatus(); }}
+                    generateAfterDownload={summary.automaticGenerationSession !== null && summary.automaticGenerationSession === store.workspace.activeSessionId}
+                    onGenerateAfterDownloadChange={(enabled) => {
+                        if (store.workspace.activeSessionId) summary.setGenerateAfterDownload(store.workspace.activeSessionId, prompt, enabled);
+                    }}
                     onDownload={() => { void summary.downloadModel(); }}
                     onCancel={() => { void summary.cancelModelDownload(); }} />}
                 <section aria-label="Summary prompt" className={`${styles.prompt} ${collapsed ? styles.promptCompact : ''}`}>
                     {format === 'detailed' && hasSummary && <div className={styles.row}>
-                        {collapsed && <><strong>Prompt</strong><span className={styles.promptExcerpt}>{prompt}</span></>}
+                        {collapsed && <><strong>Prompt</strong>{preset && <Badge variant="light">{preset.name}</Badge>}
+                            <span className={styles.promptExcerpt}>{prompt}</span></>}
                         <Button size="compact-sm" variant="subtle" className={styles.link} aria-expanded={!collapsed}
                             aria-controls={promptId} onClick={() => setEditing(collapsed)} disabled={Boolean(promptError)}>
                             {collapsed ? 'Edit prompt' : 'Hide prompt'}
@@ -107,8 +113,12 @@ export const RecordingSummary: React.FC<Props> = observer(({ format, onFormatCha
                         {collapsed && !summary.isRunning && !resume && !generationError && generateButton}
                     </div>}
                     <div id={promptId} hidden={collapsed}>
+                        {!collapsed && <SummaryPresets prompt={prompt} canSave={!promptError} onChange={(value) => {
+                            summary.setPrompt(value);
+                            promptRef.current?.focus();
+                        }} />}
                         {!collapsed && <Textarea ref={promptRef} label="Prompt" value={prompt}
-                            onChange={(event) => setPrompt(event.currentTarget.value)}
+                            onChange={(event) => summary.setPrompt(event.currentTarget.value)}
                             disabled={summary.isRunning} rows={3} resize="vertical"
                             classNames={{ input: styles.promptInput }}
                             error={promptError && <span role="alert" className={styles.fieldError}>

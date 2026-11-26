@@ -24,8 +24,11 @@ let failNextCompletion: boolean;
 const inference: SummaryInference = {
     countTokens: (text) => Promise.resolve(Array.from(text).length),
     complete: (prompt) => {
-        if (failNextCompletion) { failNextCompletion = false; throw new Error('Controlled inference failure'); }
         const body = bodyOf(prompt);
+        if (failNextCompletion && !body.includes('REVIEWED PARAGRAPH\n')) {
+            failNextCompletion = false;
+            throw new Error('Controlled inference failure');
+        }
         if (body.includes('NEW LINES\n')) { drafts.push(body); return Promise.resolve(note); }
         if (body.includes('ORIGINAL LINES\n')) { reviews.push(body); return Promise.resolve(note); }
         return Promise.resolve(failBrief ? null : brief);

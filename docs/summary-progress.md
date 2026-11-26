@@ -29,7 +29,9 @@ snapshots and times must match the reconstructed accepted passage.
 `phase = chunks` means unread speech remains. `phase = brief` means the final
 cursor reaches the end of the final group; all reviewed chunks are available for
 brief synthesis. Every accepted chunk is atomically persisted before the next
-inference call, including the final chunk's transition to `brief`. Stop/error
+inference call, including the final chunk's transition to `brief`. A generated title
+updates that checkpoint with the same cursor. Stopping during title generation
+keeps the reviewed paragraph available for continuation. Stop/error
 retains the last committed checkpoint. Interrupted native calls and interrupted
 uncommitted file writes can be repeated; accepted persisted chunks are not.
 
