@@ -38,6 +38,16 @@
 .session-row__recording-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand-color-error); }
 .sessions-panel__lock { padding: 8px 10px; border-radius: 4px; background: var(--brand-color-fill-secondary); }
 .sessions-panel__lock svg { flex-shrink: 0; margin-top: 1px; }
+.session-row__open, .session-row__actions {
+    appearance: none;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
 .session-row__open:disabled { color: var(--brand-color-text-secondary); cursor: default; }
 
 .session-row__open {
@@ -52,16 +62,35 @@
 }
 
 .session-row__title {
+    font-size: var(--mantine-font-size-sm);
+    line-height: var(--mantine-line-height-sm);
+    font-weight: var(--brand-font-weight-strong);
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+.session-row__meta {
+    font-size: var(--mantine-font-size-xs);
+    line-height: var(--mantine-line-height-xs);
+    color: var(--mantine-color-dimmed);
+}
+
 .session-row__actions {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    color: var(--mantine-color-gray-6);
+    border-radius: var(--mantine-radius-default);
     flex-shrink: 0;
     margin-right: 4px;
     opacity: 0;
+}
+
+.session-row__actions:hover {
+    background: var(--mantine-color-gray-light-hover);
 }
 
 .session-row:hover .session-row__actions,

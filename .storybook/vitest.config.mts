@@ -17,7 +17,7 @@ export default defineProject({
     },
     optimizeDeps: {
         include: [
-            'react/jsx-dev-runtime', '@mantine/core', 'mobx-react-lite', 'mobx',
+            'react/jsx-dev-runtime', 'react-dom', '@mantine/core', 'mobx-react-lite', 'mobx',
             '@tabler/icons-react', 'wavesurfer.js',
             'wavesurfer.js/dist/plugins/regions.esm.js', 'wavesurfer.js/dist/plugins/timeline.esm.js',
         ],

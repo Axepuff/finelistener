@@ -13,7 +13,7 @@ export const groupSessions = (items: readonly Readonly<SessionListItem>[], query
     return Object.entries(groups).filter(([, sessions]) => sessions.length).map(([label, sessions]) => ({ label, items: sessions }));
 };
 
-export const formatSessionMeta = (session: Readonly<SessionListItem>) => {
+export const formatSessionMeta = (session: Readonly<SessionListItem>, speakerCount = session.speakerCount) => {
     const parts: string[] = [];
     if (session.durationMs !== undefined && Number.isFinite(session.durationMs) && session.durationMs >= 0) {
         const total = Math.floor(session.durationMs / 1000);
@@ -22,6 +22,6 @@ export const formatSessionMeta = (session: Readonly<SessionListItem>) => {
         const seconds = String(total % 60).padStart(2, '0');
         parts.push(`${hours ? `${hours}:` : ''}${minutes}:${seconds}`);
     }
-    if (session.speakerCount && session.speakerCount > 0) parts.push(`${session.speakerCount} ${session.speakerCount === 1 ? 'speaker' : 'speakers'}`);
+    if (speakerCount && speakerCount > 0) parts.push(`${speakerCount} ${speakerCount === 1 ? 'speaker' : 'speakers'}`);
     return parts.join(' · ') || (session.sourceKind === 'recorded' ? 'Recorded' : 'Imported');
 };
