@@ -24,7 +24,7 @@ const SESSION_FILE_NAME = 'session.json';
 const SESSION_VERSION = 1 as const;
 const TRANSCRIPT_FILE_RELATIVE_PATH = path.join('transcript', 'transcript.v1.json');
 const ORIGINAL_AUDIO_DIR = 'audio';
-const SESSION_WAV_RELATIVE_PATH = path.join(ORIGINAL_AUDIO_DIR, 'source-original-v1.wav');
+export const SESSION_WAV_RELATIVE_PATH = path.join(ORIGINAL_AUDIO_DIR, 'source-original-v1.wav');
 const DERIVED_CACHE_INDEX_FILE = '.derived-cache.json';
 const SESSION_WAV_CONVERT_OPTIONS = { highPass: undefined, dynanorm: false } as const;
 const SESSION_OPTIMIZED_WAV_CONVERT_OPTIONS = {
@@ -218,21 +218,42 @@ export class SessionsService {
     }
 
     public getWaveformPeaks(sessionId: string, mode: SessionAudioMode): Promise<SessionWaveformPeaks> {
+        return this.requestWaveformPeaks(this.resolveSessionDir(sessionId), mode);
+    }
+
+    public prepareRecordedWaveform(sessionId: string): void {
         const sessionDir = this.resolveSessionDir(sessionId);
+        void this.requestWaveformPeaks(sessionDir, 'optimized', true).catch((error: unknown) => {
+            if (!this.waveformsStopped && !this.deletingSessions.has(sessionDir)) {
+                console.warn('Failed to prepare recording waveform', error);
+            }
+        });
+    }
+
+    private requestWaveformPeaks(sessionDir: string, mode: SessionAudioMode, prepareAudio = false): Promise<SessionWaveformPeaks> {
         if (this.waveformsStopped) return Promise.reject(new Error('Waveform preparation has stopped'));
         if (this.deletingSessions.has(sessionDir)) return Promise.reject(new Error('Session is being deleted'));
         const cachePath = path.join(sessionDir, waveformFileName(mode));
         const existing = this.waveformRequests.get(cachePath);
         if (existing) return existing.result;
         const controller = new AbortController();
-        const result = this.readWaveform(sessionDir, mode, cachePath, controller.signal).finally(() => this.waveformRequests.delete(cachePath));
+        const result = this.readWaveform(sessionDir, mode, cachePath, controller.signal, prepareAudio)
+            .finally(() => this.waveformRequests.delete(cachePath));
         this.waveformRequests.set(cachePath, { sessionId: path.basename(sessionDir), controller, result });
         return result;
     }
 
-    private async readWaveform(sessionDir: string, mode: SessionAudioMode, cachePath: string, signal: AbortSignal): Promise<SessionWaveformPeaks> {
+    private async readWaveform(
+        sessionDir: string, mode: SessionAudioMode, cachePath: string, signal: AbortSignal, prepareAudio: boolean,
+    ): Promise<SessionWaveformPeaks> {
         if (!(await fs.lstat(sessionDir)).isDirectory()) throw new Error('Invalid session directory');
+        if (prepareAudio) {
+            const sessionFilePath = path.join(sessionDir, SESSION_FILE_NAME);
+            const session = await readJsonFile<SessionFileV1>(sessionFilePath);
+            await this.ensureSessionWavFile(sessionDir, sessionFilePath, session, signal);
+        }
         const original = await this.resolveOwnedFile(sessionDir, SESSION_WAV_RELATIVE_PATH);
+        if (prepareAudio) await this.prepareSourceAudio(original, mode, signal);
         const audio = mode === 'original' ? original : await this.resolveOwnedFile(sessionDir, path.relative(sessionDir, (await optimizedTarget(original)).target));
         return loadWaveformPeaks(audio, cachePath, signal);
     }
@@ -764,7 +785,9 @@ export class SessionsService {
         sessionDir: string,
         sessionFilePath: string,
         session: SessionFileV1,
+        signal?: AbortSignal,
     ): Promise<{ wavPath: string; session: SessionFileV1 }> {
+        signal?.throwIfAborted();
         const explicitWavRelativePath = session.audio.wavPath?.trim() || null;
         const fallbackWavRelativePath = path.extname(session.audio.originalPath).toLowerCase() === '.wav' ?
             session.audio.originalPath :
@@ -789,12 +812,20 @@ export class SessionsService {
             const { path: tmpWavPath, cleanup } = session.tracks?.length ?
                 await this.audioPreprocessor.mixSources(session.tracks.map((track) => ({
                     ...track, filePath: this.resolveTrackPath(sessionDir, track.filePath),
-                }))) : await this.audioPreprocessor.convertAudio({ audioPath: originalAbsolutePath, ...SESSION_WAV_CONVERT_OPTIONS });
+                })), signal) : await this.audioPreprocessor.convertAudio({ audioPath: originalAbsolutePath, ...SESSION_WAV_CONVERT_OPTIONS, signal });
+            const temporary = targetWavPath + '.' + randomUUID() + '.tmp';
             try {
+                signal?.throwIfAborted();
                 await fs.mkdir(path.dirname(targetWavPath), { recursive: true });
-                await fs.copyFile(tmpWavPath, targetWavPath);
-            } finally { await cleanup().catch(() => void 0); }
+                await fs.copyFile(tmpWavPath, temporary);
+                signal?.throwIfAborted();
+                await fs.rename(temporary, targetWavPath);
+            } finally {
+                await Promise.all([fs.rm(temporary, { force: true }), cleanup()]);
+            }
         });
+        signal?.throwIfAborted();
+        if (explicitWavRelativePath === SESSION_WAV_RELATIVE_PATH) return { wavPath: targetWavPath, session };
 
         const updatedAt = Date.now();
         const updatedSession: SessionFileV1 = {

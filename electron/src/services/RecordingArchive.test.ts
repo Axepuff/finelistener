@@ -23,24 +23,37 @@ const wav = (): Buffer => {
 };
 
 describe('RecordingArchive', () => {
-    beforeEach(async () => { environment.root = await fs.mkdtemp(path.join(tmpdir(), 'finelistener-archive-test-')); });
-    afterEach(async () => { await fs.rm(environment.root, { recursive: true, force: true }); });
+    let sessions: SessionsService;
+    beforeEach(async () => {
+        environment.root = await fs.mkdtemp(path.join(tmpdir(), 'finelistener-archive-test-'));
+        sessions = new SessionsService();
+    });
+    afterEach(async () => {
+        await sessions.stopWaveformsAndWait();
+        await fs.rm(environment.root, { recursive: true, force: true });
+    });
 
-    it('publishes valid sources transactionally and makes repeated recovery idempotent', async () => {
-        const archive = new RecordingArchive({ sessionsService: new SessionsService() });
+    it('publishes valid sources transactionally and prepares the waveform before first open', async () => {
+        const archive = new RecordingArchive({ sessionsService: sessions });
         const prepared = await archive.prepareCapture({ system: '', microphone: null }, DEFAULT_WAV_FORMAT);
         await fs.writeFile(prepared.outputPath, wav());
         await archive.registerCaptureResult(prepared.recordingId, { filePath: prepared.outputPath, format: DEFAULT_WAV_FORMAT });
         const first = await archive.finalize(prepared.recordingId);
+        const cache = path.join(sessions.getSessionsRootDir(), first.sessionId, 'waveform-optimized-v1.peaks');
+        await vi.waitFor(() => fs.access(cache), { timeout: 3000 });
+        await fs.utimes(cache, 1, 1);
         const second = await archive.recover(prepared.recordingId);
         expect(second.sessionId).toBe(first.sessionId);
-        const session = await new SessionsService().getSession(second.sessionId);
+        const reopened = new SessionsService();
+        const session = await reopened.getSession(second.sessionId);
         expect(session.tracks?.map((track) => track.source)).toEqual(['system']);
+        expect((await reopened.getWaveformPeaks(session.id, 'optimized')).duration).toBe(1);
+        expect((await fs.stat(cache)).mtimeMs).toBe(1000);
         await expect(fs.access(path.join(environment.root, 'recordings', 'pending', prepared.recordingId))).rejects.toThrow();
     });
 
     it('keeps a valid source when another source is invalid', async () => {
-        const archive = new RecordingArchive({ sessionsService: new SessionsService() });
+        const archive = new RecordingArchive({ sessionsService: sessions });
         const prepared = await archive.prepareCapture({ system: '', microphone: '' }, DEFAULT_WAV_FORMAT);
         const microphonePath = path.join(path.dirname(prepared.outputPath), 'microphone.wav');
         await fs.writeFile(prepared.outputPath, wav()); await fs.writeFile(microphonePath, 'broken');
@@ -49,7 +62,7 @@ describe('RecordingArchive', () => {
             tracks: [{ source: 'system', filePath: prepared.outputPath }, { source: 'microphone', filePath: microphonePath }],
         });
         const result = await archive.finalize(prepared.recordingId);
-        const session = await new SessionsService().getSession(result.sessionId);
+        const session = await sessions.getSession(result.sessionId);
         expect(session.tracks?.map((track) => track.source)).toEqual(['system']);
         expect(result.sourceWarnings).toEqual([{
             source: 'microphone',
