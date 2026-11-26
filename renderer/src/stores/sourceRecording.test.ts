@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AppContext } from '../AppContext';
 import { TranscriptionError } from '../features/transcribe-control/src/ui/TranscribeControl/TranscriptionError';
-import type { RecordingState } from 'electron/src/services/RecordingService';
+import type { RecordingLevel, RecordingProgress, RecordingState } from 'electron/src/services/RecordingService';
 import type { FinalizeRecordingResult, StartRecordingResult } from 'electron/src/types/recordingArchive';
 import type { SessionDetails, SessionTranscriptV1 } from 'electron/src/types/sessions';
 import type { SessionTranscribeOpts } from 'electron/src/types/transcription';
@@ -46,6 +46,60 @@ const captured: FinalizeRecordingResult = {
 const settle = async () => { for (let i = 0; i < 12; i += 1) await Promise.resolve(); };
 
 describe('recording sources', () => {
+    it('warns only for sources silent for 30 seconds and clears the warning when signal returns', async () => {
+        vi.useFakeTimers();
+        let level!: (sample: RecordingLevel) => void;
+        let progress!: (sample: RecordingProgress) => void;
+        const fake = createFakeRendererAdapter({
+            getRecordingState: () => Promise.resolve('recording'),
+            onRecordingLevel: (callback) => { level = callback; return () => undefined; },
+            onRecordingProgress: (callback) => { progress = callback; return () => undefined; },
+        });
+        const store = new AppStore(fake.adapter);
+        store.initialize();
+        try {
+            await settle();
+            level({ source: 'microphone', rms: 0, peak: 0, clipped: false });
+            level({ source: 'system', rms: 0.1, peak: 0.2, clipped: false });
+            await vi.advanceTimersByTimeAsync(29_999);
+            progress({ durationMs: 29_999 });
+            level({ source: 'system', rms: 0.1, peak: 0.2, clipped: false });
+            expect(store.recording.silentSources).toEqual([]);
+            await vi.advanceTimersByTimeAsync(1);
+            progress({ durationMs: 30_000 });
+            expect(store.recording.silentSources).toEqual(['microphone']);
+            level({ source: 'microphone', rms: 0, peak: 0.02, clipped: false });
+            expect(store.recording.silentSources).toEqual([]);
+            expect(store.operations.kind).toBe('recording');
+        } finally { store.dispose(); vi.useRealTimers(); }
+    });
+    it('warns for macOS silence before the first PCM buffer and after audio progress starts late', async () => {
+        vi.useFakeTimers();
+        let level!: (sample: RecordingLevel) => void;
+        let progress!: (sample: RecordingProgress) => void;
+        const { adapter } = createFakeRendererAdapter({
+            runtimePlatform: 'darwin', getRecordingState: () => Promise.resolve('recording'),
+            onRecordingLevel: (callback) => { level = callback; return () => undefined; },
+            onRecordingProgress: (callback) => { progress = callback; return () => undefined; },
+        });
+        const store = new AppStore(adapter);
+        store.initialize();
+        try {
+            await settle();
+            await vi.advanceTimersByTimeAsync(30_000);
+            expect(store.recording.silentSources).toEqual(['system']);
+            await vi.advanceTimersByTimeAsync(30_000);
+            level({ rms: 0.1, peak: 0.2, clipped: false });
+            expect(store.recording.silentSources).toEqual([]);
+            for (let elapsed = 500; elapsed <= 30_000; elapsed += 500) {
+                await vi.advanceTimersByTimeAsync(500);
+                progress({ durationMs: elapsed });
+                level({ rms: 0, peak: 0, clipped: false });
+                expect(store.recording.silentSources).toEqual(elapsed < 30_000 ? [] : ['system']);
+            }
+        } finally { store.dispose(); vi.useRealTimers(); }
+    });
+
     it('defaults both sources on, persists Off, rejects both Off, and accepts the finalized session', async () => {
         const startSystemRecording = vi.fn(() => Promise.resolve({
             recordingId: 'capture', startedAt: 1,
@@ -72,6 +126,62 @@ describe('recording sources', () => {
             expect(startSystemRecording).toHaveBeenCalledWith({ deviceId: undefined, sources: { system: null, microphone: 'chosen-mic' } });
             expect((await store.recording.stopRecording()).ok).toBe(true);
             expect(store.workspace.activeSession?.tracks).toEqual(session.tracks);
+        } finally { store.dispose(); }
+    });
+
+    it.each([
+        { enabled: false, outcome: 'saved', starts: 0 },
+        { enabled: true, outcome: 'saved', starts: 1 },
+        { enabled: true, outcome: 'failed', starts: 0 },
+        { enabled: true, outcome: 'missing model', starts: 0 },
+    ])('starts transcription after recording with enabled=$enabled and outcome=$outcome', async ({ enabled, outcome, starts }) => {
+        const transcribeSession = vi.fn(() => Promise.resolve({ ...session, transcript: partial }));
+        const fake = createFakeRendererAdapter({
+            getRecordingState: () => Promise.resolve('recording'),
+            getWhisperModels: () => Promise.resolve([{ name: 'base', sizeLabel: '148 MB', isBundled: true, isDownloaded: outcome !== 'missing model' }]),
+            stopSystemRecording: () => outcome === 'failed' ? Promise.reject(new Error('Capture failed')) : Promise.resolve(captured),
+            getSession: () => Promise.resolve(session), transcribeSession,
+        });
+        const store = new AppStore(fake.adapter);
+        store.initialize();
+        try {
+            await settle();
+            store.transcriptionControl.setModel('base');
+            store.transcriptionControl.setLanguage('en');
+            expect(store.recording.transcribeWhenRecordingStops).toBe(false);
+            if (enabled) await store.recording.setTranscribeWhenRecordingStops(true);
+            expect((await store.recording.stopRecording()).ok).toBe(outcome !== 'failed');
+            await settle();
+            expect(transcribeSession).toHaveBeenCalledTimes(starts);
+            if (starts) expect(transcribeSession).toHaveBeenCalledWith(session.id, expect.objectContaining({ language: 'en', model: 'base' }));
+        } finally { store.dispose(); }
+    });
+
+    it('keeps auto-transcription available when a previous lifecycle fails to load its finalized session', async () => {
+        const previous = Promise.withResolvers<SessionDetails>();
+        const getSession = vi.fn(() => Promise.resolve(session)).mockImplementationOnce(() => previous.promise);
+        const transcribeSession = vi.fn(() => Promise.resolve({ ...session, transcript: partial }));
+        const { adapter } = createFakeRendererAdapter({
+            getRecordingState: () => Promise.resolve('recording'), stopSystemRecording: () => Promise.resolve(captured),
+            getWhisperModels: () => Promise.resolve([{ name: 'base', sizeLabel: '148 MB', isBundled: true, isDownloaded: true }]),
+            getSession, transcribeSession,
+        });
+        const store = new AppStore(adapter);
+        store.initialize();
+        try {
+            await settle();
+            const first = store.recording.stopRecording();
+            await vi.waitFor(() => expect(getSession).toHaveBeenCalledOnce());
+            store.dispose();
+            store.initialize();
+            await settle();
+            await store.recording.setTranscribeWhenRecordingStops(true);
+            store.transcriptionControl.setModel('base');
+            previous.reject(new Error('Previous session was removed'));
+            expect((await first).ok).toBe(false);
+            expect((await store.recording.stopRecording()).ok).toBe(true);
+            await settle();
+            expect(transcribeSession).toHaveBeenCalledOnce();
         } finally { store.dispose(); }
     });
 

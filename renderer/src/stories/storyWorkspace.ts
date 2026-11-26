@@ -2,6 +2,7 @@ import type { RecordingLevel, RecordingProgress, RecordingState } from 'electron
 import type { RecoverableRecording } from 'electron/src/types/recordingArchive';
 import type { SpeakerAnalysisProgressEvent } from 'electron/src/types/transcription';
 import type { SessionDetails, SessionListItem, SessionTranscriptV1 } from 'electron/src/types/sessions';
+import { spyOn } from 'storybook/test';
 import { UI_PREFERENCE_DEFAULTS, type UiPreferenceKey, type UiPreferenceValueMap } from '../../../electron/src/types/uiPreferences';
 import { AppStore } from '../stores/appStore';
 import type { RendererAdapter } from '../stores/rendererAdapter';
@@ -140,7 +141,6 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
     let recordingState: RecordingState = 'idle';
     let activeRecordingSources = { system: true, microphone: false };
     let recordingAttempt = 0;
-    let silenceTimer: ReturnType<typeof setTimeout> | undefined;
     let stateListener: ((state: RecordingState) => void) | null = null;
     let levelListener: ((level: RecordingLevel) => void) | null = null;
     let progressListener: ((progress: RecordingProgress) => void) | null = null;
@@ -250,16 +250,17 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
             if (scenario === 'recording-error' || scenario === 'recording-start-error') return Promise.reject(new Error('Demo recording device unavailable'));
             activeRecordingSources = { system: options?.sources?.system !== null, microphone: typeof options?.sources?.microphone === 'string' };
             recordingState = 'recording';
-            emitRecording();
             if (scenario === 'settings-recording-silence') {
-                const silent = { source: 'system' as const, rms: 0, peak: 0, clipped: false };
-                levelListener?.(silent);
-                silenceTimer = setTimeout(() => levelListener?.(silent), 2100);
-            }
+                const clock = spyOn(performance, 'now').mockReturnValue(performance.now() - 30_000);
+                try {
+                    emitRecording();
+                    levelListener?.({ source: 'system', rms: 0, peak: 0, clipped: false });
+                } finally { clock.mockRestore(); }
+                progressListener?.({ durationMs: 72_000, bytesWritten: 2_304_000 });
+            } else emitRecording();
             return Promise.resolve({ recordingId: 'demo-recording', startedAt: Date.now() });
         },
         stopSystemRecording: () => {
-            clearTimeout(silenceTimer);
             recordingState = 'idle';
             emitRecording();
             session = { ...session, sourceKind: 'recorded' };
@@ -343,7 +344,6 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         store,
         adapter: fake.adapter,
         dispose: () => {
-            clearTimeout(silenceTimer);
             summaryStory.dispose();
             void store.whisperModels.cancelDownload();
             finishModelDownload?.();

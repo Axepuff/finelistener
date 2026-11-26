@@ -101,7 +101,7 @@ export const useSystemAudioRecorder = (): SystemAudioRecorderViewModel => {
         },
         alerts: {
             recordingError: session.recordingError,
-            showSilenceWarning: session.showSilenceWarning,
+            showSilenceWarning: isMacOS && recordingStore.silentSources.includes('system'),
             isMacOS,
             onOpenRecordingPreferences: () => void recordingStore.openRecordingPreferences(),
             onRevealDevApp: () => void recordingStore.revealDevApp(),

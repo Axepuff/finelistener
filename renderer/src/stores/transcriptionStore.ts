@@ -2,6 +2,7 @@ import type { RecordingSource, SessionSummary, SessionSummaryDraft, SessionTrans
 import type { TranscribeOpts, TranscriptionProgressEvent, TranscriptionTextEvent } from 'electron/src/types/transcription';
 import type { WhisperModelName } from 'electron/src/types/whisper';
 import type { ActivityLogStore } from './activityLogStore';
+import { ProgressEstimate } from './progressEstimate';
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { TranscriptionRunOutcome } from 'renderer/src/features/transcribe-state/src/model/transcriptionWorkflow';
 import type { RendererAdapter } from './rendererAdapter';
@@ -37,6 +38,7 @@ export type TranscriptionRunResult =
 
 /** Owns one transcription run, its streaming listeners, and the visible transcript state. */
 export class TranscriptionStore {
+    readonly estimate = new ProgressEstimate();
     private savedTranscriptValue: DeepReadonly<SessionTranscriptV1> | null = null;
 
     previousTranscriptKept = false;
@@ -413,6 +415,7 @@ export class TranscriptionStore {
     }
 
     private beginRun(segment: Segment | undefined, isCurrent: () => boolean): number {
+        this.estimate.start();
         this.runId += 1;
         this.activeRunId = this.runId;
         this.runIsCurrent = isCurrent;
@@ -494,6 +497,7 @@ export class TranscriptionStore {
         if (!event || !Number.isFinite(event.value) || !this.isEventCurrent(event.runId)) return;
 
         this.progressValue = Math.min(100, Math.max(0, event.value));
+        this.estimate.update(this.progressValue / 100);
     }
 
     private isEventCurrent(runId: number): boolean {

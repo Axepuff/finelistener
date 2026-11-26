@@ -88,7 +88,12 @@ export class AppStore {
             adapter,
             activityLog: this.activityLog,
             operations: this.operations,
-            onSessionImported: (session) => this.acceptSession(session),
+            onSessionImported: (session, transcribe) => {
+                this.acceptSession(session);
+                if (transcribe) void this.requestTranscriptionStart().then((result) => {
+                    if (!result.ok) this.activityLog.appendEvent(result.message);
+                });
+            },
             onRecoveryChanged: () => { void this.recordingRecovery.refresh(); },
         });
         this.recordingRecovery = new RecordingRecoveryStore(adapter, this.operations, (session) => this.acceptSession(session), this.activityLog);
@@ -413,6 +418,7 @@ export class AppStore {
         const operation = this.operations.begin('transcribing');
 
         if (!operation) return commandFailure('Another workspace operation is already running.');
+        this.speakers.reset();
 
         const selectedSegment = retryFailed ?
             this.transcription.savedTranscript?.sourceRun?.settings.segment :

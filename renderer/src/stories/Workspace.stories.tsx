@@ -367,6 +367,7 @@ export const NemotronAnalyzing: Story = {
         skip.focus();
         await userEvent.keyboard('{Enter}');
         await waitFor(() => expect(settings.queryByRole('button', { name: 'Skip speaker analysis' })).not.toBeInTheDocument());
+        await expect(settings.getByText(/Identify speakers · Skipped/)).toBeVisible();
         await expect(canvas.getByRole('radio', { name: 'Speakers' })).toBeEnabled();
         await expect(canvas.getByRole('button', { name: 'Export' })).toBeEnabled();
     },

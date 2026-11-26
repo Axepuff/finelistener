@@ -1,6 +1,6 @@
 import { TranscriptionError } from './TranscriptionError';
 import { InlineAlert } from 'renderer/src/shared/InlineAlert';
-import { ActionIcon, Box, Button, Group, Loader, Modal, Progress, Select, Stack, Switch, Text } from '@mantine/core';
+import { ActionIcon, Box, Button, Checkbox, Group, Loader, Modal, Progress, Select, Stack, Switch, Text } from '@mantine/core';
 import { IconHeadphones, IconTrash } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useState } from 'react';
@@ -73,18 +73,23 @@ const TranscribeControl: React.FC = observer(() => {
 
     const showProgress = store.operations.kind === 'transcribing' || store.operations.kind === 'analyzing-speakers';
     const modelReady = useCustomModelFile ? Boolean(customModelFile) : store.whisperModels.isDownloaded(model);
+    const downloadingSelectedModel = !useCustomModelFile && store.whisperModels.downloadProgress?.name === model;
+    const modelName = model[0].toUpperCase() + model.slice(1);
+    const canUseBase = downloadingSelectedModel && model !== 'base' && store.whisperModels.isDownloaded('base');
     const blockReason = store.operations.kind === 'recording' ? 'Stop recording to transcribe.' : store.operationBlockReason ??
         (
         !store.workspace.hasAudioSource ? 'Choose an audio source to transcribe.' :
         store.workspace.hasIncompleteSegment ? 'Complete or clear the selected segment.' :
         !modelReady ? (useCustomModelFile ? 'Choose a local model file to transcribe.' :
-            store.whisperModels.downloadProgress?.name === model ? 'The selected model is downloading.' :
+            downloadingSelectedModel ? `${modelName} can transcribe once it is downloaded.${canUseBase ? ' You can start now with Base or wait.' : ''}` :
             'Download the selected model to transcribe.') : null);
     const canStart = blockReason === null;
     const hasSystemAudio = store.workspace.activeSession?.sourceKind === 'imported'
         || store.workspace.activeSession?.tracks?.some((track) => track.source === 'system');
     const preparingSpeakerAssets = store.operations.kind === 'preparing-speaker-assets';
-    const canPrepareSpeakerComponent = store.speakers.enabled && hasSystemAudio && !store.speakers.componentReady;
+    const hasTranscript = Boolean(store.transcription.savedTranscript?.segments.length);
+    const canPrepareSpeakerComponent = hasSystemAudio && !store.speakers.componentReady
+        && (preparingSpeakerAssets || store.speakers.enabled || (hasTranscript && store.speakers.status === 'error'));
 
     if (showProgress) return <TranscriptionProgress />;
 
@@ -157,6 +162,9 @@ const TranscribeControl: React.FC = observer(() => {
                         disabled={store.operations.isBusy && !store.recordingInProgress}
                         description="Nemotron 3 counts speakers automatically. Auto uses CPU when no GPU is available." />
                 ) : null}
+                {hasTranscript && store.speakers.status === 'cancelled' ? (
+                    <Text size="xs" c="dimmed" role="status">Identify speakers · Skipped. You can run speaker analysis from Speakers.</Text>
+                ) : null}
                 {store.speakers.enabled && hasSystemAudio && store.speakers.compute === 'gpu' && store.speakers.assets?.gpuAvailable === false ? (
                     <InlineAlert severity="warning" title="GPU unavailable" actions={<Button size="compact-sm" disabled={store.operations.isBusy} onClick={() => { void store.speakers.setCompute('cpu'); }}>Select CPU</Button>}>Select CPU or update your graphics driver.</InlineAlert>
                 ) : null}
@@ -169,7 +177,9 @@ const TranscribeControl: React.FC = observer(() => {
                                 Prepare speaker component
                             </Button>
                             {preparingSpeakerAssets ? (
-                                <Button size="compact-sm" color="red" variant="light" onClick={() => { void handleCancelSpeakerPreparation(); }}>Cancel</Button>
+                                <Button size="compact-sm" variant="default" onClick={() => { void handleCancelSpeakerPreparation(); }}>
+                                    {hasTranscript ? 'Skip speakers' : 'Cancel'}
+                                </Button>
                             ) : null}
                         </Group>
                         {preparingSpeakerAssets ? (
@@ -181,7 +191,10 @@ const TranscribeControl: React.FC = observer(() => {
                             </Group>
                         ) : null}
                         {store.speakers.status === 'error' && store.speakers.errorMessage ? (
-                            <InlineAlert title="Component preparation failed" actions={<Button size="compact-sm" disabled={store.operations.isBusy} onClick={() => { void handlePrepareSpeakerComponent(); }}>Retry download</Button>}>{store.speakers.errorMessage}</InlineAlert>
+                            <InlineAlert title="Component preparation failed" actions={<Group gap={6}>
+                                <Button size="compact-sm" disabled={store.operations.isBusy} onClick={() => { void handlePrepareSpeakerComponent(); }}>Retry download</Button>
+                                {hasTranscript ? <Button size="compact-sm" variant="default" disabled={store.operations.isBusy} onClick={() => store.speakers.cancel()}>Skip speakers</Button> : null}
+                            </Group>}>{store.speakers.errorMessage}</InlineAlert>
                         ) : null}
                     </Stack>
                 ) : null}
@@ -200,6 +213,9 @@ const TranscribeControl: React.FC = observer(() => {
                 <TranscriptionError />
             </Stack>
             <Box className="settings-panel__footer">
+                {store.operations.kind === 'recording' ? <Checkbox label="Transcribe when recording stops"
+                    checked={store.recording.transcribeWhenRecordingStops}
+                    onChange={(event) => void store.recording.setTranscribeWhenRecordingStops(event.currentTarget.checked)} /> : null}
                 <Text id="settings-transcription-status" size="xs" c="dimmed" aria-live="polite">{blockReason ?? 'Ready to transcribe.'}</Text>
                 <Group gap={8} wrap="nowrap">
                     <Button
@@ -212,8 +228,12 @@ const TranscribeControl: React.FC = observer(() => {
                         aria-describedby="settings-transcription-status"
                         leftSection={<IconHeadphones size={16} />}
                     >
-                        {!store.recordingInProgress && store.workspace.selectedSegment ? 'Transcribe segment' : 'Transcribe'}
+                        {downloadingSelectedModel ? `Transcribe with ${modelName}` :
+                            !store.recordingInProgress && store.workspace.selectedSegment ? 'Transcribe segment' : 'Transcribe'}
                     </Button>
+                    {canUseBase ? (
+                        <Button variant="default" onClick={() => control.setModel('base')}>Use Base now</Button>
+                    ) : null}
                     <ActionIcon onClick={handleClear} aria-label="Clear workspace" title={store.operations.isBusy ? blockReason ?? undefined : 'Clear workspace'}
                         aria-describedby={store.operations.isBusy ? 'settings-transcription-status' : undefined}
                         variant="default" size={32} disabled={store.operations.isBusy || store.lifecycleState !== 'ready'}>

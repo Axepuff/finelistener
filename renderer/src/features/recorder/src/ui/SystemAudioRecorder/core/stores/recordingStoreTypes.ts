@@ -24,13 +24,11 @@ export interface RecordingSessionState {
     recordingLevel: RecordingLevel | null;
     sourceLevels: Partial<Record<RecordingSourceKind, RecordingLevel>>;
     recordingSources: RecordingSourceKind[];
-    showSilenceWarning: boolean;
+    lastSourceSignalMs: Partial<Record<RecordingSourceKind, number>>;
     recordingError: string | null;
     isProcessingRecording: boolean;
     recordingStartAt: number | null;
     lastProgressAt: number | null;
-    silenceStartedAt: number | null;
-    silenceLogged: boolean;
 }
 
 export interface RecordingDependencies {
@@ -58,11 +56,9 @@ export const initialSessionState: RecordingSessionState = {
     recordingLevel: null,
     sourceLevels: {},
     recordingSources: [],
-    showSilenceWarning: false,
+    lastSourceSignalMs: {},
     recordingError: null,
     isProcessingRecording: false,
     recordingStartAt: null,
     lastProgressAt: null,
-    silenceStartedAt: null,
-    silenceLogged: false,
 };

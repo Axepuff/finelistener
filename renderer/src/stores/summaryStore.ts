@@ -5,6 +5,7 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import { defaultRecordingSummaryOptions, type RecordingSummaryOptions } from '../../../electron/src/types/summaryOptions';
 import type { ForegroundOperationStore } from './foregroundOperationStore';
 import type { RendererAdapter } from './rendererAdapter';
+import { ProgressEstimate } from './progressEstimate';
 
 interface SummaryRequestFailure {
     sessionId: string;
@@ -24,6 +25,7 @@ const generationMessages: Record<SummaryRequestFailure['reason'], string> = {
 };
 
 export class SummaryStore {
+    readonly downloadEstimate = new ProgressEstimate();
     private progressValue = '';
     private runningOptionsValue?: RecordingSummaryOptions;
     private generationFailureValue: SummaryRequestFailure | null = null;
@@ -63,6 +65,11 @@ export class SummaryStore {
 
     private setModelStatus(status: SummaryModelStatus): void {
         const previous = this.modelValue;
+        if (status.state === 'downloading' && status.totalBytes > 0) {
+            const fraction = status.downloadedBytes / status.totalBytes;
+            if (previous?.state === 'downloading') this.downloadEstimate.update(fraction);
+            else this.downloadEstimate.start(fraction);
+        }
         if (status.state === 'error' && (previous?.state !== 'error' || previous.error !== status.error || previous.downloadedBytes !== status.downloadedBytes)) {
             this.activityLog?.appendFailure('Summary model download failed', `reason=${status.error}; model=${status.model}; reached=${status.downloadedBytes}/${status.totalBytes} bytes`);
         }

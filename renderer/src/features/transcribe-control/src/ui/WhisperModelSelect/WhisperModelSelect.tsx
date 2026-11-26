@@ -1,5 +1,6 @@
 import { Button, Group, Progress, Stack, Text } from '@mantine/core';
 import { InlineAlert } from 'renderer/src/shared/InlineAlert';
+import { RemainingTime } from 'renderer/src/shared/RemainingTime';
 import { IconCheck } from '@tabler/icons-react';
 import type { WhisperModelName } from 'electron/src/types/whisper';
 import { observer } from 'mobx-react-lite';
@@ -49,6 +50,7 @@ export const WhisperModelSelect: React.FC<Props> = observer(({ value, onChange, 
                                     </Group>
                                     <Progress value={progress.percent ?? 0} animated={progress.percent === null} size={4}
                                         aria-label={`${title} download progress`} aria-valuetext={progress.percent === null ? 'Size unknown' : `${progress.percent}%`} />
+                                    <RemainingTime estimate={whisperModels.estimate} />
                                     <Button variant="subtle" size="compact-xs" className="settings-link" disabled={whisperModels.isCancelling}
                                         onClick={() => { void whisperModels.cancelDownload(); }}>Cancel download</Button>
                                 </>

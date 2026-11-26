@@ -4,6 +4,7 @@ import { tmpdir } from 'os';
 import path from 'path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { SUMMARY_MODEL_FILE, SummaryModelService } from './summaryModel';
+import { SUMMARY_MODEL_ARTIFACT } from '../types/summaryModel';
 
 const fetch = vi.hoisted(() => vi.fn<typeof globalThis.fetch>());
 vi.mock('fs', async (load) => {
@@ -14,7 +15,7 @@ vi.mock('electron', () => ({ net: { fetch } }));
 vi.mock('../types/summaryModel', async (load) => {
     const actual = await load<typeof import('../types/summaryModel')>();
     return { ...actual, SUMMARY_MODEL_ARTIFACT: {
-        ...actual.SUMMARY_MODEL_ARTIFACT, bytes: 3,
+        ...actual.SUMMARY_MODEL_ARTIFACT, get bytes() { return 3; },
         sha256: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
     } };
 });
@@ -60,6 +61,27 @@ it('only transfers weights on request, shares progress, and reopens the installe
     await fs.writeFile(replacement, 'bad');
     await fs.rename(replacement, model);
     await expect(service.requireInstalled(signal)).rejects.toThrow('SUMMARY_MODEL_MISSING');
+});
+
+it('reports bytes on a slow download before the first full percent arrives', async () => {
+    const fixture: { readonly bytes: number } = SUMMARY_MODEL_ARTIFACT;
+    vi.spyOn(fixture, 'bytes', 'get').mockReturnValue(10_000);
+    const changed = vi.fn();
+    const service = new SummaryModelService(directory, changed);
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    fetch.mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ start(controller) { stream = controller; } })));
+    const transfer = service.download();
+    try {
+        await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+        const now = Date.now;
+        vi.spyOn(Date, 'now').mockImplementation(() => now() + 2_000);
+        stream.enqueue(Buffer.from('a'));
+        await vi.waitFor(() => expect(changed).toHaveBeenCalledWith(expect.objectContaining({ state: 'downloading', downloadedBytes: 1 })));
+    } finally {
+        stream.close();
+        await service.cancelDownload();
+        await transfer;
+    }
 });
 
 it('rejects corrupt on-disk weights and transfers, removes the partial file and accepts a retry', async () => {

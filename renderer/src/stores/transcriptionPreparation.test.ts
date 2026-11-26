@@ -30,6 +30,33 @@ const setup = () => {
 };
 
 describe('Transcription preparation integration', () => {
+    it('transcribes with Base during a Large download and keeps Base selected after installation', async () => {
+        const { promise, resolve } = Promise.withResolvers<void>();
+        let installed = false;
+        const { adapter } = createFakeRendererAdapter({
+            getWhisperModels: () => Promise.resolve([
+                { name: 'base', sizeLabel: '148 MB', isBundled: true, isDownloaded: true },
+                { name: 'large', sizeLabel: '874 MB', isBundled: false, isDownloaded: installed },
+            ]),
+            downloadWhisperModel: async () => { await promise; installed = true; },
+            getSession: (id) => Promise.resolve(session(id)),
+        });
+        const transcribe = vi.spyOn(adapter, 'transcribe').mockResolvedValue('Transcript');
+        const store = new AppStore(adapter);
+        await store.speakers.setEnabled(false);
+        await store.whisperModels.refresh();
+        store.workspace.replaceWorkspace(session('first'));
+        const downloading = store.downloadWhisperModel('large');
+        store.transcriptionControl.setModel('base');
+        expect((await store.requestTranscriptionStart()).ok).toBe(true);
+        expect(transcribe).toHaveBeenCalledWith('/first.wav', expect.objectContaining({ model: 'base' }));
+        expect(store.whisperModels.isDownloadActive).toBe(true);
+        resolve();
+        await downloading;
+        expect(store.whisperModels.isDownloaded('large')).toBe(true);
+        expect(store.transcriptionControl.model).toBe('base');
+    });
+
     it('blocks an absent model without downloading or queuing a start, then requires an explicit start after download', async () => {
         const { store, download, transcribe, finishDownload } = setup();
         expect(await store.requestTranscriptionStart()).toEqual({ ok: false, message: 'Download the selected model to transcribe.' });

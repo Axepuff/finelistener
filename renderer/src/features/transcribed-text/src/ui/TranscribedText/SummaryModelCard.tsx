@@ -1,5 +1,7 @@
 import { Button, Progress } from '@mantine/core';
 import { InlineAlert } from 'renderer/src/shared/InlineAlert';
+import { RemainingTime } from 'renderer/src/shared/RemainingTime';
+import { useAppStore } from 'renderer/src/AppContext';
 import { IconDownload } from '@tabler/icons-react';
 import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
 import type React from 'react';
@@ -16,6 +18,7 @@ interface Props {
 const gigabytes = (bytes: number) => (bytes / 1_000_000_000).toFixed(2);
 
 export const SummaryModelCard: React.FC<Props> = ({ model, error, onCheck, onDownload, onCancel }) => {
+    const { summary } = useAppStore();
     if (!model || model.state === 'ready') {
         return error ? <InlineAlert title="Could not check summary model" actions={<Button size="compact-sm" variant="default" onClick={onCheck}>Check again</Button>}>{error}</InlineAlert> : <span role="status" className={styles.caption}>Checking model availability…</span>;
     }
@@ -63,6 +66,7 @@ export const SummaryModelCard: React.FC<Props> = ({ model, error, onCheck, onDow
         </div>
         <Progress value={percent} size={6} radius={1} color={failed ? 'var(--brand-color-error)' : 'var(--brand-color-primary)'}
             aria-label="Summary model download" />
+        <RemainingTime estimate={summary.downloadEstimate} />
         <div className={styles.row}>
             {error ? <span role="alert" className={styles.grow}>{error}</span> :
                 downloading && <span className={`${styles.caption} ${styles.grow}`}>You can keep reading, recording and transcribing meanwhile.</span>}
