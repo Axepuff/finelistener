@@ -21,6 +21,17 @@ const sampleAcrossRecording = (text: string): string => {
     }).join(' ');
 };
 
+const reusesParagraphWords = (title: string, paragraph: string): boolean => {
+    const words = (value: string) => value.normalize('NFC').toLowerCase().match(/[\p{L}\p{M}]+/gu) ?? [];
+    const sourceWords = words(paragraph);
+    return words(title).every((word) => sourceWords.some((source) => {
+        if (word === source) return true;
+        // A short grammatical ending may change between the paragraph and its heading, as in "note" and "notes".
+        const [shorter, longer] = word.length < source.length ? [word, source] : [source, word];
+        return shorter.length >= 4 && longer.length - shorter.length <= 2 && longer.startsWith(shorter);
+    }));
+};
+
 export const getSummaryLanguage = async (rows: SummarySourceRow[], hint?: string): Promise<SummaryLanguage> => {
     const { eld } = await import('eld/small');
     const speech = rows.map((row) => row.text).join('\n');
@@ -54,14 +65,9 @@ export const getSummaryLanguage = async (rows: SummarySourceRow[], hint?: string
             const prose = narrative(text);
             const actual = eld.detect(prose);
             if (code && actual.language === code) return true;
-            if (code && plausible(prose, actual, code)) {
-                if (!reviewedParagraph || !actual.isReliable()) return true;
-                // Short headings can resemble another language even when they reuse the paragraph's vocabulary.
-                const words = (value: string) => value.toLowerCase().match(/[\p{L}\p{M}]+/gu) ?? [];
-                const paragraphWords = new Set(words(reviewedParagraph));
-                if (words(prose).every((word) => paragraphWords.has(word) || eld.detect(word).language === code)) return true;
-            }
+            if (!reviewedParagraph && code && plausible(prose, actual, code)) return true;
             if (sourceScript && actual.language && scriptOf(actual.language) !== sourceScript) return false;
+            if (reviewedParagraph && canCheck) return reusesParagraphWords(prose, reviewedParagraph);
             return !canCheck || !actual.isReliable();
         },
     };
