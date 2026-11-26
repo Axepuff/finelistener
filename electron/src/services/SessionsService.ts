@@ -592,11 +592,11 @@ export class SessionsService {
         const { transcript, session } = await this.readStoredTranscript(sessionId);
         const input = getSummaryInput(transcript);
         if (!input) throw new Error('A complete transcript with speech is required.');
-        const saved = getReadableSummary(transcript);
+        const saved = getReadableSummary(transcript, input);
         const setting = transcript.sourceRun?.settings.language ?? session.transcription?.language;
         const languageHint = typeof setting === 'string' ? setting.trim() : '';
         return { ...input, saved, savedSourceMatches: !transcript.summary?.sourceRevision || transcript.summary.sourceRevision === input.sourceRevision,
-            draft: getReadableSummaryDraft(transcript), ...(languageHint && languageHint.toLowerCase() !== 'auto' ? { languageHint } : {}) };
+            draft: getReadableSummaryDraft(transcript, input ?? undefined), ...(languageHint && languageHint.toLowerCase() !== 'auto' ? { languageHint } : {}) };
     }
 
     public async saveSummary(sessionId: string, summary: SessionSummary, signal: AbortSignal, activeGeneration?: number): Promise<SessionSummary> {
@@ -610,9 +610,9 @@ export class SessionsService {
             }
             // This rename commits the summary. Cancellation after it must return the saved result.
             this.assertSummaryOwner(sessionId, activeGeneration);
-            const readable = getReadableSummary({ ...transcript, summary })!;
+            const readable = getReadableSummary({ ...transcript, summary }, input ?? undefined)!;
             await writeJsonFile(transcriptPath, { ...transcript, summary: readable,
-                summaryDraft: summary.brief ? undefined : getReadableSummaryDraft(transcript) }, signal,
+                summaryDraft: summary.brief ? undefined : getReadableSummaryDraft(transcript, input ?? undefined) }, signal,
                 () => this.assertSummaryOwner(sessionId, activeGeneration));
             return readable;
         });
@@ -628,7 +628,7 @@ export class SessionsService {
             if (!input || draft.inputHash !== input.inputHash || draft.sourceRevision !== input.sourceRevision) {
                 throw new Error('The transcript changed during summarization.');
             }
-            const readable = getReadableSummaryDraft({ ...transcript, summaryDraft: draft });
+            const readable = getReadableSummaryDraft({ ...transcript, summaryDraft: draft }, input);
             if (!readable) throw new Error('SUMMARY_DRAFT_INCOMPATIBLE');
             this.assertSummaryOwner(sessionId, activeGeneration);
             await writeJsonFile(transcriptPath, { ...transcript, summaryDraft: readable }, signal,

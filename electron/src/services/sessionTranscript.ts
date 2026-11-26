@@ -19,10 +19,10 @@ const getSummarySourceRevision = (transcript: SessionTranscriptV1): string => cr
 ])).digest('hex');
 
 // Readers must not expose offsets against a different source, even when the normalized inputHash still matches.
-export const getReadableSummary = (transcript: SessionTranscriptV1): SessionSummary | undefined => {
+export const getReadableSummary = (transcript: SessionTranscriptV1, preparedInput?: NonNullable<ReturnType<typeof getSummaryInput>>): SessionSummary | undefined => {
     const summary = transcript.summary;
     if (!summary) return undefined;
-    const input = getSummaryInput(transcript);
+    const input = preparedInput ?? getSummaryInput(transcript);
     if (summary.inputHash !== input?.inputHash) return undefined;
     if (summary.sourceRevision && summary.sourceRevision === input?.sourceRevision) return summary;
     const { sourceRevision: _revision, ...readable } = summary;
@@ -32,10 +32,11 @@ export const getReadableSummary = (transcript: SessionTranscriptV1): SessionSumm
     }) } : {}) };
 };
 
-export const getReadableSummaryDraft = (transcript: SessionTranscriptV1): SessionSummaryDraft | undefined => {
+export const getReadableSummaryDraft = (transcript: SessionTranscriptV1, preparedInput?: NonNullable<ReturnType<typeof getSummaryInput>>): SessionSummaryDraft | undefined => {
     const draft = transcript.summaryDraft;
-    const input = getSummaryInput(transcript);
-    return draft && input && draft.inputHash === input.inputHash && draft.sourceRevision === input.sourceRevision
+    if (!draft) return undefined;
+    const input = preparedInput ?? getSummaryInput(transcript);
+    return input && draft.inputHash === input.inputHash && draft.sourceRevision === input.sourceRevision
         && draft.generationVersion === recordingSummaryGenerationVersion && validSummaryDraft(draft, input.rows) ? draft : undefined;
 };
 
