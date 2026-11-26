@@ -87,6 +87,38 @@ it('lists WAV duration and persisted speaker count while retaining legacy sessio
     expect((await new SessionsService().listSessions()).find(({ id }) => id === 'metadata')).not.toHaveProperty('durationMs');
 });
 
+it('reuses waveform peaks after restart and rebuilds them after corruption or a listening WAV replacement', async () => {
+    const sessionDir = path.join(environment.root, 'sessions', 'old-recording');
+    const sourcePath = path.join(sessionDir, 'audio', 'source-original-v1.wav');
+    await fs.mkdir(path.dirname(sourcePath), { recursive: true });
+    const source = wav(0);
+    source.writeInt16LE(-32768, 44);
+    source.writeInt16LE(16384, source.length - 2);
+    await fs.writeFile(sourcePath, source);
+
+    const first = await new SessionsService().getWaveformPeaks('old-recording', 'original');
+    expect(first.duration).toBe(1);
+    expect(first.peaks[0]).toBe(1);
+    expect(first.peaks.at(-1)).toBe(0.5);
+    expect(first.peaks.subarray(1, -1).every((peak) => peak === 0)).toBe(true);
+
+    const [sidecar] = (await fs.readdir(sessionDir)).filter((name) => name.endsWith('.peaks'));
+    const cachePath = path.join(sessionDir, sidecar);
+    await fs.utimes(cachePath, 1, 1);
+    const reopened = new SessionsService();
+    expect(await reopened.getWaveformPeaks('old-recording', 'original')).toEqual(first);
+    expect((await fs.stat(cachePath)).mtimeMs).toBe(1000);
+    const corrupted = await fs.readFile(cachePath);
+    corrupted[corrupted.length - 1] ^= 0xff;
+    await fs.writeFile(cachePath, corrupted);
+    expect(await reopened.getWaveformPeaks('old-recording', 'original')).toEqual(first);
+    expect(await fs.readFile(cachePath)).not.toEqual(corrupted);
+    await fs.writeFile(sourcePath, wav(8192));
+    await fs.utimes(sourcePath, 100, 100);
+    const replaced = await reopened.getWaveformPeaks('old-recording', 'original');
+    expect(replaced.peaks.every((peak) => peak === 0.25)).toBe(true);
+});
+
 it('persists source originals and reopens a real FFmpeg mix with aligned duration and bounded samples', async () => {
     const systemPath = path.join(environment.root, 'recordings', 'system.wav');
     const microphonePath = path.join(environment.root, 'recordings', 'microphone.wav');

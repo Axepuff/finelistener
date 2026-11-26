@@ -7,7 +7,7 @@ import type {
 import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResult } from 'electron/src/types/recordingArchive';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
-import type { SessionDetails, SessionListItem, SessionRawSpan, SessionSpeakerAssignment, SummaryGenerationResult, SummaryProgressEvent } from 'electron/src/types/sessions';
+import type { SessionAudioMode, SessionDetails, SessionListItem, SessionRawSpan, SessionSpeakerAssignment, SessionWaveformPeaks, SummaryGenerationResult, SummaryProgressEvent } from 'electron/src/types/sessions';
 import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
 import type { RecordingSummaryOptions } from 'electron/src/types/summaryOptions';
 import type { AnalyzeSpeakersOptions, SpeakerAnalysisProgressEvent, SpeakerAssetStatus, TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
@@ -22,6 +22,8 @@ export interface RendererAdapter {
     onSummaryModelChanged: (cb: (status: SummaryModelStatus) => void) => () => void;
     listSessions: () => Promise<SessionListItem[]>;
     getSession: (sessionId: string) => Promise<SessionDetails>;
+    getPlaybackUrl: (path: string) => string;
+    getWaveformPeaks: (sessionId: string, mode: SessionAudioMode) => Promise<SessionWaveformPeaks>;
     setActiveSession: (sessionId: string | null) => Promise<boolean>;
     deleteSession: (sessionId: string) => Promise<boolean>;
     importAudio: () => Promise<SessionDetails | null>;
@@ -91,6 +93,11 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
         onSummaryModelChanged: (cb) => api.onSummaryModelChanged(cb),
         listSessions: () => api.sessions.list(),
         getSession: (sessionId) => api.sessions.get(sessionId),
+        getPlaybackUrl: (path) => {
+            const segments = path.replace(/\\/g, '/').split('/');
+            return `local-file://playback/${segments.map(encodeURIComponent).join('/')}`;
+        },
+        getWaveformPeaks: (sessionId, mode) => api.sessions.getWaveformPeaks(sessionId, mode),
         setActiveSession: (sessionId) => api.sessions.setActive(sessionId),
         deleteSession: (sessionId) => api.sessions.delete(sessionId),
         importAudio: () => api.sessions.importAudio(),

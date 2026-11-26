@@ -13,7 +13,7 @@ it('exposes workspace state as read-only properties and nested data', () => {
     type PlaybackState = Pick<WorkspaceStore,
         | 'audioMode'
         | 'isPlaying'
-        | 'isPlayerLoading'
+        | 'playbackDuration'
         | 'playbackPosition'
         | 'playbackRequest'
     >;

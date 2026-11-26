@@ -172,10 +172,19 @@ export const StorageFull: Story = {
 };
 export const SourceStopped: Story = {
     parameters: { errorScenario: 'source-stopped' },
-    play: async ({ canvas, loaded }) => {
-        const { store } = loaded.workspace as StoryWorkspace;
-        await userEvent.click(canvas.getByRole('button', { name: 'Play captured audio' }));
-        await expect(store.workspace.playbackRequest?.action).toBe('play');
+    play: async ({ canvas }) => {
+        await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
+        const audio = canvas.getByRole('region', { name: 'Audio player' }).querySelector('audio')!;
+        audio.currentTime = 5;
+        const play = spyOn(audio, 'play');
+        try {
+            await userEvent.click(canvas.getByRole('button', { name: 'Play captured audio' }));
+            await expect(play).toHaveBeenCalledOnce();
+            await expect(audio.currentTime).toBeLessThan(1);
+        } finally {
+            audio.pause();
+            play.mockRestore();
+        }
     },
 };
 

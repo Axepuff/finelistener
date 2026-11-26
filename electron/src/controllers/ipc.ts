@@ -40,8 +40,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     return async () => {
         shuttingDown = true;
         const stopped = await Promise.allSettled([speakerWorkflow.stopAndWait(), transcriptionService.stopAndWait(),
-            summaryWorkflow.stopAndWait(), summaryModel.stopAndWait()]);
+            summaryWorkflow.stopAndWait(), summaryModel.stopAndWait(), sessionsService.stopWaveformsAndWait()]);
         const failures = stopped.filter((result) => result.status === 'rejected').map((result): unknown => result.reason);
-        if (failures.length > 0) throw new AggregateError(failures, 'Failed to stop speech processing');
+        if (failures.length > 0) throw new AggregateError(failures, 'Failed to stop background processing');
     };
 }

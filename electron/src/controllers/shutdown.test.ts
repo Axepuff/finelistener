@@ -7,6 +7,7 @@ const lifecycle = vi.hoisted(() => ({
     quit: vi.fn(),
     cleanup: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     stopSpeakers: vi.fn<() => Promise<boolean>>(),
+    stopWaveforms: vi.fn<() => Promise<void>>(),
     readSession: vi.fn<() => Promise<{ audioOriginalPath: string }>>(),
     prepareAudio: vi.fn().mockResolvedValue('optimized.wav'),
     transcribe: vi.fn().mockResolvedValue({ text: '', segments: [] }),
@@ -35,6 +36,7 @@ vi.mock('../services/AudioPreprocessor', () => ({ cleanupAudioTempDirs: lifecycl
 vi.mock('../services/SessionsService', () => ({ SessionsService: class {
     getSession = lifecycle.readSession;
     prepareSourceAudio = lifecycle.prepareAudio;
+    stopWaveformsAndWait = lifecycle.stopWaveforms;
     saveTranscript = () => Promise.resolve();
 } }));
 vi.mock('../services/RecordingArchive', () => ({ RecordingArchive: class {} }));
@@ -57,6 +59,8 @@ vi.mock('./whisperModelController', () => ({ registerWhisperModelController: vi.
 vi.mock('./uiPreferencesController', () => ({ registerUiPreferencesController: vi.fn(), getUiPreferenceValue: () => 1000 }));
 
 it('waits for speech preparation before cleanup and keeps repeated quits and late starts blocked', async () => {
+    const waveform = Promise.withResolvers<void>();
+    lifecycle.stopWaveforms.mockReturnValue(waveform.promise);
     let finishSpeakers!: (stopped: boolean) => void;
     let finishSessionRead!: (session: { audioOriginalPath: string }) => void;
     lifecycle.stopSpeakers.mockImplementation(() => new Promise((resolve) => { finishSpeakers = resolve; }));
@@ -96,12 +100,16 @@ it('waits for speech preparation before cleanup and keeps repeated quits and lat
         expect(lifecycle.transcribe).not.toHaveBeenCalled();
         expect(lifecycle.prepareAudio).not.toHaveBeenCalled();
         expect(lateError).toMatchObject({ name: 'AbortError' });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(lifecycle.quit).not.toHaveBeenCalled();
+        waveform.resolve();
         await vi.waitFor(() => expect(lifecycle.quit).toHaveBeenCalledOnce());
         expect(lifecycle.cleanup).toHaveBeenCalledOnce();
         const final = { preventDefault: vi.fn() };
         quit(final);
         expect(final.preventDefault).not.toHaveBeenCalled();
     } finally {
+        waveform.resolve();
         finishSpeakers?.(true);
         finishSessionRead?.({ audioOriginalPath: 'original.wav' });
         logged.mockRestore();

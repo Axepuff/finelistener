@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { app, shell } from 'electron';
 import type {
+    SessionAudioMode,
     SessionDetails,
     SessionFileV1,
     SessionListItem,
@@ -11,7 +12,9 @@ import type {
     SessionTranscriptV1,
     SessionTranscriptionInfo,
     SessionSourceTrack,
+    SessionWaveformPeaks,
 } from '../types/sessions';
+import { loadWaveformPeaks, readWavDurationMs } from './waveformPeaks';
 import { AudioPreprocessor } from './AudioPreprocessor';
 import type { RecordingResult } from './RecordingService';
 import { deriveSourceTranscript } from './transcriptDuplicateFilter';
@@ -30,7 +33,17 @@ const SESSION_OPTIMIZED_WAV_CONVERT_OPTIONS = {
     dynanorm: true,
 } as const;
 
-type DerivedCacheKind = 'listening' | 'optimized';
+type DerivedCacheKind = 'listening' | 'optimized' | 'waveform-original' | 'waveform-optimized';
+
+const waveformFileName = (mode: SessionAudioMode): string => `waveform-${mode}-v1.peaks`;
+
+const optimizedTarget = async (audioPath: string, microphoneGate = false) => {
+    const stat = await fs.stat(audioPath);
+    const configuration = microphoneGate ? { ...SESSION_OPTIMIZED_WAV_CONVERT_OPTIONS, microphoneGate: true, dynanorm: false } : SESSION_OPTIMIZED_WAV_CONVERT_OPTIONS;
+    const key = createHash('sha256').update(JSON.stringify({ source: path.basename(audioPath), bytes: stat.size,
+        modified: stat.mtimeMs, configuration })).digest('hex').slice(0, 20);
+    return { target: path.join(path.dirname(audioPath), 'derived', key + '.wav'), configuration };
+};
 
 interface DerivedCacheEntry {
     sessionId: string;
@@ -94,36 +107,12 @@ const toListItem = (session: SessionFileV1, durationMs?: number, speakerCount?: 
     ...(speakerCount !== undefined ? { speakerCount } : {}),
 });
 
-const readWavDurationMs = async (filePath: string): Promise<number | undefined> => {
-    let file;
-    try { file = await fs.open(filePath, 'r'); } catch { return undefined; }
-    try {
-        const header = Buffer.alloc(12);
-        if ((await file.read(header, 0, 12, 0)).bytesRead !== 12 || header.toString('ascii', 0, 4) !== 'RIFF' || header.toString('ascii', 8, 12) !== 'WAVE') return undefined;
-        const fileSize = (await file.stat()).size;
-        let offset = 12;
-        const chunk = Buffer.alloc(8);
-        let byteRate: number | undefined;
-        while (offset + 8 <= fileSize) {
-            if ((await file.read(chunk, 0, 8, offset)).bytesRead !== 8) break;
-            const size = chunk.readUInt32LE(4);
-            const dataOffset = offset + 8;
-            if (dataOffset + size > fileSize) return undefined;
-            if (chunk.toString('ascii', 0, 4) === 'fmt ' && size >= 16) {
-                const format = Buffer.alloc(16);
-                if ((await file.read(format, 0, 16, dataOffset)).bytesRead !== 16) break;
-                byteRate = format.readUInt32LE(8);
-            }
-            if (chunk.toString('ascii', 0, 4) === 'data' && byteRate) return Math.round(size / byteRate * 1000);
-            offset = dataOffset + size + (size & 1);
-        }
-        return undefined;
-    } catch { return undefined; } finally { await file.close(); }
-};
-
 export class SessionsService {
     private readonly audioPreprocessor = new AudioPreprocessor();
     private readonly derivedGeneration = new Map<string, Promise<void>>();
+    private readonly waveformRequests = new Map<string, { sessionId: string; controller: AbortController; result: Promise<SessionWaveformPeaks> }>();
+    private waveformsStopped = false;
+    private readonly deletingSessions = new Set<string>();
     private readonly transcriptWrites = new Map<string, Promise<void>>();
     private activeSessionId: string | null = null;
     private activeSessionGeneration = 0;
@@ -197,8 +186,55 @@ export class SessionsService {
 
     public async deleteSession(sessionId: string): Promise<void> {
         const sessionDir = this.resolveSessionDir(sessionId);
+        await this.withTranscriptWrite(sessionId, async () => {
+            this.deletingSessions.add(sessionDir);
+            try {
+                await this.cancelWaveforms(path.basename(sessionDir));
+                await fs.rm(sessionDir, { recursive: true, force: true });
+            } finally { this.deletingSessions.delete(sessionDir); }
+        });
+    }
 
-        await this.withTranscriptWrite(sessionId, () => fs.rm(sessionDir, { recursive: true, force: true }));
+    public stopWaveformsAndWait(): Promise<void> {
+        this.waveformsStopped = true;
+        return this.cancelWaveforms();
+    }
+
+    private async cancelWaveforms(sessionId?: string): Promise<void> {
+        const pending = Array.from(this.waveformRequests.values()).filter((request) => !sessionId || request.sessionId === sessionId);
+        for (const request of pending) request.controller.abort();
+        await Promise.allSettled(pending.map((request) => request.result));
+    }
+
+    public async prepareMissingWaveform(sessionId: string, mode: SessionAudioMode): Promise<void> {
+        const cachePath = path.join(this.resolveSessionDir(sessionId), waveformFileName(mode));
+        try {
+            // The player validates existing peaks when it opens; only precompute on a cache miss.
+            await fs.access(cachePath);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+            await this.getWaveformPeaks(sessionId, mode);
+        }
+    }
+
+    public getWaveformPeaks(sessionId: string, mode: SessionAudioMode): Promise<SessionWaveformPeaks> {
+        const sessionDir = this.resolveSessionDir(sessionId);
+        if (this.waveformsStopped) return Promise.reject(new Error('Waveform preparation has stopped'));
+        if (this.deletingSessions.has(sessionDir)) return Promise.reject(new Error('Session is being deleted'));
+        const cachePath = path.join(sessionDir, waveformFileName(mode));
+        const existing = this.waveformRequests.get(cachePath);
+        if (existing) return existing.result;
+        const controller = new AbortController();
+        const result = this.readWaveform(sessionDir, mode, cachePath, controller.signal).finally(() => this.waveformRequests.delete(cachePath));
+        this.waveformRequests.set(cachePath, { sessionId: path.basename(sessionDir), controller, result });
+        return result;
+    }
+
+    private async readWaveform(sessionDir: string, mode: SessionAudioMode, cachePath: string, signal: AbortSignal): Promise<SessionWaveformPeaks> {
+        if (!(await fs.lstat(sessionDir)).isDirectory()) throw new Error('Invalid session directory');
+        const original = await this.resolveOwnedFile(sessionDir, SESSION_WAV_RELATIVE_PATH);
+        const audio = mode === 'original' ? original : await this.resolveOwnedFile(sessionDir, path.relative(sessionDir, (await optimizedTarget(original)).target));
+        return loadWaveformPeaks(audio, cachePath, signal);
     }
 
     public async listSessions(): Promise<SessionListItem[]> {
@@ -278,11 +314,13 @@ export class SessionsService {
         const audioMode = resolvedSession.audioMode ?? 'optimized';
         const audioOptimizedWavPath = audioMode === 'optimized' || resolvedSession.audio.optimizedWavPath ?
             await this.prepareSourceAudio(audioWavPath, 'optimized') : undefined;
+        const waveformPath = path.join(sessionDir, waveformFileName(audioMode));
         await this.touchDerivedFiles(resolvedSession.id, [
             { kind: 'listening', path: audioWavPath },
+            { kind: `waveform-${audioMode}`, path: waveformPath },
             ...(audioOptimizedWavPath ? [{ kind: 'optimized' as const, path: audioOptimizedWavPath }] : []),
         ]);
-        await this.enforceDerivedCacheBudget(new Set([audioWavPath, ...(audioOptimizedWavPath ? [audioOptimizedWavPath] : [])]));
+        await this.enforceDerivedCacheBudget(new Set([audioWavPath, waveformPath, ...(audioOptimizedWavPath ? [audioOptimizedWavPath] : [])]));
 
         let transcript: SessionTranscriptV1 | undefined;
 
@@ -556,11 +594,7 @@ export class SessionsService {
     public async prepareSourceAudio(audioPath: string, mode: 'original' | 'optimized', signal?: AbortSignal, microphoneGate = false): Promise<string> {
         signal?.throwIfAborted();
         if (mode === 'original') return audioPath;
-        const stat = await fs.stat(audioPath);
-        const configuration = microphoneGate ? { ...SESSION_OPTIMIZED_WAV_CONVERT_OPTIONS, microphoneGate: true, dynanorm: false } : SESSION_OPTIMIZED_WAV_CONVERT_OPTIONS;
-        const key = createHash('sha256').update(JSON.stringify({ source: path.basename(audioPath), bytes: stat.size,
-            modified: stat.mtimeMs, configuration })).digest('hex').slice(0, 20);
-        const target = path.join(path.dirname(audioPath), 'derived', key + '.wav');
+        const { target, configuration } = await optimizedTarget(audioPath, microphoneGate);
         await this.runDerivedGeneration(target, async () => {
             try { await fs.access(target); return; } catch { /* Generate a missing cache entry. */ }
             const prepared = await this.audioPreprocessor.convertAudio({ audioPath, ...configuration, signal });
@@ -821,7 +855,9 @@ export class SessionsService {
         for (const candidate of candidates) {
             if (total <= this.derivedCacheBudgetBytes) break;
             const indexed = index[candidate.key];
-            if (excluded.has(candidate.path) || indexed?.sessionId === this.activeSessionId || this.derivedGeneration.has(candidate.path)) continue;
+            const readingWaveform = Array.from(this.waveformRequests.values()).some((request) => request.sessionId === indexed?.sessionId);
+            if (excluded.has(candidate.path) || indexed?.sessionId === this.activeSessionId || this.derivedGeneration.has(candidate.path)
+                || readingWaveform) continue;
             await fs.rm(candidate.path, { force: true });
             total -= candidate.size; delete index[candidate.key];
         }
@@ -850,7 +886,10 @@ export class SessionsService {
                 continue;
             }
 
-            const files: Array<{ kind: DerivedCacheKind; relativePath: string }> = [];
+            const files: Array<{ kind: DerivedCacheKind; relativePath: string }> = [
+                { kind: 'waveform-original', relativePath: waveformFileName('original') },
+                { kind: 'waveform-optimized', relativePath: waveformFileName('optimized') },
+            ];
             // Keep fingerprinted source caches discoverable after restart without touching originals.
             for (const parent of ['audio', ...(session.tracks ?? []).map((track) => path.dirname(track.filePath))]) {
                 const derived = path.join(sessionDir, parent, 'derived');

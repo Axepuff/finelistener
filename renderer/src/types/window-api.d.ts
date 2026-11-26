@@ -8,6 +8,7 @@ import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResul
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
 import type { SessionDetails, SessionListItem, SessionRawSpan, SessionSpeakerAssignment, SummaryGenerationResult, SummaryProgressEvent } from 'electron/src/types/sessions';
+import type { SessionAudioMode, SessionWaveformPeaks } from 'electron/src/types/sessions';
 import type { SummaryModelStatus } from 'electron/src/types/summaryModel';
 import type { RecordingSummaryOptions } from 'electron/src/types/summaryOptions';
 import type { AnalyzeSpeakersOptions, SpeakerAnalysisProgressEvent, SpeakerAssetStatus, TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from 'electron/src/types/transcription';
@@ -25,6 +26,7 @@ declare global {
             sessions: {
                 list: () => Promise<SessionListItem[]>;
                 get: (sessionId: string) => Promise<SessionDetails>;
+                getWaveformPeaks: (sessionId: string, mode: SessionAudioMode) => Promise<SessionWaveformPeaks>;
                 setActive: (sessionId: string | null) => Promise<boolean>;
                 delete: (sessionId: string) => Promise<boolean>;
                 importAudio: () => Promise<SessionDetails | null>;

@@ -131,6 +131,16 @@ export class AppStore {
         return this.adapter !== null;
     }
 
+    getPlaybackSource() {
+        const { activeSessionId, audioMode, audioSourcePath } = this.workspace;
+        if (!this.adapter || !activeSessionId || !audioSourcePath) return null;
+
+        return {
+            url: this.adapter.getPlaybackUrl(audioSourcePath),
+            waveform: this.adapter.getWaveformPeaks(activeSessionId, audioMode),
+        };
+    }
+
     get runtimePlatform(): RendererAdapter['runtimePlatform'] | null {
         return this.adapter?.runtimePlatform ?? null;
     }

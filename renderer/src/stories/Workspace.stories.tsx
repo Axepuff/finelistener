@@ -186,6 +186,100 @@ export const RecordingStartError: Story = {
     },
 };
 export const AudioReady: Story = { parameters: { scenario: 'ready' } };
+export const HourRecording: Story = {
+    parameters: { scenario: 'hour-recording' },
+    play: async ({ canvas, canvasElement }) => {
+        await waitFor(() => expect(canvas.getByLabelText('Current position: 00:00.00 / 60:00.00')).toBeVisible());
+        const strip = canvasElement.querySelector<HTMLElement>('.player-strip__waveform')!;
+        await waitFor(() => expect(strip).toHaveAttribute('aria-busy', 'false'));
+        const wave = Array.from(strip.querySelectorAll('*'), (el) => el.shadowRoot).find(Boolean)!;
+        const previousWidth = strip.style.width;
+        try {
+            for (const width of [600, 1150]) {
+                strip.style.width = width + 'px';
+                await waitFor(async () => {
+                    const ticks = [...wave.querySelectorAll('[part~="timeline-notch"]')].filter((tick) => tick.textContent);
+                    const labels = ticks.map((tick) => {
+                        const text = document.createRange();
+                        text.selectNodeContents(tick);
+                        return text.getBoundingClientRect();
+                    });
+                    await expect(labels.length).toBeGreaterThan(1);
+                    const bounds = strip.getBoundingClientRect();
+                    await expect(labels[labels.length - 1].left - bounds.left).toBeGreaterThan(width * 0.6);
+                    for (let i = 1; i < labels.length; i++) {
+                        await expect(labels[i].left - labels[i - 1].right).toBeGreaterThan(8);
+                        await expect(labels[i].right).toBeLessThanOrEqual(bounds.right);
+                    }
+                });
+            }
+        } finally {
+            strip.style.width = previousWidth;
+        }
+    },
+};
+
+export const PlaybackWhileWaveformLoads: Story = {
+    play: async ({ canvas, canvasElement, loaded }) => {
+        const { store, adapter } = loaded.workspace as StoryWorkspace;
+        const sessionId = store.workspace.activeSessionId!;
+        const fixture = await adapter.getWaveformPeaks(sessionId, 'optimized');
+        const pending = Promise.withResolvers<typeof fixture>();
+        const peaks = spyOn(adapter, 'getWaveformPeaks').mockReturnValueOnce(pending.promise);
+        try {
+            await store.openSession(sessionId);
+            const strip = canvasElement.querySelector('.player-strip__waveform')!;
+            await waitFor(() => expect(strip).toHaveAttribute('aria-busy', 'true'));
+            const play = canvas.getByRole('button', { name: 'Play audio' });
+            await waitFor(() => expect(play).toBeEnabled());
+            const audio = strip.querySelector('audio')!;
+            const wave = Array.from(strip.querySelectorAll('*'), element => element.shadowRoot)
+                .find(root => root?.querySelector('[part="wrapper"]'))!;
+            const wrapper = wave.querySelector<HTMLElement>('[part="wrapper"]')!;
+            const bounds = wrapper.getBoundingClientRect();
+            const bitmap = () => wave.querySelector<HTMLCanvasElement>('[part="canvases"] canvas')!.toDataURL();
+            const blank = bitmap();
+
+            await fireEvent.click(wrapper, { clientX: bounds.left + bounds.width / 4, clientY: bounds.top + 10 });
+            await waitFor(() => expect(audio.currentTime).toBeCloseTo(3, 1));
+            await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
+            await userEvent.click(canvas.getByRole('radio', { name: 'Timecodes' }));
+            await userEvent.click(canvas.getByText('00:00:04 – 00:00:08'));
+            await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
+            const segment = canvas.getByText(/^Segment 00:0[23]\.\d+ — 00:04\.00$/);
+            await expect(segment).toBeVisible();
+
+            audio.muted = true;
+            const start = spyOn(audio, 'play');
+            try {
+                await userEvent.click(play);
+                await expect(start).toHaveBeenCalledOnce();
+                const attempt = start.mock.results[0].value as Promise<void>;
+                const started = await attempt.then(() => true, (error: unknown) => {
+                    // A normal browser can require a physical click to start playback.
+                    if (error instanceof DOMException && error.name === 'NotAllowedError') return false;
+                    throw error;
+                });
+                const position = audio.currentTime;
+                pending.resolve(fixture);
+                await waitFor(() => expect(strip).toHaveAttribute('aria-busy', 'false'));
+                await expect(bitmap() === blank).toBe(false);
+                await expect(audio.paused).toBe(!started);
+                if (started) await expect(audio.currentTime).toBeGreaterThanOrEqual(position);
+                else await expect(audio.currentTime).toBe(position);
+                await expect(segment).toBeVisible();
+                await expect(wave.querySelector('[part~="region"]')).toBeVisible();
+            } finally {
+                audio.pause();
+                start.mockRestore();
+            }
+        } finally {
+            pending.resolve(fixture);
+            peaks.mockRestore();
+        }
+    },
+};
+
 export const SegmentResizing: Story = {
     play: async ({ canvas, canvasElement, loaded }) => {
         const { adapter } = loaded.workspace as StoryWorkspace;
@@ -484,7 +578,7 @@ export const SpeakerReading: Story = {
         await expect(canvas.getByRole('status')).toHaveTextContent('1 of 1');
         await expect(word.querySelector('mark')).toHaveTextContent('Friday');
         await userEvent.click(canvas.getByRole('button', { name: 'Clear search' }));
-        const audio = Array.from(canvasElement.querySelectorAll('*'), element => element.shadowRoot?.querySelector('audio')).find(Boolean);
+        const audio = canvasElement.querySelector<HTMLAudioElement>('.player-strip__waveform audio');
         if (!audio) throw new Error('The waveform has no audio element.');
         // A synthetic click reaches the real media element even when the browser denies autoplay.
         const play = spyOn(audio, 'play');

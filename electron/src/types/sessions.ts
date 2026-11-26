@@ -52,6 +52,11 @@ export interface SessionRawSpan {
 
 export type SessionAudioMode = 'original' | 'optimized';
 
+export interface SessionWaveformPeaks {
+    duration: number;
+    peaks: Float32Array;
+}
+
 export interface SessionSpeakerAssignment {
     recognitionRevision: string;
     generation: string;

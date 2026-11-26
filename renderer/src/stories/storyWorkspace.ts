@@ -7,10 +7,10 @@ import { UI_PREFERENCE_DEFAULTS, type UiPreferenceKey, type UiPreferenceValueMap
 import { AppStore } from '../stores/appStore';
 import type { RendererAdapter } from '../stores/rendererAdapter';
 import { createFakeRendererAdapter } from '../stores/testing/fakeRendererAdapter';
-import { STORY_AUDIO_PATH, STORY_LONG_AUDIO_PATH } from './storyAudio';
+import { createStoryAudio } from './storyAudio';
 import { createStorySummary, type SummaryScenario } from './storySummary';
 
-export type WorkspaceScenario = 'settings-recording-error' | 'settings-recording-silence' | 'settings-recording' | 'settings-models' | 'settings-downloading' | 'settings-failed' | 'empty' | 'ready' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error' | 'recording-start-error'
+export type WorkspaceScenario = 'settings-recording-error' | 'settings-recording-silence' | 'settings-recording' | 'settings-models' | 'settings-downloading' | 'settings-failed' | 'empty' | 'ready' | 'hour-recording' | 'transcript' | 'speakers' | 'long-transcript' | 'transcribing' | 'error' | 'recording-ready' | 'recording' | 'recording-error' | 'recording-start-error'
     | SummaryScenario
     | 'nemotron' | 'nemotron-reading' | 'nemotron-downloading' | 'nemotron-analyzing' | 'nemotron-error'
     | 'sessions' | 'sessions-empty' | 'sessions-recovery' | 'sessions-recovery-error' | 'sessions-transcribing' | 'sessions-speaker-edit';
@@ -54,8 +54,9 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
     let modelAttempt = 0;
     const isNemotron = scenario.startsWith('nemotron');
     const hasTranscript = scenario === 'transcript' || scenario === 'long-transcript' || scenario === 'speakers' || isNemotron || scenario.startsWith('summary-') || scenario.startsWith('sessions');
-    const longSummary = scenario === 'summary-long';
-    const audioPath = longSummary ? STORY_LONG_AUDIO_PATH : STORY_AUDIO_PATH;
+    const repetitions = scenario === 'hour-recording' ? 300 : scenario === 'summary-long' ? 8 : 1;
+    const storyAudio = await createStoryAudio(repetitions);
+    const audioPath = storyAudio.url;
     let session: SessionDetails = {
         id: 'storybook-session',
         title: 'Design discussion.wav',
@@ -67,7 +68,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         audioMode: 'optimized',
         audioOriginalPath: audioPath,
         sourceFileName: 'Design discussion.wav',
-        sourceMetadata: { durationMs: longSummary ? 96_000 : 12_000, sampleRate: 16000, channels: 1 },
+        sourceMetadata: { durationMs: storyAudio.waveform.duration * 1000, sampleRate: 16000, channels: 1 },
         audioWavPath: audioPath,
         audioOptimizedWavPath: audioPath,
         transcript: hasTranscript ? scenario === 'long-transcript' ? {
@@ -163,6 +164,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         ...(isNemotron ? { getSpeakerAssets: () => Promise.resolve({ gpuBackend: 'vulkan' as const,
             ready: scenario !== 'nemotron-downloading', gpuAvailable: scenario !== 'nemotron-error', downloadBytes: 123_671_929 }) } : {}),
         listSessions: () => Promise.resolve(sessions),
+        getWaveformPeaks: () => Promise.resolve(storyAudio.waveform),
         getSession: (id) => {
             const item = sessions.find((candidate) => candidate.id === id);
             return Promise.resolve(id === session.id || !item ? session : { ...session, ...item, transcript: item.hasTranscript ? session.transcript : undefined });
@@ -344,6 +346,7 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
         store,
         adapter: fake.adapter,
         dispose: () => {
+            storyAudio.dispose();
             summaryStory.dispose();
             void store.whisperModels.cancelDownload();
             finishModelDownload?.();
