@@ -51,9 +51,9 @@ const ReadingChunk: React.FC<ChunkProps> = React.memo(({
 
         const label = speakerWordLabel(word, labels);
         run.push(word.startSec !== null ? (
-            <button
+            <span
                 key={word.startChar}
-                type="button"
+                role="button"
                 className={styles.readingWord}
                 data-regions={word.startSec}
                 data-word-index={i}
@@ -62,7 +62,7 @@ const ReadingChunk: React.FC<ChunkProps> = React.memo(({
                 aria-current={word === activeWord ? 'true' : undefined}
                 aria-label={`${text.slice(word.startChar, word.endChar)} · ${label}`}
                 title={`${label} · Play from ${formatSecondsReadable(word.startSec)}`}
-            >{content}</button>
+            >{content}</span>
         ) : (
             <span key={word.startChar} className={styles.untimedWord} title={`${label} · No word timestamp`}>{content}</span>
         ));
@@ -151,19 +151,19 @@ export const SpeakerReading: React.FC<Props> = ({ paragraphs, labels, highlightS
         if (!element.querySelector(`[data-word-index="${index}"]`)) {
             flushSync(() => setExpanded(previous => new Set([...previous, offset])));
         }
-        element.querySelector<HTMLButtonElement>(`[data-word-index="${index}"]`)?.focus();
+        element.querySelector<HTMLElement>(`[data-word-index="${index}"]`)?.focus();
     };
 
     return (
         <div ref={readingRef} onClick={renderAll ? undefined : event => {
             const target = event.target as HTMLElement;
-            if (!event.detail || target.closest('button') || target.ownerDocument.getSelection()?.isCollapsed === false) return;
+            if (!event.detail || target.closest('[data-word-index]') || target.ownerDocument.getSelection()?.isCollapsed === false) return;
             const chunk = target.closest<HTMLElement>('[data-reading-chunk]');
             if (!chunk) return;
             // A scrollbar jump can deliver a click before the nearby words have mounted.
             const offset = Number(chunk.dataset.readingChunk);
             flushSync(() => setExpanded(previous => previous.has(offset) ? previous : new Set([...previous, offset])));
-            const hit = target.ownerDocument.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLButtonElement>('button[data-word-index]');
+            const hit = target.ownerDocument.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-word-index]');
             if (hit && chunk.contains(hit)) {
                 hit.focus({ preventScroll: true });
                 hit.click();
@@ -181,7 +181,7 @@ export const SpeakerReading: React.FC<Props> = ({ paragraphs, labels, highlightS
                 }
                 return <p key={paragraph.offset} className={styles.transcriptParagraph} onFocus={event => {
                     const target = event.target;
-                    if (!(target instanceof HTMLButtonElement)) {
+                    if (!(target instanceof HTMLElement) || target.dataset.wordIndex === undefined) {
                         if (!pointerDown.current && firstTimed !== -1) focusAt(event.currentTarget, paragraph, firstTimed);
                         return;
                     }
@@ -192,9 +192,16 @@ export const SpeakerReading: React.FC<Props> = ({ paragraphs, labels, highlightS
                         target.tabIndex = 0;
                     }
                 }} onKeyDown={event => {
-                    if (!(event.target instanceof HTMLButtonElement) || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+                    const target = event.target;
+                    if (!(target instanceof HTMLElement) || target.dataset.wordIndex === undefined) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        if (!event.repeat) target.click();
+                        return;
+                    }
+                    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
                     const step = event.key === 'ArrowLeft' ? -1 : 1;
-                    let next = Number(event.target.dataset.wordIndex) + step;
+                    let next = Number(target.dataset.wordIndex) + step;
                     while (paragraph.words[next]?.startSec === null) next += step;
                     if (paragraph.words[next]) {
                         event.preventDefault();

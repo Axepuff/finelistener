@@ -6,6 +6,7 @@ import { createStoryWorkspace, type StoryWorkspace, type WorkspaceScenario } fro
 import { StoryWorkspaceProvider } from './StoryWorkspaceProvider';
 
 const partialTimingSpeech = 'First. Second missing timed. Third starts here.';
+const longReadingTail = `Before ${'long'.repeat(18)} and after ${'wide'.repeat(18)} Closing beacon finishes the conversation.`;
 
 const meta = {
     title: 'Workspace/Transcript views',
@@ -29,7 +30,7 @@ const meta = {
             if (!speakers) throw new Error('The speaker fixture is missing.');
             const segments = Array.from({ length: 120 }, (_, index) => {
                 const text = index === 0 ? 'Opening beacon starts this conversation.' :
-                    index === 119 ? 'Closing beacon finishes the conversation.' :
+                    index === 119 ? longReadingTail :
                     `Section ${index} contains another sentence in the recorded conversation.`;
                 const startSec = index / 10;
                 const endSec = (index + 1) / 10;
@@ -76,6 +77,7 @@ export const TimedSpeakers: Story = {};
 
 export const LongSpeakerReading: Story = {
     parameters: { longReading: true },
+    render: () => <div style={{ width: 1024 }}><Home /></div>,
     play: async ({ canvas, canvasElement }) => {
         await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
         const opening = canvas.getByRole('button', { name: 'Opening · Alice' });
@@ -84,6 +86,22 @@ export const LongSpeakerReading: Story = {
         const document = canvasElement.ownerDocument;
         const selection = document.getSelection()!;
         const frame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+
+        const search = canvas.getByRole('textbox', { name: 'Search transcript' });
+        await userEvent.type(search, 'beacon');
+        await expect(canvas.getByRole('status')).toHaveTextContent('1 of 2');
+        await userEvent.keyboard('{Enter}');
+        await expect(canvas.getByRole('status')).toHaveTextContent('2 of 2');
+        await waitFor(async () => {
+            const word = within(last).getByRole('button', { name: 'beacon · Alice' });
+            await expect(word.querySelector('mark')).toHaveAttribute('data-active', 'true');
+            const rect = word.getBoundingClientRect();
+            await expect(word.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))).toBe(true);
+        });
+        await userEvent.click(canvas.getByRole('button', { name: 'Previous search result' }));
+        await waitFor(() => expect(within(first).getByRole('button', { name: 'beacon · Alice' }).querySelector('mark')).toHaveAttribute('data-active', 'true'));
+        await userEvent.click(canvas.getByRole('button', { name: 'Clear search' }));
+
         // Dispatch in the same frame as the scrollbar jump, before observer delivery.
         const clickAfterJump = async (text: string, start = 0, length = text.length) => {
             first.scrollIntoView({ block: 'start' });
@@ -107,9 +125,9 @@ export const LongSpeakerReading: Story = {
             await frame();
         };
         await clickAfterJump('Closing beacon', 'Closing'.length, 1);
-        await expect(last.querySelector('button[aria-current="true"]')).toBeNull();
+        await expect(last.querySelector('[aria-current="true"]')).toBeNull();
         await clickAfterJump('finishes');
-        await expect(last.querySelector('button[aria-current="true"]')).toBeNull();
+        await expect(last.querySelector('[aria-current="true"]')).toBeNull();
         await clickAfterJump('Closing');
         await expect(within(last).getByRole('button', { name: 'Closing \u00b7 Alice' })).toHaveAttribute('aria-current', 'true');
         first.scrollIntoView({ block: 'start' });
@@ -140,20 +158,6 @@ export const LongSpeakerReading: Story = {
         await userEvent.keyboard('{ArrowRight}');
         await expect(last.contains(document.activeElement)).toBe(true);
         await expect(document.activeElement).not.toBe(entry);
-
-        const search = canvas.getByRole('textbox', { name: 'Search transcript' });
-        await userEvent.type(search, 'beacon');
-        await expect(canvas.getByRole('status')).toHaveTextContent('1 of 2');
-        await userEvent.keyboard('{Enter}');
-        await expect(canvas.getByRole('status')).toHaveTextContent('2 of 2');
-        await waitFor(async () => {
-            const word = within(last).getByRole('button', { name: 'beacon · Alice' });
-            await expect(word.querySelector('mark')).toHaveAttribute('data-active', 'true');
-            const rect = word.getBoundingClientRect();
-            await expect(word.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))).toBe(true);
-        });
-        await userEvent.click(canvas.getByRole('button', { name: 'Previous search result' }));
-        await waitFor(() => expect(within(first).getByRole('button', { name: 'beacon · Alice' }).querySelector('mark')).toHaveAttribute('data-active', 'true'));
     },
 };
 
