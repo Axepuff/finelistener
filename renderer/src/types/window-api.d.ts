@@ -5,6 +5,7 @@ import type {
     RecordingState,
 } from 'electron/src/services/RecordingService';
 import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResult } from 'electron/src/types/recordingArchive';
+import type { ObsidianApi } from 'electron/src/types/obsidian';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
 import type { SessionDetails, SessionListItem, SessionRawSpan, SessionSpeakerAssignment, SummaryGenerationResult, SummaryProgressEvent } from 'electron/src/types/sessions';
@@ -19,6 +20,7 @@ type RuntimePlatform = 'darwin' | 'win32' | 'linux';
 declare global {
     interface Window {
         api?: {
+            obsidian: ObsidianApi;
             runtime: {
                 platform: RuntimePlatform;
             };

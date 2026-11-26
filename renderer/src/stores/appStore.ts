@@ -14,6 +14,7 @@ import {
 } from 'renderer/src/features/transcribe-state/src/model/transcriptionWorkflow';
 import { ActivityLogStore } from './activityLogStore';
 import { ForegroundOperationStore } from './foregroundOperationStore';
+import { ObsidianExportStore } from './obsidianExportStore';
 import type { RendererAdapter } from './rendererAdapter';
 import { SessionsStore } from './sessionsStore';
 import { SummaryStore } from './summaryStore';
@@ -50,6 +51,8 @@ export class AppStore {
 
     readonly transcription: TranscriptionStore;
 
+    readonly obsidian: ObsidianExportStore;
+
     readonly speakers: SpeakerAnalysisStore;
 
     readonly summary: SummaryStore;
@@ -81,6 +84,11 @@ export class AppStore {
     constructor(private readonly adapter: RendererAdapter | null) {
         this.sessions = new SessionsStore(adapter);
         this.transcription = new TranscriptionStore(adapter, this.activityLog);
+        this.obsidian = new ObsidianExportStore(adapter?.obsidian, () => {
+            const session = this.workspace.activeSession;
+            const transcript = this.transcription.savedTranscript;
+            return this.canExportObsidian && session && transcript ? { id: session.id, title: session.title, transcript } : null;
+        });
         this.speakers = new SpeakerAnalysisStore(adapter);
         this.summary = new SummaryStore(adapter, this.operations, this.activityLog, (sessionId, prompt) => {
             const options = { ...defaultRecordingSummaryOptions, prompt };
@@ -113,6 +121,7 @@ export class AppStore {
             workspace: false,
             sessions: false,
             transcription: false,
+            obsidian: false,
             speakers: false,
             summary: false,
             transcriptionControl: false,
@@ -156,6 +165,11 @@ export class AppStore {
         if (this.recordingInProgress || this.operations.kind === 'transcribing' || this.operations.kind === 'analyzing-speakers') {
             return this.operationBlockReason;
         }
+    }
+
+    get canExportObsidian(): boolean {
+        return Boolean(this.adapter && this.workspace.activeSessionId && !this.exportBlockReason
+            && this.transcription.savedTranscript?.segments.some((segment) => segment.text.trim()));
     }
 
     get lifecycleState(): TranscriptionLifecycleState {
@@ -209,6 +223,7 @@ export class AppStore {
         this.unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
         this.unsubscribeFunctions = [];
         this.transcription.dispose();
+        this.obsidian.dismiss();
         this.speakers.dispose();
         this.summary.dispose();
         this.whisperModels.dispose();
@@ -308,6 +323,7 @@ export class AppStore {
 
                 if (this.workspace.activeSessionId === sessionId) {
                     this.workspace.clearWorkspace();
+                    this.obsidian.dismiss();
                     this.summary.leaveSession();
                     this.transcription.clear();
                 }
@@ -761,6 +777,7 @@ export class AppStore {
             console.error('Failed to clear the active session', error);
         });
         this.workspace.clearWorkspace();
+        this.obsidian.dismiss();
         this.summary.leaveSession();
         this.transcription.clear();
 
@@ -894,6 +911,7 @@ export class AppStore {
     }
 
     private acceptSession(session: SessionDetails): void {
+        if (this.workspace.activeSessionId !== session.id) this.obsidian.dismiss();
         if (this.workspace.activeSessionId !== session.id) this.summary.leaveSession();
         else this.summary.clearError();
         void this.adapter?.setActiveSession(session.id).catch((error: unknown) => {

@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import type { BrowserWindow } from 'electron';
 import { registerDebugController } from './debugController';
 import { registerFileController } from './fileController';
+import { registerObsidianController } from './obsidianController';
 import { registerRecordingController } from './recordingController';
 import { registerSessionsController } from './sessionsController';
 import { registerTranscriptionController } from './transcriptionController';
@@ -21,6 +22,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
         recoveryQuotaBytes: getUiPreferenceValue('recordingRecoveryQuotaBytes'),
     });
     registerFileController(ipcMain, getMainWindow);
+    registerObsidianController(ipcMain, getMainWindow);
     let shuttingDown = false;
     let speakerBusy = () => false;
     let summaryBusy = () => false;

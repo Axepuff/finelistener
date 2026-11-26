@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { ObsidianApi } from './src/types/obsidian';
 import type { RecordingStartOptions } from './src/services/RecordingService';
 import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResult } from './src/types/recordingArchive';
 import type { TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from './src/types/transcription';
@@ -49,6 +50,13 @@ contextBridge.exposeInMainWorld('api', {
             ipcRenderer.invoke('sessions:merge-speakers', sessionId, sourceId, targetId),
         revealFolder: (sessionId: string) => ipcRenderer.invoke('sessions:reveal-folder', sessionId),
     },
+    obsidian: {
+        getOptions: () => ipcRenderer.invoke('obsidian:get-options'),
+        chooseFolder: () => ipcRenderer.invoke('obsidian:choose-folder'),
+        saveOptions: (options) => ipcRenderer.invoke('obsidian:save-options', options),
+        exportNote: (sessionId, title, markdown, newCopy) => ipcRenderer.invoke('obsidian:export-note', sessionId, title, markdown, newCopy),
+        openNote: (sessionId) => ipcRenderer.invoke('obsidian:open-note', sessionId),
+    } satisfies ObsidianApi,
     saveText: (content: string) => ipcRenderer.invoke('saveText', content),
     getSummaryModelStatus: (): Promise<SummaryModelStatus> => ipcRenderer.invoke('summary-model:status'),
     downloadSummaryModel: (): Promise<SummaryModelStatus> => ipcRenderer.invoke('summary-model:download'),

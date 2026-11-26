@@ -2,7 +2,7 @@ import { deriveSourceTranscript } from '../../../../../../../electron/src/servic
 import { parseVerboseJson } from '../../../../../../../electron/src/services/whisperServer/utils';
 import type { SessionTranscriptV1 } from 'electron/src/types/sessions';
 import { expect, it } from 'vitest';
-import { projectTextSentences } from './plainText';
+import { projectTextSentences } from 'renderer/src/stores/plainText';
 
 it('seeks sentences within a timed raw segment and keeps legacy speech seekable', () => {
     const text = 'First sentence. Second sentence.';

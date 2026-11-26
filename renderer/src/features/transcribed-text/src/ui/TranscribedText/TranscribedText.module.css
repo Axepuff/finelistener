@@ -271,6 +271,7 @@ button.speakerTag:hover,
     right: 16px;
     bottom: 16px;
     z-index: 400;
+    max-width: min(360px, calc(100vw - 32px));
 }
 
 .viewOptions { display: grid; justify-items: start; min-width: 0; gap: 4px; }
@@ -327,14 +328,14 @@ button.speakerTag:hover,
 
 .actionsGroup {
     justify-content: flex-end;
-    flex: 1 1 306px;
+    flex: 1 1 480px;
     min-width: 0;
 }
 
 .searchField {
     display: flex;
     align-items: center;
-    flex: 1;
+    flex: 1 1 160px;
     gap: 3px;
     min-width: 0;
     max-width: 260px;

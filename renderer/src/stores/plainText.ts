@@ -1,6 +1,6 @@
 import type { SessionTranscriptV1 } from 'electron/src/types/sessions';
-import { projectTranscript } from 'renderer/src/stores/transcriptFormat';
-import type { DeepReadonly } from 'renderer/src/stores/types';
+import { projectTranscript } from './transcriptFormat';
+import type { DeepReadonly } from './types';
 
 const sentenceSegmenter = new Intl.Segmenter(undefined, { granularity: 'sentence' });
 

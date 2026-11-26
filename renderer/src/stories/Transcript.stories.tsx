@@ -54,6 +54,38 @@ type Story = StoryObj<typeof meta>;
 
 export const TimedSpeakers: Story = {};
 
+export const ExportToObsidian: Story = {
+    parameters: { scenario: 'transcript' },
+    play: async ({ canvas, canvasElement, loaded }) => {
+        const page = within(canvasElement.ownerDocument.body);
+        const { adapter } = loaded.workspace as StoryWorkspace;
+        const open = spyOn(adapter.obsidian, 'openNote');
+        const start = canvas.getByRole('button', { name: 'Export to Obsidian' });
+        try {
+            await userEvent.click(start);
+            const options = within(await page.findByRole('dialog', { name: 'Obsidian export options' }));
+            const confirm = options.getByRole('button', { name: 'Export note' });
+            await expect(confirm).toBeDisabled();
+            await userEvent.click(options.getByRole('button', { name: 'Choose folder' }));
+            await expect(await options.findByText('Work / Meetings')).toBeVisible();
+            await userEvent.click(options.getByRole('checkbox', { name: 'Timestamped transcript' }));
+            await expect(confirm).toBeDisabled();
+            await userEvent.click(options.getByRole('checkbox', { name: 'Plain text' }));
+            await userEvent.click(confirm);
+            await expect(await page.findByRole('button', { name: 'Open in Obsidian' })).toBeVisible();
+            await expect(open).not.toHaveBeenCalled();
+
+            await userEvent.click(start);
+            const repeat = within(await page.findByRole('dialog', { name: 'Already exported' }));
+            await waitFor(() => expect(repeat.getByRole('button', { name: 'Save new copy' })).toBeVisible());
+            await userEvent.click(repeat.getByRole('button', { name: 'Open in Obsidian' }));
+            await expect(open).toHaveBeenCalledTimes(1);
+        } finally {
+            open.mockRestore();
+        }
+    },
+};
+
 export const RenameTimedSpeaker: Story = {
     play: async ({ canvas, canvasElement }) => {
         await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
