@@ -56,10 +56,10 @@ export const getSummaryLanguage = async (rows: SummarySourceRow[], hint?: string
             if (code && actual.language === code) return true;
             if (code && plausible(prose, actual, code)) {
                 if (!reviewedParagraph || !actual.isReliable()) return true;
-                // Short titles can score highly in two languages. Check unfamiliar words against the expected language.
+                // Short headings can resemble another language even when they reuse the paragraph's vocabulary.
                 const words = (value: string) => value.toLowerCase().match(/[\p{L}\p{M}]+/gu) ?? [];
                 const paragraphWords = new Set(words(reviewedParagraph));
-                if (words(prose).every((word) => paragraphWords.has(word) || plausible(word, eld.detect(word), code))) return true;
+                if (words(prose).every((word) => paragraphWords.has(word) || eld.detect(word).language === code)) return true;
             }
             if (sourceScript && actual.language && scriptOf(actual.language) !== sourceScript) return false;
             return !canCheck || !actual.isReliable();

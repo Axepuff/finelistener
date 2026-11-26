@@ -39,16 +39,18 @@ it('retains the reviewed paragraph and its source cursor when stopped during its
     });
 });
 
-it('drops a title reliably detected in a different language from the reviewed paragraph', async () => {
-    const text = 'Мы обсудили сроки поставки и договорились отправить готовый отчёт в пятницу.';
-    let saved: ReviewedSummaryChunk[] = [];
-    const result = await generateRecordingNotes([{ startSec: 1, endSec: 4, text }], {
-        countTokens,
-        complete: (prompt) => Promise.resolve(bodyOf(prompt).includes('REVIEWED PARAGRAPH\n') ? 'Звіт про постачання' : text),
-    }, () => {}, (chunks) => { saved = chunks; return Promise.resolve(); }, undefined, 'ru');
-    expect(saved[0].title).toBeUndefined();
-    expect(result.detailed).toBe(text);
-});
+it.each(['Звіт про постачання', 'Дати відвантаження', 'Плани на майбутнє', 'Узгоджені строки'])(
+    'drops the foreign-language title %s without changing the reviewed paragraph', async (title) => {
+        const text = 'Мы обсудили сроки поставки и договорились отправить готовый отчёт в пятницу.';
+        let saved: ReviewedSummaryChunk[] = [];
+        const result = await generateRecordingNotes([{ startSec: 1, endSec: 4, text }], {
+            countTokens,
+            complete: (prompt) => Promise.resolve(bodyOf(prompt).includes('REVIEWED PARAGRAPH\n') ? title : text),
+        }, () => {}, (chunks) => { saved = chunks; return Promise.resolve(); }, undefined, 'ru');
+        expect(saved[0].title).toBeUndefined();
+        expect(result.detailed).toBe(text);
+    },
+);
 
 it.each([
     { hint: 'en', source: 'Мы обсудили обновление в GitHub. Проверку завершили сегодня утром и договорились отправить готовый отчёт в пятницу.',
