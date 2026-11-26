@@ -390,6 +390,34 @@ it('evicts least recently used derived audio and regenerates it on demand', asyn
     await expect(fs.readFile(reopened.audioOriginalPath)).resolves.toEqual(wav(1000));
 });
 
+it('opens a session while an older optimized WAV is locked and evicts it after release', async () => {
+    const source = path.join(environment.root, 'meeting.wav');
+    await fs.writeFile(source, wav(1000));
+    const setup = new SessionsService();
+    const previous = await setup.createSessionFromImport(source);
+    const other = await setup.createSessionFromImport(source);
+    const selected = await setup.createSessionFromImport(source);
+    const lockedWav = previous.audioOptimizedWavPath!;
+    const service = new SessionsService(0);
+    const remove = fs.rm.bind(fs);
+    const lock = vi.spyOn(fs, 'rm').mockImplementation((target, options) => {
+        if (target === lockedWav) return Promise.reject(Object.assign(new Error('File is in use'), { code: 'EBUSY' }));
+        return remove(target, options);
+    });
+    try {
+        const opened = await service.getSession(selected.id);
+        await expect(fs.access(opened.audioOptimizedWavPath!)).resolves.toBeUndefined();
+        await expect(fs.access(lockedWav)).resolves.toBeUndefined();
+        await expect(fs.access(other.audioOptimizedWavPath!)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+        lock.mockRestore();
+    }
+
+    await service.setActiveSession(selected.id);
+    await expect(fs.access(lockedWav)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.readFile(previous.audioOriginalPath)).resolves.toEqual(wav(1000));
+});
+
 it('does not allow the sessions API to delete the staging root', async () => {
     const stagingFile = path.join(environment.root, 'sessions', '.staging', 'recording', 'audio.wav');
     await fs.mkdir(path.dirname(stagingFile), { recursive: true });

@@ -858,7 +858,14 @@ export class SessionsService {
             const readingWaveform = Array.from(this.waveformRequests.values()).some((request) => request.sessionId === indexed?.sessionId);
             if (excluded.has(candidate.path) || indexed?.sessionId === this.activeSessionId || this.derivedGeneration.has(candidate.path)
                 || readingWaveform) continue;
-            await fs.rm(candidate.path, { force: true });
+            try {
+                await fs.rm(candidate.path, { force: true });
+            } catch (error) {
+                // A media reader can keep a previous session's WAV locked until after the switch.
+                const code = (error as NodeJS.ErrnoException).code;
+                if (code === 'EBUSY' || code === 'EPERM' || code === 'EACCES') continue;
+                throw error;
+            }
             total -= candidate.size; delete index[candidate.key];
         }
         await writeJsonFile(indexPath, index);
