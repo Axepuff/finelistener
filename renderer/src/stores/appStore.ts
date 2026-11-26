@@ -87,7 +87,9 @@ export class AppStore {
             const failure = this.summary.generationFailure;
             if (sessionId === this.workspace.activeSessionId && !this.operations.isBusy && isRecordingSummaryOptions(options)
                 && !(failure?.reason === 'prompt-too-long' && failure.sessionId === sessionId && failure.prompt === prompt)) {
-                void this.generateSummary(options);
+                const continuation = this.summaryContinuation;
+                if (continuation?.options.prompt === prompt) continuation.onContinue();
+                else void this.generateSummary(options);
             }
         });
         this.whisperModels = new WhisperModelStore(adapter, this.activityLog);

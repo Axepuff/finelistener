@@ -9,7 +9,7 @@ interface Props {
     canSave: boolean;
 }
 
-type PresetAction = { kind: 'save'; prompt: string } | { kind: 'rename' | 'delete'; name: string };
+type PresetAction = ({ kind: 'save'; prompt: string } | { kind: 'rename' | 'delete'; name: string }) & { error?: string };
 
 export const SummaryPresets: React.FC<Props> = observer(({ prompt, onChange, canSave }) => {
     const { summary } = useAppStore();
@@ -23,7 +23,8 @@ export const SummaryPresets: React.FC<Props> = observer(({ prompt, onChange, can
         if (!action) return;
         const saved = action.kind === 'save' ? await presets.savePreset(name, action.prompt) :
             action.kind === 'rename' ? await presets.renamePreset(action.name, name) : await presets.deletePreset(action.name);
-        if (saved) setAction(null);
+        const nextAction = saved.ok ? null : { ...action, error: saved.message };
+        setAction((current) => current === action ? nextAction : current);
     };
 
     return <>
@@ -41,15 +42,15 @@ export const SummaryPresets: React.FC<Props> = observer(({ prompt, onChange, can
                 <Button size="compact-xs" variant="subtle" disabled={disabled} onClick={() => setAction({ kind: 'delete', name: selected.name })}>Delete preset</Button>
             </>}
         </Group>
-        {presets.error && !action && <Group gap={6}><Text size="xs" c="red" role="alert">{presets.error}</Text>
-            {!presets.ready && <Button size="compact-xs" variant="default" onClick={() => void presets.load()}>Retry</Button>}
+        {presets.loadError && <Group gap={6}><Text size="xs" c="red" role="alert">{presets.loadError}</Text>
+            <Button size="compact-xs" variant="default" onClick={() => void presets.load()}>Retry</Button>
         </Group>}
         <Modal opened={action !== null} centered={true} onClose={() => { if (!presets.saving) setAction(null); }} title={title}>
             <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
                 <Stack gap="sm">
                     {action?.kind === 'delete' ? <Text size="sm">Remove “{action.name}” from your presets? Saved summaries keep their original prompt.</Text> :
                         <TextInput label="Preset name" value={name} onChange={(event) => setName(event.currentTarget.value)} disabled={presets.saving} data-autofocus={true} />}
-                    {presets.error && <Text size="sm" c="red" role="alert">{presets.error}</Text>}
+                    {action?.error && <Text size="sm" c="red" role="alert">{action.error}</Text>}
                     <Group justify="flex-end">
                         <Button variant="default" disabled={presets.saving} onClick={() => setAction(null)}>Cancel</Button>
                         <Button type="submit" color={action?.kind === 'delete' ? 'red' : undefined}

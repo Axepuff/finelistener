@@ -3,7 +3,7 @@ import type { SummarySourceRow } from '../types/sessions';
 export interface SummaryLanguage {
     instruction: string;
     reference: string;
-    accepts: (text: string) => boolean;
+    accepts: (text: string, reviewedParagraph?: string) => boolean;
 }
 
 // A quoted email or a product name can be in a different language from the people discussing it.
@@ -50,10 +50,17 @@ export const getSummaryLanguage = async (rows: SummarySourceRow[], hint?: string
         instruction: name ? `Write all narrative prose in ${name}, the language of the original transcript. Keep names and quoted terms when needed.` :
             'Write in the language the speakers use in the original transcript sample. Keep that language throughout the answer.',
         reference: name ? '' : sample.slice(0, 200),
-        accepts: (text) => {
+        accepts: (text, reviewedParagraph) => {
             const prose = narrative(text);
             const actual = eld.detect(prose);
-            if (code && (actual.language === code || plausible(prose, actual, code))) return true;
+            if (code && actual.language === code) return true;
+            if (code && plausible(prose, actual, code)) {
+                if (!reviewedParagraph || !actual.isReliable()) return true;
+                // Short titles can score highly in two languages. Check unfamiliar words against the expected language.
+                const words = (value: string) => value.toLowerCase().match(/[\p{L}\p{M}]+/gu) ?? [];
+                const paragraphWords = new Set(words(reviewedParagraph));
+                if (words(prose).every((word) => paragraphWords.has(word) || plausible(word, eld.detect(word), code))) return true;
+            }
             if (sourceScript && actual.language && scriptOf(actual.language) !== sourceScript) return false;
             return !canCheck || !actual.isReliable();
         },

@@ -13,17 +13,41 @@ it.each([
     [null, undefined], [new Error('Title unavailable'), undefined],
 ] as const)('keeps reviewed text byte-for-byte when generating the optional title %s', async (answer, expected) => {
     const text = 'Delivery  is due Friday.';
-    const saved: ReviewedSummaryChunk[] = [];
+    let saved: ReviewedSummaryChunk[] = [];
     const result = await generateRecordingNotes([{ startSec: 1, endSec: 4, text }], {
         countTokens,
         complete: (prompt) => {
             if (!bodyOf(prompt).includes('REVIEWED PARAGRAPH\n')) return Promise.resolve(text);
             return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
         },
-    }, () => {}, (chunks) => { saved.push(...chunks); return Promise.resolve(); }, undefined, 'en');
+    }, () => {}, (chunks) => { saved = chunks; return Promise.resolve(); }, undefined, 'en');
     expect(saved[0].title).toBe(expected);
     expect(Buffer.from(result.detailed)).toEqual(Buffer.from(text));
     expect(result.brief).toBe(text);
+});
+
+it('retains the reviewed paragraph and its source cursor when stopped during its title', async () => {
+    const text = 'Delivery is due Friday.';
+    const save = vi.fn<Parameters<typeof generateRecordingNotes>[3]>().mockResolvedValue(undefined);
+    await expect(generateRecordingNotes([{ startSec: 1, endSec: 4, text }], {
+        countTokens,
+        complete: (prompt) => bodyOf(prompt).includes('REVIEWED PARAGRAPH\n') ?
+            Promise.reject(new DOMException('Stopped', 'AbortError')) : Promise.resolve(text),
+    }, () => {}, save, undefined, 'en')).rejects.toMatchObject({ name: 'AbortError' });
+    expect(save).toHaveBeenCalledWith([{ startSec: 1, endSec: 4, text }], {
+        version: 1, phase: 'brief', cursors: [{ groupIndex: 0, startChar: 0, endChar: text.length }],
+    });
+});
+
+it('drops a title reliably detected in a different language from the reviewed paragraph', async () => {
+    const text = 'Мы обсудили сроки поставки и договорились отправить готовый отчёт в пятницу.';
+    let saved: ReviewedSummaryChunk[] = [];
+    const result = await generateRecordingNotes([{ startSec: 1, endSec: 4, text }], {
+        countTokens,
+        complete: (prompt) => Promise.resolve(bodyOf(prompt).includes('REVIEWED PARAGRAPH\n') ? 'Звіт про постачання' : text),
+    }, () => {}, (chunks) => { saved = chunks; return Promise.resolve(); }, undefined, 'ru');
+    expect(saved[0].title).toBeUndefined();
+    expect(result.detailed).toBe(text);
 });
 
 it.each([

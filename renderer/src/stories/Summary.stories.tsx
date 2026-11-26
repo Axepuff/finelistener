@@ -71,6 +71,17 @@ export const PromptPresets: Story = {
         await userEvent.click(page.getByRole('button', { name: 'Save' }));
         await expect(await canvas.findByRole('button', { name: 'Deadlines' })).toHaveAttribute('aria-pressed', 'true');
         await userEvent.click(canvas.getByRole('button', { name: 'Rename preset' }));
+        const conflictingName = page.getByRole('textbox', { name: 'Preset name' });
+        await userEvent.clear(conflictingName);
+        await userEvent.type(conflictingName, 'Default');
+        await userEvent.click(page.getByRole('button', { name: 'Save' }));
+        await expect(await page.findByRole('alert')).toHaveTextContent('Use a unique preset name');
+        await userEvent.click(page.getByRole('button', { name: 'Cancel' }));
+        await waitFor(() => expect(page.queryByRole('alert')).not.toBeInTheDocument());
+        await userEvent.click(canvas.getByRole('button', { name: 'Delete preset' }));
+        await expect(within(await page.findByRole('dialog')).queryByRole('alert')).not.toBeInTheDocument();
+        await userEvent.click(page.getByRole('button', { name: 'Cancel' }));
+        await userEvent.click(canvas.getByRole('button', { name: 'Rename preset' }));
         const name = page.getByRole('textbox', { name: 'Preset name' });
         await userEvent.clear(name);
         await userEvent.type(name, 'Due dates');

@@ -130,7 +130,7 @@ const generateChunkTitle = async (text: string, model: SummaryInference, languag
         if (!answer) return undefined;
         // Qwen can put the opening quotation mark on a line of its own.
         const title = titleQuotes[answer[0]] === answer.at(-1) ? answer.slice(1, -1).trim() : answer;
-        if (!title || /[\r\n]/u.test(title) || title.length > 160 || !language.accepts(title)) return undefined;
+        if (!title || /[\r\n]/u.test(title) || title.length > 160 || !language.accepts(title, text)) return undefined;
         const words = wordCount(title);
         return words > 0 && words <= 8 ? title : undefined;
     } catch (error) {
@@ -242,8 +242,8 @@ export const generateRecordingNotes = async (
                     progress(`Checking chunk ${chunks.length + 1} against the transcript…`);
                     const text = await generate(model, reviewInstruction, `DRAFT\n${draft}\n\n${overlap}ORIGINAL LINES\n${lines}`, paragraphLimit, task);
                     if (!text) continue;
-                    const title = await generateChunkTitle(text, model, task.language);
-                    chunks.push({ ...passageMetadata(passage), text, ...(title ? { title } : {}) });
+                    const chunk = { ...passageMetadata(passage), text };
+                    chunks.push(chunk);
                     group.splice(0, group.length, ...candidate);
                     previous = passage;
                     first += passage.length;
@@ -251,7 +251,14 @@ export const generateRecordingNotes = async (
                     cursors.push({ groupIndex, startChar: offset, endChar });
                     offset = endChar;
                     const phase = groupIndex === groups.length - 1 && offset === size ? 'brief' : 'chunks';
-                    await onReviewed([...chunks], { version: 1, phase, cursors: [...cursors] });
+                    const checkpoint: SummaryDraftProgress = { version: 1, phase, cursors: [...cursors] };
+                    await onReviewed([...chunks], checkpoint);
+                    progress(`Writing a title for chunk ${chunks.length}…`);
+                    const title = await generateChunkTitle(text, model, task.language);
+                    if (title) {
+                        chunks[chunks.length - 1] = { ...chunk, title };
+                        await onReviewed([...chunks], checkpoint);
+                    }
                     accepted = true;
                     break;
                 }
