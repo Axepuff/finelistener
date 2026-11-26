@@ -1,7 +1,7 @@
 import { ActionIcon, Paper, UnstyledButton } from '@mantine/core';
 import { IconPencil, IconPlayerPlayFilled, IconUserEdit } from '@tabler/icons-react';
 import type { SessionSpeakerAssignment, SessionTranscriptSegmentV1 } from 'electron/src/types/sessions';
-import React, { useEffect, useRef, type MouseEvent } from 'react';
+import React, { useLayoutEffect, useRef, type MouseEvent } from 'react';
 import type { TranscriptMatch, TranscriptMatchRange } from './search';
 import styles from './TranscribedText.module.css';
 import type { DeepReadonly, Segment } from 'renderer/src/stores/types';
@@ -64,13 +64,23 @@ export const TranscribedTextContent: React.FC<Props> = ({
         });
     });
 
-    useEffect(() => {
+    useLayoutEffect(() => {
+        if (activeMatchIndex < 0) return;
         contentRef.current?.querySelector('mark[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
     }, [activeMatchIndex, matches, searchQuery, transcriptText]);
 
-    const highlightSegment = (text: string, segmentIndex: number) => {
+    const highlightSegment = (text: string, segmentIndex: number, startChar = 0) => {
         const ranges = matchesBySegment.get(segmentIndex) ?? [];
         let nextMatch = 0;
+        if (startChar > 0) {
+            // A Reading chunk may start deep inside an unpunctuated paragraph.
+            let last = ranges.length;
+            while (nextMatch < last) {
+                const middle = Math.floor((nextMatch + last) / 2);
+                if (ranges[middle].range.end <= startChar) nextMatch = middle + 1;
+                else last = middle;
+            }
+        }
         // Reading renders consecutive word and punctuation slices. A match can span both.
         return (start = 0, end = text.length): React.ReactNode => {
             while (nextMatch < ranges.length && ranges[nextMatch].range.end <= start) nextMatch++;

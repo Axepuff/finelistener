@@ -49,7 +49,7 @@ export const DeleteSession: Story = {
             await waitFor(() => expect(page.queryByRole('menuitem', { name: 'Delete session' })).not.toBeInTheDocument());
             await expect(panel.getByRole('button', { name: 'Customer interview' })).toBeVisible();
             confirm.mockReturnValue(true);
-            await userEvent.click(within(row).getByRole('button', { name: 'Session actions' }));
+            await userEvent.pointer({ target: panel.getByRole('button', { name: 'Customer interview' }), keys: '[MouseRight]' });
             await waitFor(() => expect(page.getByRole('menuitem', { name: 'Delete session' })).toBeVisible());
             await userEvent.click(page.getByRole('menuitem', { name: 'Delete session' }));
             await waitFor(() => expect(panel.queryByRole('button', { name: 'Customer interview' })).not.toBeInTheDocument());
@@ -60,7 +60,7 @@ export const DeleteSession: Story = {
 };
 
 export const Empty: Story = { parameters: { scenario: 'sessions-empty' } };
-export const SpeakerEdits: Story = { parameters: { scenario: 'sessions-speaker-edit', docs: { description: { story: 'A merge through the public AppStore service boundary updates the rendered sidebar and preserves player state before clearing the workspace.' } } }, play: async ({ canvas, loaded }) => {
+export const SpeakerEdits: Story = { parameters: { scenario: 'sessions-speaker-edit', docs: { description: { story: 'A merge through the public AppStore service boundary updates the rendered sidebar and preserves player state before clearing the workspace.' } } }, play: async ({ canvas, canvasElement, loaded }) => {
     const { store } = loaded.workspace as StoryWorkspace;
     const panel = within(canvas.getByRole('navigation', { name: 'Sessions' }));
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Play audio' })).toBeEnabled());
@@ -70,7 +70,16 @@ export const SpeakerEdits: Story = { parameters: { scenario: 'sessions-speaker-e
     await userEvent.click(canvas.getByRole('button', { name: 'Mark start' }));
     await userEvent.click(canvas.getByText('00:00:08 – 00:00:12'));
     await userEvent.click(canvas.getByRole('button', { name: 'Mark end' }));
+    const page = within(canvasElement.ownerDocument.body);
+    const originalRow = within(panel.getByRole('region', { name: 'Yesterday' })).getByRole('button', { name: 'Design discussion.wav' }).parentElement!;
+    await userEvent.click(within(originalRow).getByRole('button', { name: 'Session actions' }));
+    await waitFor(() => expect(page.getByRole('menuitem', { name: 'Reveal session folder' })).toBeVisible());
     await expect((await store.mergeSpeakers('alice', 'bob')).ok).toBe(true);
+    await waitFor(() => {
+        const updatedRow = within(panel.getByRole('region', { name: 'Today' })).getByRole('button', { name: 'Design discussion.wav' }).parentElement!;
+        return expect(within(updatedRow).getByRole('button', { name: 'Session actions' })).toHaveAttribute('aria-expanded', 'false');
+    });
+    await waitFor(() => expect(page.queryByRole('menu')).not.toBeInTheDocument());
     await waitFor(() => expect(within(panel.getByRole('region', { name: 'Today' })).getByRole('button', { name: 'Design discussion.wav' })).toHaveAccessibleDescription('00:12 · 2 speakers'));
     await expect(canvas.getByLabelText('Current position: 00:08.00 / 00:12.00')).toBeVisible();
     await expect(canvas.getByText('Segment 00:04.00 — 00:08.00')).toBeVisible();
@@ -114,7 +123,7 @@ export const RecoveryError: Story = { parameters: { scenario: 'sessions-recovery
     await userEvent.click(panel.getByRole('button', { name: 'Recover' }));
     await waitFor(() => expect(panel.getByText('Could not recover the recording.')).toBeVisible());
 } };
-export const Narrow: Story = { render: () => <div style={{ width: 1024 }}><Home /></div>, play: async ({ canvas }) => {
+export const Narrow: Story = { render: () => <div style={{ width: 1024 }}><Home /></div>, play: async ({ canvas, canvasElement }) => {
     const panel = canvas.getByRole('navigation', { name: 'Sessions' });
     const bounds = panel.getBoundingClientRect();
     const title = within(panel).getByRole('button', { name: /^A very long session title/ });
@@ -123,6 +132,15 @@ export const Narrow: Story = { render: () => <div style={{ width: 1024 }}><Home 
     await expect(title.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
     title.focus();
     await userEvent.tab();
-    await expect(within(title.parentElement!).getByRole('button', { name: 'Session actions' })).toHaveFocus();
-    await expect(within(title.parentElement!).getByRole('button', { name: 'Session actions' })).toBeVisible();
+    const actions = within(title.parentElement!).getByRole('button', { name: 'Session actions' });
+    await expect(actions).toHaveFocus();
+    await expect(actions).toBeVisible();
+    await userEvent.keyboard('{Enter}');
+    const page = within(canvasElement.ownerDocument.body);
+    const menu = await page.findByRole('menu');
+    await waitFor(() => expect(menu.contains(canvasElement.ownerDocument.activeElement)).toBe(true));
+    await userEvent.keyboard('{ArrowDown}');
+    await expect(within(menu).getByRole('menuitem', { name: 'Reveal session folder' })).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(actions).toHaveFocus());
 } };
