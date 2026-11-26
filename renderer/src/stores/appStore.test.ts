@@ -55,6 +55,24 @@ const sourceTranscript: SessionTranscriptV1 = {
 };
 
 describe('AppStore', () => {
+    it('does not export a different session when switching while Obsidian options load', async () => {
+        const options = createDeferred<Awaited<ReturnType<RendererAdapter['obsidian']['getOptions']>>>();
+        const { adapter } = createFakeRendererAdapter({
+            getSession: (id) => Promise.resolve(createSession({ id, transcript: sourceTranscript })),
+        });
+        vi.spyOn(adapter.obsidian, 'getOptions').mockReturnValue(options.promise);
+        const write = vi.spyOn(adapter.obsidian, 'exportNote');
+        const store = new AppStore(adapter);
+        await store.openSession('first');
+        const exporting = store.obsidian.start();
+        await store.openSession('second');
+        options.resolve({ folder: { id: 'notes', label: 'Meetings' }, plain: true, timestamped: false });
+        await exporting;
+        expect(write).not.toHaveBeenCalled();
+        expect(store.obsidian.stage).toBe('idle');
+        expect(store.obsidian.busy).toBe(false);
+    });
+
     it('blocks conflicting public commands through recording and saving while retaining the workspace', async () => {
         const oldSession = createSession({ transcript: sourceTranscript });
         const recorded = createSession({ id: 'recorded', sourceKind: 'recorded' });

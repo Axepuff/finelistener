@@ -61,6 +61,13 @@ export const createFakeRendererAdapter = (
         new Error('Not configured in fake renderer adapter'),
     );
     const adapter: RendererAdapter = {
+        obsidian: {
+            getOptions: () => Promise.resolve({ folder: null, plain: false, timestamped: true }),
+            chooseFolder: () => Promise.resolve(null),
+            saveOptions: unavailable,
+            exportNote: unavailable,
+            openNote: unavailable,
+        },
         runtimePlatform: 'linux',
         listSessions: () => Promise.resolve([]),
         getSession: unavailable,

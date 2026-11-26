@@ -2,6 +2,7 @@ import type { RecordingLevel, RecordingProgress, RecordingState } from 'electron
 import type { RecoverableRecording } from 'electron/src/types/recordingArchive';
 import type { SpeakerAnalysisProgressEvent } from 'electron/src/types/transcription';
 import type { SessionDetails, SessionListItem, SessionTranscriptV1 } from 'electron/src/types/sessions';
+import type { ObsidianOptions } from 'electron/src/types/obsidian';
 import { spyOn } from 'storybook/test';
 import { UI_PREFERENCE_DEFAULTS, type UiPreferenceKey, type UiPreferenceValueMap } from '../../../electron/src/types/uiPreferences';
 import { AppStore } from '../stores/appStore';
@@ -158,7 +159,20 @@ export const createStoryWorkspace = async (scenario: WorkspaceScenario): Promise
             progressListener?.({ durationMs: 42000, bytesWritten: 1344000 });
         }
     };
+    let obsidianOptions: ObsidianOptions = { folder: null, plain: false, timestamped: true };
+    const exportedSessions = new Set<string>();
     const fake = createFakeRendererAdapter({
+        obsidian: {
+            getOptions: () => Promise.resolve(obsidianOptions),
+            chooseFolder: () => Promise.resolve({ id: 'demo-meetings', label: 'Work / Meetings' }),
+            saveOptions: (options) => { obsidianOptions = options; return Promise.resolve(true); },
+            exportNote: (sessionId, _title, _markdown, newCopy) => {
+                if (exportedSessions.has(sessionId) && !newCopy) return Promise.resolve({ status: 'existing' });
+                exportedSessions.add(sessionId);
+                return Promise.resolve({ status: 'saved' });
+            },
+            openNote: (sessionId) => Promise.resolve(exportedSessions.has(sessionId)),
+        },
         runtimePlatform: scenario === 'settings-recording-silence' ? 'darwin' : 'win32',
         ...(isNemotron ? { getSpeakerAssets: () => Promise.resolve({ gpuBackend: 'vulkan' as const,
             ready: scenario !== 'nemotron-downloading', gpuAvailable: scenario !== 'nemotron-error', downloadBytes: 123_671_929 }) } : {}),

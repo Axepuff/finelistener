@@ -5,6 +5,7 @@ import type {
     RecordingState,
 } from 'electron/src/services/RecordingService';
 import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResult } from 'electron/src/types/recordingArchive';
+import type { ObsidianApi } from 'electron/src/types/obsidian';
 import type { RecordingDevice } from 'electron/src/services/capture/CaptureAdapter';
 import type { ScreenRecordingPermissionStatus } from 'electron/src/services/capture/ScreenCaptureKitAdapter';
 import type { SessionDetails, SessionListItem, SessionRawSpan, SessionSpeakerAssignment, SummaryGenerationResult, SummaryProgressEvent } from 'electron/src/types/sessions';
@@ -15,6 +16,7 @@ import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/u
 import type { WhisperModelDownloadProgress, WhisperModelInfo, WhisperModelName } from 'electron/src/types/whisper';
 
 export interface RendererAdapter {
+    readonly obsidian: ObsidianApi;
     readonly runtimePlatform: 'darwin' | 'win32' | 'linux';
     getSummaryModelStatus: () => Promise<SummaryModelStatus>;
     downloadSummaryModel: () => Promise<SummaryModelStatus>;
@@ -85,6 +87,7 @@ export const createPreloadAdapter = (api?: Window['api']): RendererAdapter | nul
 
     return {
         runtimePlatform: api.runtime.platform,
+        obsidian: api.obsidian,
         getSummaryModelStatus: () => api.getSummaryModelStatus(),
         downloadSummaryModel: () => api.downloadSummaryModel(),
         cancelSummaryModelDownload: () => api.cancelSummaryModelDownload(),

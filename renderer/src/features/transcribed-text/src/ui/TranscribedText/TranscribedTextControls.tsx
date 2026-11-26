@@ -3,6 +3,7 @@ import { IconChevronDown, IconChevronUp, IconCopy, IconDownload, IconSearch, Ico
 import React, { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useAppStore } from 'renderer/src/AppContext';
+import { ObsidianExport } from './ObsidianExport';
 import styles from './TranscribedText.module.css';
 import type { TranscriptView } from 'renderer/src/stores/transcriptFormat';
 
@@ -123,7 +124,7 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
             <div className={styles.controlsRow}>
                 <TranscriptViewSwitch view={view} onViewChange={onViewChange} viewLockReasons={viewLockReasons} />
 
-                <Group gap={8} align="center" wrap="nowrap" className={view === 'summary' ? styles.summaryActions : styles.actionsGroup}>
+                <Group gap={8} align="center" className={view === 'summary' ? styles.summaryActions : styles.actionsGroup}>
                     {view !== 'summary' && (
                         <div className={styles.searchField} role="search" aria-label="Transcript">
                             <IconSearch size={16} aria-hidden="true" />
@@ -186,6 +187,7 @@ export const TranscribedTextControls: React.FC<Props> = observer(({
                     >
                         {view === 'summary' ? 'Export summary' : 'Export'}
                     </Button>
+                    <ObsidianExport />
                 </Group>
             </div>
             {view !== 'summary' && store.transcription.duplicateFilterAvailable ? (

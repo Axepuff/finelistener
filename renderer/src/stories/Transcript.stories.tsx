@@ -75,6 +75,38 @@ type Story = StoryObj<typeof meta>;
 
 export const TimedSpeakers: Story = {};
 
+export const ExportToObsidian: Story = {
+    parameters: { scenario: 'transcript' },
+    play: async ({ canvas, canvasElement, loaded }) => {
+        const page = within(canvasElement.ownerDocument.body);
+        const { adapter } = loaded.workspace as StoryWorkspace;
+        const open = spyOn(adapter.obsidian, 'openNote');
+        const start = canvas.getByRole('button', { name: 'Export to Obsidian' });
+        try {
+            await userEvent.click(start);
+            const options = within(await page.findByRole('dialog', { name: 'Obsidian export options' }));
+            const confirm = options.getByRole('button', { name: 'Export note' });
+            await expect(confirm).toBeDisabled();
+            await userEvent.click(options.getByRole('button', { name: 'Choose folder' }));
+            await expect(await options.findByText('Work / Meetings')).toBeVisible();
+            await userEvent.click(options.getByRole('checkbox', { name: 'Timestamped transcript' }));
+            await expect(confirm).toBeDisabled();
+            await userEvent.click(options.getByRole('checkbox', { name: 'Plain text' }));
+            await userEvent.click(confirm);
+            await expect(await page.findByRole('button', { name: 'Open in Obsidian' })).toBeVisible();
+            await expect(open).not.toHaveBeenCalled();
+
+            await userEvent.click(start);
+            const repeat = within(await page.findByRole('dialog', { name: 'Already exported' }));
+            await waitFor(() => expect(repeat.getByRole('button', { name: 'Save new copy' })).toBeVisible());
+            await userEvent.click(repeat.getByRole('button', { name: 'Open in Obsidian' }));
+            await expect(open).toHaveBeenCalledTimes(1);
+        } finally {
+            open.mockRestore();
+        }
+    },
+};
+
 export const LongSpeakerReading: Story = {
     parameters: { longReading: true },
     render: () => <div style={{ width: 1024 }}><Home /></div>,
@@ -107,14 +139,24 @@ export const LongSpeakerReading: Story = {
             first.scrollIntoView({ block: 'start' });
             await frame();
             await frame();
-            const cursor = document.createTreeWalker(last, NodeFilter.SHOW_TEXT);
-            let node = cursor.nextNode();
-            while (node && !node.textContent?.includes(text)) node = cursor.nextNode();
-            if (!node?.textContent) throw new Error('The end of the transcript is missing.');
-            const offset = node.textContent.indexOf(text) + start;
+            const match = last.textContent?.indexOf(text) ?? -1;
+            if (match === -1) throw new Error('The end of the transcript is missing.');
+            // Nearby words may already be expanded into separate text nodes.
+            const boundaryAt = (position: number) => {
+                const cursor = document.createTreeWalker(last, NodeFilter.SHOW_TEXT);
+                let offset = position;
+                for (let node = cursor.nextNode(); node; node = cursor.nextNode()) {
+                    const size = node.textContent?.length ?? 0;
+                    if (offset <= size) return { node, offset };
+                    offset -= size;
+                }
+                throw new Error('The text position is outside the transcript.');
+            };
+            const from = boundaryAt(match + start);
+            const to = boundaryAt(match + start + length);
             const range = document.createRange();
-            range.setStart(node, offset);
-            range.setEnd(node, offset + length);
+            range.setStart(from.node, from.offset);
+            range.setEnd(to.node, to.offset);
             last.scrollIntoView({ block: 'end' });
             const rect = range.getBoundingClientRect();
             const point = { clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2, bubbles: true };

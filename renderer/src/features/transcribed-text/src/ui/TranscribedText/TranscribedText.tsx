@@ -16,7 +16,7 @@ import { TranscribedTextControls, TranscriptViewSwitch } from './TranscribedText
 import { SpeakerAnalysisStatus, SpeakerControls } from './SpeakerControls';
 import { findTranscriptMatches } from './search';
 import { escapeHtml, formatSecondsReadable } from 'renderer/src/shared/lib';
-import { projectTextSentences } from './plainText';
+import { projectTextSentences } from 'renderer/src/stores/plainText';
 import styles from './TranscribedText.module.css';
 
 interface Props {
