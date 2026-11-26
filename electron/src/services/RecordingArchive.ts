@@ -14,7 +14,7 @@ import {
     type RecoveryState,
 } from '../types/recordingArchive';
 import type { SessionFileV1, SessionSourceTrack } from '../types/sessions';
-import { SessionsService } from './SessionsService';
+import { SESSION_WAV_RELATIVE_PATH, SessionsService } from './SessionsService';
 
 const MANIFEST_FILE = 'recovery.json';
 const AUDIO_DIR = 'audio';
@@ -292,7 +292,7 @@ export class RecordingArchive {
                 sourceKind: 'recorded',
                 tracks: validTracks,
                 sourceWarnings: manifest.sourceWarnings,
-                audio: { originalFileName: 'recording.wav', originalPath: MIX_FILE, wavPath: MIX_FILE },
+                audio: { originalFileName: 'recording.wav', originalPath: MIX_FILE, wavPath: SESSION_WAV_RELATIVE_PATH },
             };
             await atomicWriteJson(path.join(location, SESSION_FILE), session);
             const publishedDir = path.join(this.sessionsRoot(), sessionId);
@@ -301,6 +301,7 @@ export class RecordingArchive {
             await fs.rm(path.join(publishedDir, MANIFEST_FILE), { force: true }).catch((error) => {
                 console.warn('Failed to remove published recording recovery manifest', error);
             });
+            this.sessionsService.prepareRecordedWaveform(sessionId);
             return { recordingId, sessionId, sourceWarnings: this.toPublicWarnings(manifest.sourceWarnings) };
         } catch (error) {
             if (published) throw error;

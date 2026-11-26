@@ -1,8 +1,11 @@
 import path from 'path';
+import { open } from 'node:fs/promises';
 import { pathToFileURL } from 'url';
 import { app, BrowserWindow, shell, screen, protocol, net } from 'electron';
 import { registerIpcHandlers } from './src/controllers/ipc';
 import { cleanupAudioTempDirs } from './src/services/AudioPreprocessor';
+import { PlaybackFiles } from './src/services/PlaybackFiles';
+import { getFileByteRange } from './src/utils/fileByteRange';
 
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
@@ -106,9 +109,10 @@ app.whenReady()
             });
         });
 
-        stopBackgroundWork = registerIpcHandlers(() => mainWindow);
+        const playbackFiles = new PlaybackFiles();
+        stopBackgroundWork = registerIpcHandlers(() => mainWindow, playbackFiles);
 
-        protocol.handle(LOCAL_FILE_PROTOCOL, (request) => {
+        protocol.handle(LOCAL_FILE_PROTOCOL, async (request) => {
             const url = new URL(request.url);
 
             const pathname = decodeURIComponent(url.pathname);
@@ -116,6 +120,12 @@ app.whenReady()
 
             let filePath = pathname;
 
+            if (host === 'playback') {
+                // The first slash separates the URL authority from the encoded native path.
+                const playbackPath = pathname.slice(1);
+                if (!path.isAbsolute(playbackPath)) return new Response(null, { status: 400 });
+                return playbackFiles.serve(path.normalize(playbackPath), request);
+            }
             if (process.platform === 'win32') {
                 // На Windows восстанавливаем букву диска из host (local-file://c/...) и убираем лишние слэши
                 filePath = `${host ? `${host}:` : ''}${pathname}`.replace(/^\/+/, '');
@@ -127,7 +137,25 @@ app.whenReady()
             const normalizedPath = path.normalize(filePath);
             const fileUrl = pathToFileURL(normalizedPath).toString();
 
-            return net.fetch(fileUrl);
+            const rangeHeader = request.headers.get('range');
+            if (!rangeHeader) return net.fetch(fileUrl, { signal: request.signal });
+
+            const file = await open(normalizedPath, 'r');
+            const { size } = await file.stat().finally(() => file.close());
+            const range = getFileByteRange(rangeHeader, size);
+            if (!range) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
+
+            // Chromium reads the requested file bytes, but omits the HTTP range metadata needed for seeking.
+            const { start, end } = range;
+            const response = await net.fetch(fileUrl, { headers: { Range: `bytes=${start}-${end}` }, signal: request.signal });
+            if (!response.ok) return response;
+
+            const headers = new Headers(response.headers);
+            headers.set('Accept-Ranges', 'bytes');
+            headers.set('Content-Range', `bytes ${start}-${end}/${size}`);
+            headers.set('Content-Length', String(end - start + 1));
+
+            return new Response(response.body, { status: 206, headers });
         });
     })
     .catch((err) => {

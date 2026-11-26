@@ -4,6 +4,7 @@ import type { FinalizeRecordingResult, RecoverableRecording, StartRecordingResul
 import type { TranscribeOpts, SessionTranscribeOpts, TranscriptionTextEvent, TranscriptionProgressEvent } from './src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from './src/types/uiPreferences';
 import type { SessionDetails, SessionRawSpan, SessionSpeakerAssignment, SummaryGenerationResult, SummaryProgressEvent } from './src/types/sessions';
+import type { SessionAudioMode, SessionWaveformPeaks } from './src/types/sessions';
 import type { RecordingSummaryOptions } from './src/types/summaryOptions';
 import type { SummaryModelStatus } from './src/types/summaryModel';
 import type { AnalyzeSpeakersOptions, SpeakerAnalysisProgressEvent } from './src/types/transcription';
@@ -22,6 +23,8 @@ contextBridge.exposeInMainWorld('api', {
     sessions: {
         list: () => ipcRenderer.invoke('sessions:list'),
         get: (sessionId: string) => ipcRenderer.invoke('sessions:get', sessionId),
+        getWaveformPeaks: (sessionId: string, mode: SessionAudioMode): Promise<SessionWaveformPeaks> =>
+            ipcRenderer.invoke('sessions:get-waveform-peaks', sessionId, mode),
         setActive: (sessionId: string | null) => ipcRenderer.invoke('sessions:set-active', sessionId),
         delete: (sessionId: string) => ipcRenderer.invoke('sessions:delete', sessionId),
         importAudio: () => ipcRenderer.invoke('sessions:import-audio'),

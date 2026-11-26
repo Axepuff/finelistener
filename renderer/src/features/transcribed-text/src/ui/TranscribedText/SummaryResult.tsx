@@ -127,7 +127,7 @@ export const SummaryResult: React.FC<Props> = observer(({ transcript, saved, for
                 aria-label={saved.brief ? undefined : 'Detailed notes'}>
                 {chunks.length ? chunks.map(({ chunk, index }, position) => <SummaryChunk key={index} chunk={chunk}
                     transcript={transcript} labels={labels} current={position === playingIndex}
-                    canPlay={Boolean(workspace.audioSourcePath && !workspace.isPlayerLoading)}
+                    canPlay={workspace.playbackDuration > 0}
                     onPlay={(seconds) => workspace.requestPlaybackTime(seconds, 'play')} />) :
                     <SummaryParagraphs text={saved.detailed} />}
             </Tabs.Panel>

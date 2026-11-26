@@ -87,6 +87,38 @@ it('lists WAV duration and persisted speaker count while retaining legacy sessio
     expect((await new SessionsService().listSessions()).find(({ id }) => id === 'metadata')).not.toHaveProperty('durationMs');
 });
 
+it('reuses waveform peaks after restart and rebuilds them after corruption or a listening WAV replacement', async () => {
+    const sessionDir = path.join(environment.root, 'sessions', 'old-recording');
+    const sourcePath = path.join(sessionDir, 'audio', 'source-original-v1.wav');
+    await fs.mkdir(path.dirname(sourcePath), { recursive: true });
+    const source = wav(0);
+    source.writeInt16LE(-32768, 44);
+    source.writeInt16LE(16384, source.length - 2);
+    await fs.writeFile(sourcePath, source);
+
+    const first = await new SessionsService().getWaveformPeaks('old-recording', 'original');
+    expect(first.duration).toBe(1);
+    expect(first.peaks[0]).toBe(1);
+    expect(first.peaks.at(-1)).toBe(0.5);
+    expect(first.peaks.subarray(1, -1).every((peak) => peak === 0)).toBe(true);
+
+    const [sidecar] = (await fs.readdir(sessionDir)).filter((name) => name.endsWith('.peaks'));
+    const cachePath = path.join(sessionDir, sidecar);
+    await fs.utimes(cachePath, 1, 1);
+    const reopened = new SessionsService();
+    expect(await reopened.getWaveformPeaks('old-recording', 'original')).toEqual(first);
+    expect((await fs.stat(cachePath)).mtimeMs).toBe(1000);
+    const corrupted = await fs.readFile(cachePath);
+    corrupted[corrupted.length - 1] ^= 0xff;
+    await fs.writeFile(cachePath, corrupted);
+    expect(await reopened.getWaveformPeaks('old-recording', 'original')).toEqual(first);
+    expect(await fs.readFile(cachePath)).not.toEqual(corrupted);
+    await fs.writeFile(sourcePath, wav(8192));
+    await fs.utimes(sourcePath, 100, 100);
+    const replaced = await reopened.getWaveformPeaks('old-recording', 'original');
+    expect(replaced.peaks.every((peak) => peak === 0.25)).toBe(true);
+});
+
 it('persists source originals and reopens a real FFmpeg mix with aligned duration and bounded samples', async () => {
     const systemPath = path.join(environment.root, 'recordings', 'system.wav');
     const microphonePath = path.join(environment.root, 'recordings', 'microphone.wav');
@@ -356,6 +388,34 @@ it('evicts least recently used derived audio and regenerates it on demand', asyn
     const reopened = await service.getSession(first.id);
     await expect(fs.access(reopened.audioWavPath)).resolves.toBeUndefined();
     await expect(fs.readFile(reopened.audioOriginalPath)).resolves.toEqual(wav(1000));
+});
+
+it('opens a session while an older optimized WAV is locked and evicts it after release', async () => {
+    const source = path.join(environment.root, 'meeting.wav');
+    await fs.writeFile(source, wav(1000));
+    const setup = new SessionsService();
+    const previous = await setup.createSessionFromImport(source);
+    const other = await setup.createSessionFromImport(source);
+    const selected = await setup.createSessionFromImport(source);
+    const lockedWav = previous.audioOptimizedWavPath!;
+    const service = new SessionsService(0);
+    const remove = fs.rm.bind(fs);
+    const lock = vi.spyOn(fs, 'rm').mockImplementation((target, options) => {
+        if (target === lockedWav) return Promise.reject(Object.assign(new Error('File is in use'), { code: 'EBUSY' }));
+        return remove(target, options);
+    });
+    try {
+        const opened = await service.getSession(selected.id);
+        await expect(fs.access(opened.audioOptimizedWavPath!)).resolves.toBeUndefined();
+        await expect(fs.access(lockedWav)).resolves.toBeUndefined();
+        await expect(fs.access(other.audioOptimizedWavPath!)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+        lock.mockRestore();
+    }
+
+    await service.setActiveSession(selected.id);
+    await expect(fs.access(lockedWav)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.readFile(previous.audioOriginalPath)).resolves.toEqual(wav(1000));
 });
 
 it('does not allow the sessions API to delete the staging root', async () => {

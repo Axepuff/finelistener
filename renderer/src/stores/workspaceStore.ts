@@ -37,7 +37,7 @@ export class WorkspaceStore {
 
     private isPlayingValue = false;
 
-    private isPlayerLoadingValue = false;
+    private playbackDurationValue = 0;
 
     private playbackPositionValue = 0;
 
@@ -51,8 +51,8 @@ export class WorkspaceStore {
         return this.isPlayingValue;
     }
 
-    get isPlayerLoading(): boolean {
-        return this.isPlayerLoadingValue;
+    get playbackDuration(): number {
+        return this.playbackDurationValue;
     }
 
     get playbackPosition(): number {
@@ -163,8 +163,8 @@ export class WorkspaceStore {
         this.isPlayingValue = isPlaying;
     }
 
-    setPlayerLoading(isLoading: boolean): void {
-        this.isPlayerLoadingValue = isLoading;
+    setPlaybackDuration(duration: number): void {
+        this.playbackDurationValue = duration;
     }
 
     setPlaybackPosition(position: number): void {
@@ -189,7 +189,7 @@ export class WorkspaceStore {
     private resetPlayback(): void {
         this.segmentSelectionValue = null;
         this.isPlayingValue = false;
-        this.isPlayerLoadingValue = false;
+        this.playbackDurationValue = 0;
         this.playbackPositionValue = 0;
         this.clearPlaybackRequest();
     }

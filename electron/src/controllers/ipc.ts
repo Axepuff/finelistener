@@ -11,11 +11,12 @@ import { registerSpeakerController } from './speakerController';
 import { registerSummaryController } from './summaryController';
 import { registerSummaryModelController } from './summaryModelController';
 import { SessionsService } from '../services/SessionsService';
+import type { PlaybackFiles } from '../services/PlaybackFiles';
 import { RecordingArchive } from '../services/RecordingArchive';
 import { getUiPreferenceValue } from './uiPreferencesController';
 
-export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): () => Promise<void> {
-    const sessionsService = new SessionsService(getUiPreferenceValue('recordingDerivedCacheBudgetBytes'));
+export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null, playbackFiles: PlaybackFiles): () => Promise<void> {
+    const sessionsService = new SessionsService(getUiPreferenceValue('recordingDerivedCacheBudgetBytes'), playbackFiles);
     const recordingArchive = new RecordingArchive({
         sessionsService,
         recoveryQuotaBytes: getUiPreferenceValue('recordingRecoveryQuotaBytes'),
@@ -40,8 +41,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     return async () => {
         shuttingDown = true;
         const stopped = await Promise.allSettled([speakerWorkflow.stopAndWait(), transcriptionService.stopAndWait(),
-            summaryWorkflow.stopAndWait(), summaryModel.stopAndWait()]);
+            summaryWorkflow.stopAndWait(), summaryModel.stopAndWait(), sessionsService.stopWaveformsAndWait()]);
         const failures = stopped.filter((result) => result.status === 'rejected').map((result): unknown => result.reason);
-        if (failures.length > 0) throw new AggregateError(failures, 'Failed to stop speech processing');
+        if (failures.length > 0) throw new AggregateError(failures, 'Failed to stop background processing');
     };
 }

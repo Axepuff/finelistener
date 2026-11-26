@@ -286,8 +286,10 @@ export class AudioPreprocessor {
 
     public async mixSources(
         tracks: Array<{ filePath: string; startOffsetMs: number }>,
+        signal?: AbortSignal,
     ): Promise<WavResult> {
         if (tracks.length === 0) throw new Error('No audio sources');
+        signal?.throwIfAborted();
         const tmpDir = await this.createTempDir();
         const outputPath = path.join(tmpDir, 'mix.wav');
         const filters = tracks.map((track, index) =>
@@ -298,7 +300,7 @@ export class AudioPreprocessor {
                 '-y', ...tracks.flatMap((track) => ['-i', track.filePath]),
                 '-filter_complex', filters.join(';'), '-map', '[mix]',
                 '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outputPath,
-            ]);
+            ], signal);
         } catch (error) {
             await this.removeDirSafe(tmpDir);
             throw error;

@@ -4,13 +4,19 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { SUPPORTED_MEDIA_EXTENSIONS } from '../constants';
 import { SessionsService } from '../services/SessionsService';
+import type { SessionDetails } from '../types/sessions';
 
 export function registerSessionsController(
     ipc: IpcMain,
     getMainWindow: () => BrowserWindow | null,
     service = new SessionsService(),
 ): void {
-
+    const prepareForPlayback = (session: SessionDetails): SessionDetails => {
+        void service.prepareMissingWaveform(session.id, session.audioMode ?? 'optimized').catch((error: unknown) => {
+            console.warn('Failed to prepare background waveform', error);
+        });
+        return session;
+    };
     ipc.handle('sessions:list', async () => {
         return service.listSessions();
     });
@@ -20,7 +26,7 @@ export function registerSessionsController(
             throw new Error('Invalid session id');
         }
 
-        return service.getSession(sessionId);
+        return prepareForPlayback(await service.getSession(sessionId));
     });
 
     ipc.handle('sessions:set-active', async (_event, sessionId: unknown) => {
@@ -29,12 +35,27 @@ export function registerSessionsController(
         return true;
     });
 
+    ipc.handle('sessions:get-waveform-peaks', async (_event, sessionId: unknown, mode: unknown) => {
+        if (typeof sessionId !== 'string' || (mode !== 'original' && mode !== 'optimized')) throw new Error('Invalid audio choice');
+        try {
+            return await service.getWaveformPeaks(sessionId, mode);
+        } catch (error) {
+            console.warn('Failed to prepare session waveform', error);
+            throw new Error('Waveform unavailable.');
+        }
+    });
+
     ipc.handle('sessions:delete', async (_event, sessionId: unknown) => {
         if (typeof sessionId !== 'string' || !sessionId.trim()) {
             throw new Error('Invalid session id');
         }
 
-        await service.deleteSession(sessionId);
+        try {
+            await service.deleteSession(sessionId);
+        } catch (error) {
+            console.error('Failed to delete session', { sessionId, error });
+            throw new Error('Failed to delete the session.');
+        }
 
         return true;
     });
@@ -52,7 +73,7 @@ export function registerSessionsController(
 
         if (canceled || filePaths.length === 0) return null;
 
-        return service.createSessionFromImport(filePaths[0]);
+        return prepareForPlayback(await service.createSessionFromImport(filePaths[0]));
     });
 
     ipc.handle('sessions:import-dropped-audio', async (event, filePath: unknown) => {
@@ -65,12 +86,12 @@ export function registerSessionsController(
         }
         if (!(await stat(filePath)).isFile()) throw new Error('Audio import requires a file');
 
-        return service.createSessionFromImport(filePath);
+        return prepareForPlayback(await service.createSessionFromImport(filePath));
     });
 
     ipc.handle('sessions:optimize-audio', async (_event, sessionId: unknown, mode: unknown = 'optimized') => {
         if (typeof sessionId !== 'string' || !sessionId.trim() || (mode !== 'original' && mode !== 'optimized')) throw new Error('Invalid audio choice');
-        return service.optimizeSessionAudio(sessionId, mode);
+        return prepareForPlayback(await service.optimizeSessionAudio(sessionId, mode));
     });
 
     ipc.handle('sessions:set-transcript-duplicate-filter', async (

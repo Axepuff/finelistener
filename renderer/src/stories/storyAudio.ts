@@ -1,37 +1,27 @@
 import demoAudioUrl from '../../../.storybook/public/demo.wav?url';
 
-export const STORY_AUDIO_PATH = '/storybook/demo.wav';
-export const STORY_LONG_AUDIO_PATH = '/storybook/long-demo.wav';
-
-const repeatDemoAudio = async (response: Response): Promise<Response> => {
-    const original = new Uint8Array(await response.arrayBuffer());
-    // The checked-in mono PCM fixture has a 44-byte WAV header and 12 seconds of samples.
+export const createStoryAudio = async (repetitions: number) => {
+    const response = await fetch(demoAudioUrl);
+    if (!response.ok) throw new Error('Failed to load the story audio fixture');
+    const buffer = await response.arrayBuffer();
+    // The checked-in demo has a 44-byte WAV header and 12 seconds of 16 kHz, mono PCM16.
     const headerSize = 44;
-    const samples = original.subarray(headerSize);
-    const audio = new Uint8Array(headerSize + samples.length * 8);
-    audio.set(original.subarray(0, headerSize));
-    for (let offset = headerSize; offset < audio.length; offset += samples.length) audio.set(samples, offset);
-    const header = new DataView(audio.buffer);
-    header.setUint32(4, audio.length - 8, true);
-    header.setUint32(40, audio.length - headerSize, true);
-    return new Response(audio, { headers: { 'Content-Type': 'audio/wav' } });
-};
+    const samples = new Int16Array(buffer, headerSize);
+    const peaksPerPass = Math.min(3000, Math.floor(65_536 / repetitions));
+    const peaks = new Float32Array(peaksPerPass * repetitions);
+    for (let i = 0; i < samples.length; i++) {
+        const bucket = Math.floor(i * peaksPerPass / samples.length);
+        peaks[bucket] = Math.max(peaks[bucket], Math.abs(samples[i]) / 32768);
+    }
+    for (let i = 1; i < repetitions; i++) peaks.copyWithin(i * peaksPerPass, 0, peaksPerPass);
+    const waveform = { duration: samples.length * repetitions / 16000, peaks };
 
-export const installStoryAudioProtocol = (): void => {
-    const browserFetch = globalThis.fetch;
+    if (repetitions === 1) return { url: demoAudioUrl, waveform, dispose: () => {} };
 
-    // Keep the real Electron player while serving only this story-owned virtual path.
-    const storyFetch: typeof fetch = (input, init) => {
-        if (input === `local-file://${STORY_AUDIO_PATH}`) {
-            return browserFetch(demoAudioUrl, init);
-        }
-        if (input === `local-file://${STORY_LONG_AUDIO_PATH}`) {
-            return browserFetch(demoAudioUrl, init).then(repeatDemoAudio);
-        }
-
-        return browserFetch(input, init);
-    };
-
-    globalThis.fetch = storyFetch;
-    import.meta.hot?.dispose(() => { globalThis.fetch = browserFetch; });
+    const header = new DataView(buffer);
+    header.setUint32(4, headerSize - 8 + samples.byteLength * repetitions, true);
+    header.setUint32(40, samples.byteLength * repetitions, true);
+    const sampleBlob = new Blob([samples]);
+    const url = URL.createObjectURL(new Blob([buffer.slice(0, headerSize), ...Array<Blob>(repetitions).fill(sampleBlob)], { type: 'audio/wav' }));
+    return { url, waveform, dispose: () => URL.revokeObjectURL(url) };
 };

@@ -46,7 +46,7 @@ describe('WorkspaceStore', () => {
             store.setSegmentStart(1);
             store.setSegmentEnd(3);
             store.setPlaying(true);
-            store.setPlayerLoading(true);
+            store.setPlaybackDuration(12);
             store.setPlaybackPosition(2);
             store.requestPlaybackTime(2, 'play');
 
@@ -57,7 +57,7 @@ describe('WorkspaceStore', () => {
 
             expect(store.segmentSelection).toBeNull();
             expect(store.isPlaying).toBe(false);
-            expect(store.isPlayerLoading).toBe(false);
+            expect(store.playbackDuration).toBe(0);
             expect(store.playbackPosition).toBe(0);
             expect(store.playbackRequest).toBeNull();
             if (command === 'clear') {

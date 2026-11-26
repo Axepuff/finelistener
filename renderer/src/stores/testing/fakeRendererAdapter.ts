@@ -64,6 +64,8 @@ export const createFakeRendererAdapter = (
         runtimePlatform: 'linux',
         listSessions: () => Promise.resolve([]),
         getSession: unavailable,
+        getPlaybackUrl: (path) => path,
+        getWaveformPeaks: unavailable,
         setActiveSession: () => Promise.resolve(true),
         deleteSession: () => Promise.resolve(true),
         importAudio: () => Promise.resolve(null),

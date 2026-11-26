@@ -1,61 +1,42 @@
-import { PlayerAdapter, type RegionBounds } from '@~/player/src/ui/Player/PlayerAdapter';
+import type { RegionBounds } from '@~/player/src/ui/Player/PlayerAdapter';
+import type { SessionWaveformPeaks } from 'electron/src/types/sessions';
 import WaveSurfer from 'wavesurfer.js';
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
-import Timeline from 'wavesurfer.js/dist/plugins/timeline.esm.js';
+import { PlaybackTimeline } from './PlaybackTimeline';
 
-const LOCAL_FILE_PROTOCOL = 'local-file';
 const DEFAULT_REGION_LENGTH_SECONDS = 0.01;
 
-const buildLocalFileUrl = (filePath: string): string => {
-    if (!filePath) return '';
+export type WaveformStatus = 'loading' | 'ready' | 'waveform-error' | 'audio-error';
 
-    const normalizedPath = filePath.replace(/\\/g, '/');
-    const withLeadingSlash = normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
+interface PlayerCallbacks {
+    onPlayingChange: (playing: boolean) => void;
+    onDuration: (duration: number) => void;
+    onStatus: (status: WaveformStatus) => void;
+    onTimeUpdate: (time: number) => void;
+    onRegionChange: (bounds: Required<RegionBounds>) => void;
+}
 
-    return `${LOCAL_FILE_PROTOCOL}://${encodeURI(withLeadingSlash)}`;
-};
-
-export class WaveSurferAdapter extends PlayerAdapter {
+export class WaveSurferAdapter {
     private readonly wavesurfer: WaveSurfer;
     private readonly regions: RegionsPlugin;
-    private readonly unsubscribeRegionUpdate: () => void;
-    private loadingController: AbortController | null = null;
-    private hasLoadedSource = false;
+    private readonly media = document.createElement('audio');
+    private peaks?: Float32Array;
+    private disposed = false;
     private regionEditing = true;
-    private readonly onPlayingChange: (isPlaying: boolean) => void;
-    private readonly onTimeUpdate: (time: number) => void;
-    private readonly onReadyChange: (isPlaying: boolean) => void;
-    private readonly handlePlay = (): void => {
-        this.onPlayingChange(true);
-    };
-    private readonly handlePause = (): void => {
-        this.onPlayingChange(false);
-    };
-    private readonly handleTimeUpdate = (currentTime: number): void => {
-        this.onTimeUpdate(currentTime);
-    };
 
     constructor(
         containerRef: HTMLDivElement,
-        onPlayingChange: (isPlaying: boolean) => void,
-        setIsLoading: (isPlaying: boolean) => void,
-        onTimeUpdate: (time: number) => void,
-        onRegionChange: (bounds: Required<RegionBounds>) => void,
+        source: { url: string; waveform: Promise<SessionWaveformPeaks> },
+        private readonly callbacks: PlayerCallbacks,
     ) {
-        super();
-        this.onPlayingChange = onPlayingChange;
-        this.onReadyChange = setIsLoading;
-        this.onTimeUpdate = onTimeUpdate;
         const regions = RegionsPlugin.create();
-        const timeline = Timeline.create({
-            height: 20,
-            style: { fontSize: '12px', fontFamily: 'var(--brand-font-family-code)', color: 'var(--brand-color-text-secondary)' },
-            secondaryLabelOpacity: 1,
-            formatTimeCallback: (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`,
-        });
+        const timeline = new PlaybackTimeline();
 
+        this.media.preload = 'metadata';
+        containerRef.append(this.media);
         this.wavesurfer = WaveSurfer.create({
             container: containerRef,
+            media: this.media,
             height: 80,
             waveColor: 'rgba(224, 13, 13, 1)',
             progressColor: 'rgba(194, 72, 15, 1)',
@@ -67,18 +48,31 @@ export class WaveSurferAdapter extends PlayerAdapter {
             plugins: [timeline, regions],
         });
         this.regions = regions;
-        this.unsubscribeRegionUpdate = regions.on('region-update', ({ start, end }) => {
-            onRegionChange({ start, end });
+        regions.on('region-update', ({ start, end }) => {
+            callbacks.onRegionChange({ start, end });
         });
-
-        this.wavesurfer.on('play', this.handlePlay);
-        this.wavesurfer.on('pause', this.handlePause);
-        this.wavesurfer.on('finish', this.handlePause);
-        this.wavesurfer.on('timeupdate', this.handleTimeUpdate);
-        this.wavesurfer.on('interaction', this.handleTimeUpdate);
-        this.wavesurfer.on('seeking', this.handleTimeUpdate);
-
-        this.onPlayingChange(false);
+        this.wavesurfer.on('play', () => callbacks.onPlayingChange(true));
+        this.wavesurfer.on('pause', () => callbacks.onPlayingChange(false));
+        this.wavesurfer.on('finish', () => callbacks.onPlayingChange(false));
+        this.wavesurfer.on('timeupdate', callbacks.onTimeUpdate);
+        this.wavesurfer.on('interaction', callbacks.onTimeUpdate);
+        this.wavesurfer.on('seeking', callbacks.onTimeUpdate);
+        this.media.onloadedmetadata = () => {
+            callbacks.onDuration(this.duration);
+            void this.drawWaveform();
+        };
+        this.media.onerror = () => {
+            console.error('Failed to load playback audio', this.media.error);
+            callbacks.onPlayingChange(false);
+            callbacks.onDuration(0);
+            callbacks.onStatus('audio-error');
+        };
+        this.media.src = source.url;
+        void source.waveform.then(({ peaks }) => {
+            if (this.disposed || this.media.error) return;
+            this.peaks = peaks;
+            return this.drawWaveform();
+        }).catch((error: unknown) => this.reportWaveformError(error));
     }
 
     public get currentTime(): number {
@@ -86,53 +80,38 @@ export class WaveSurferAdapter extends PlayerAdapter {
     }
 
     public get duration(): number {
-        return this.hasLoadedSource ? this.wavesurfer.getDuration() : 0;
+        return Number.isFinite(this.media.duration) ? this.media.duration : 0;
     }
 
     public get isPlaying(): boolean {
         return this.wavesurfer.isPlaying();
     }
 
-    async loadSource(filePath?: string): Promise<void> {
-        this.loadingController?.abort();
-        const controller = new AbortController();
-        this.loadingController = controller;
-        this.hasLoadedSource = false;
-        this.wavesurfer.pause();
-        this.clearRegions();
-        this.onPlayingChange(false);
-        this.onTimeUpdate(0);
-
-        if (!filePath) {
-            this.wavesurfer.empty();
-
-            return;
-        }
-
+    private async drawWaveform(): Promise<void> {
+        if (!this.duration || this.disposed || this.media.error) return;
         try {
-            const response = await fetch(buildLocalFileUrl(filePath), { signal: controller.signal });
-            if (!response.ok) throw new Error('Audio fetch failed');
-            // Large local-protocol responses can fail in Response.blob on Electron.
-            const buffer = await response.arrayBuffer();
-            if (controller.signal.aborted) return;
-            await this.wavesurfer.loadBlob(new Blob([buffer], { type: 'audio/wav' }));
-            if (!controller.signal.aborted) this.hasLoadedSource = true;
+            // A blank envelope makes the timeline interactive as soon as the media header arrives.
+            const peaks = this.peaks;
+            await this.wavesurfer.load(this.media.currentSrc, [peaks ?? [0]], this.duration);
+            if (peaks && !this.disposed && !this.media.error) this.callbacks.onStatus('ready');
         } catch (error: unknown) {
-            if (controller.signal.aborted) return;
-            console.error('Failed to load playback audio', error);
-        } finally {
-            if (!controller.signal.aborted) this.onReadyChange(false);
+            this.reportWaveformError(error);
         }
+    }
+
+    private reportWaveformError(error: unknown): void {
+        if (this.disposed || this.media.error) return;
+        console.error('Failed to load the waveform', error);
+        this.callbacks.onStatus('waveform-error');
     }
 
     async playPause(): Promise<void> {
-        if (this.hasLoadedSource) await this.wavesurfer.playPause();
+        if (this.duration) await this.wavesurfer.playPause();
     }
 
     seekTo(time: number): void {
-        if (!this.hasLoadedSource) return;
+        if (!this.duration) return;
         this.wavesurfer.setTime(time);
-        this.onTimeUpdate(time);
     }
 
     setRegionEditing(enabled: boolean): void {
@@ -193,17 +172,13 @@ export class WaveSurferAdapter extends PlayerAdapter {
     }
 
     destroy(): void {
-        this.loadingController?.abort();
-        this.unsubscribeRegionUpdate();
-        this.wavesurfer.un('play', this.handlePlay);
-        this.wavesurfer.un('pause', this.handlePause);
-        this.wavesurfer.un('finish', this.handlePause);
-        this.wavesurfer.un('timeupdate', this.handleTimeUpdate);
-        this.wavesurfer.un('interaction', this.handleTimeUpdate);
-        this.wavesurfer.un('seeking', this.handleTimeUpdate);
+        this.disposed = true;
+        this.media.onloadedmetadata = null;
+        this.media.onerror = null;
         this.wavesurfer.destroy();
-        this.clearRegions();
-        this.onPlayingChange(false);
-        this.onReadyChange(true);
+        this.media.pause();
+        this.media.removeAttribute('src');
+        this.media.load();
+        this.media.remove();
     }
 }
