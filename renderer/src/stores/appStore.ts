@@ -77,6 +77,7 @@ export class AppStore {
     private speakerStoppingOperationId: number | null = null;
 
     private speakerAnalysisRequestStartedOperationId: number | null = null;
+    private deletingSessionId: string | null = null;
 
     constructor(private readonly adapter: RendererAdapter | null) {
         this.sessions = new SessionsStore(adapter);
@@ -131,9 +132,13 @@ export class AppStore {
         return this.adapter !== null;
     }
 
+    get isPlaybackSuspended(): boolean {
+        return this.operations.kind === 'deleting-session' && this.deletingSessionId === this.workspace.activeSessionId;
+    }
+
     getPlaybackSource() {
         const { activeSessionId, audioMode, audioSourcePath } = this.workspace;
-        if (!this.adapter || !activeSessionId || !audioSourcePath) return null;
+        if (!this.adapter || !activeSessionId || !audioSourcePath || this.isPlaybackSuspended) return null;
 
         return {
             url: this.adapter.getPlaybackUrl(audioSourcePath),
@@ -299,6 +304,12 @@ export class AppStore {
         if (!operation) return commandFailure('Another workspace operation is already running.');
 
         try {
+            this.deletingSessionId = sessionId;
+            // Let the playback reaction detach the media after this MobX action.
+            await Promise.resolve();
+            if (!this.operations.owns(operation) || this.disposed) {
+                return commandFailure('Session deletion is no longer active.');
+            }
             await this.adapter.deleteSession(sessionId);
 
             if (!this.operations.owns(operation) || this.disposed) {
@@ -331,6 +342,7 @@ export class AppStore {
             return commandFailure('Failed to delete the session.');
         } finally {
             runInAction(() => {
+                if (this.operations.owns(operation)) this.deletingSessionId = null;
                 this.operations.finish(operation);
             });
         }

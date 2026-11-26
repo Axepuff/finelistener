@@ -11,11 +11,12 @@ import { registerSpeakerController } from './speakerController';
 import { registerSummaryController } from './summaryController';
 import { registerSummaryModelController } from './summaryModelController';
 import { SessionsService } from '../services/SessionsService';
+import type { PlaybackFiles } from '../services/PlaybackFiles';
 import { RecordingArchive } from '../services/RecordingArchive';
 import { getUiPreferenceValue } from './uiPreferencesController';
 
-export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): () => Promise<void> {
-    const sessionsService = new SessionsService(getUiPreferenceValue('recordingDerivedCacheBudgetBytes'));
+export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null, playbackFiles: PlaybackFiles): () => Promise<void> {
+    const sessionsService = new SessionsService(getUiPreferenceValue('recordingDerivedCacheBudgetBytes'), playbackFiles);
     const recordingArchive = new RecordingArchive({
         sessionsService,
         recoveryQuotaBytes: getUiPreferenceValue('recordingRecoveryQuotaBytes'),

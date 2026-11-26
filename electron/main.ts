@@ -4,6 +4,7 @@ import { pathToFileURL } from 'url';
 import { app, BrowserWindow, shell, screen, protocol, net } from 'electron';
 import { registerIpcHandlers } from './src/controllers/ipc';
 import { cleanupAudioTempDirs } from './src/services/AudioPreprocessor';
+import { PlaybackFiles } from './src/services/PlaybackFiles';
 import { getFileByteRange } from './src/utils/fileByteRange';
 
 let mainWindow: BrowserWindow | null = null;
@@ -108,7 +109,8 @@ app.whenReady()
             });
         });
 
-        stopBackgroundWork = registerIpcHandlers(() => mainWindow);
+        const playbackFiles = new PlaybackFiles();
+        stopBackgroundWork = registerIpcHandlers(() => mainWindow, playbackFiles);
 
         protocol.handle(LOCAL_FILE_PROTOCOL, async (request) => {
             const url = new URL(request.url);
@@ -120,9 +122,11 @@ app.whenReady()
 
             if (host === 'playback') {
                 // The first slash separates the URL authority from the encoded native path.
-                filePath = pathname.slice(1);
-                if (!path.isAbsolute(filePath)) return new Response(null, { status: 400 });
-            } else if (process.platform === 'win32') {
+                const playbackPath = pathname.slice(1);
+                if (!path.isAbsolute(playbackPath)) return new Response(null, { status: 400 });
+                return playbackFiles.serve(path.normalize(playbackPath), request);
+            }
+            if (process.platform === 'win32') {
                 // На Windows восстанавливаем букву диска из host (local-file://c/...) и убираем лишние слэши
                 filePath = `${host ? `${host}:` : ''}${pathname}`.replace(/^\/+/, '');
             } else if (host) {
