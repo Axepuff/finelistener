@@ -18,13 +18,16 @@ const getSummarySourceRevision = (transcript: SessionTranscriptV1): string => cr
     transcript.speakers?.speakers,
 ])).digest('hex');
 
+interface SummaryInput {
+    rows: SummarySourceRow[];
+    inputHash: string;
+    sourceRevision: string;
+}
+
 // Readers must not expose offsets against a different source, even when the normalized inputHash still matches.
-export const getReadableSummary = (transcript: SessionTranscriptV1, preparedInput?: NonNullable<ReturnType<typeof getSummaryInput>>): SessionSummary | undefined => {
-    const summary = transcript.summary;
-    if (!summary) return undefined;
-    const input = preparedInput ?? getSummaryInput(transcript);
-    if (summary.inputHash !== input?.inputHash) return undefined;
-    if (summary.sourceRevision && summary.sourceRevision === input?.sourceRevision) return summary;
+export const getReadableSummary = (summary: SessionSummary | undefined, input: SummaryInput | null): SessionSummary | undefined => {
+    if (!summary || !input || summary.inputHash !== input.inputHash) return undefined;
+    if (summary.sourceRevision && summary.sourceRevision === input.sourceRevision) return summary;
     const { sourceRevision: _revision, ...readable } = summary;
     return { ...readable, ...(summary.reviewedChunks ? { reviewedChunks: summary.reviewedChunks.map((chunk) => {
         const { sourceRefs: _refs, ...paragraph } = chunk;
@@ -32,15 +35,22 @@ export const getReadableSummary = (transcript: SessionTranscriptV1, preparedInpu
     }) } : {}) };
 };
 
-export const getReadableSummaryDraft = (transcript: SessionTranscriptV1, preparedInput?: NonNullable<ReturnType<typeof getSummaryInput>>): SessionSummaryDraft | undefined => {
-    const draft = transcript.summaryDraft;
-    if (!draft) return undefined;
-    const input = preparedInput ?? getSummaryInput(transcript);
-    return input && draft.inputHash === input.inputHash && draft.sourceRevision === input.sourceRevision
+export const getReadableSummaryDraft = (draft: SessionSummaryDraft | undefined, input: SummaryInput | null): SessionSummaryDraft | undefined => {
+    return draft && input && draft.inputHash === input.inputHash && draft.sourceRevision === input.sourceRevision
         && draft.generationVersion === recordingSummaryGenerationVersion && validSummaryDraft(draft, input.rows) ? draft : undefined;
 };
 
-export const getSummaryInput = (transcript: SessionTranscriptV1): { rows: SummarySourceRow[]; inputHash: string; sourceRevision: string } | null => {
+export const withReadableSummaries = (transcript: SessionTranscriptV1): SessionTranscriptV1 => {
+    if (!transcript.summary && !transcript.summaryDraft) return transcript;
+    const input = getSummaryInput(transcript);
+    return {
+        ...transcript,
+        summary: getReadableSummary(transcript.summary, input),
+        summaryDraft: getReadableSummaryDraft(transcript.summaryDraft, input),
+    };
+};
+
+export const getSummaryInput = (transcript: SessionTranscriptV1): SummaryInput | null => {
     if (transcript.sourceRun?.status === 'incomplete') return null;
 
     // Saved segments already reflect the duplicate filter and speaker corrections.
