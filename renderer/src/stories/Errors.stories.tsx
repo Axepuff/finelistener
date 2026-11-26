@@ -111,18 +111,27 @@ export const ComponentFailure: Story = {
     parameters: { errorScenario: 'preparation' },
     play: async ({ canvas, loaded }) => {
         const { adapter, store } = loaded.workspace as StoryWorkspace;
-        const retry = spyOn(adapter, 'prepareSpeakerAssets');
+        const prepare = adapter.prepareSpeakerAssets;
+        const pending = Promise.withResolvers<void>();
+        const retry = spyOn(adapter, 'prepareSpeakerAssets').mockImplementation(async () => {
+            await pending.promise;
+            return prepare();
+        });
         const analyze = spyOn(adapter, 'analyzeSpeakers');
         try {
             const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
             await userEvent.click(settings.getByRole('button', { name: 'Show in log' }));
             await expect(canvas.getByRole('region', { name: 'Process log' })).toHaveTextContent('Synthetic component failure');
             await userEvent.click(canvas.getByRole('button', { name: 'Log' }));
+            await userEvent.click(settings.getByRole('switch', { name: /^Identify speakers/ }));
+            await userEvent.click(canvas.getByRole('radio', { name: 'Summary' }));
             await userEvent.click(settings.getByRole('button', { name: 'Retry download' }));
+            await expect(await settings.findByRole('button', { name: 'Skip speakers' })).toBeEnabled();
+            pending.resolve();
             await waitFor(() => expect(store.speakers.componentReady).toBe(true));
             await expect(retry).toHaveBeenCalledOnce();
             await expect(analyze).not.toHaveBeenCalled();
-        } finally { retry.mockRestore(); analyze.mockRestore(); }
+        } finally { pending.resolve(); retry.mockRestore(); analyze.mockRestore(); }
     },
 };
 export const SkipAfterComponentFailure: Story = {
@@ -135,7 +144,7 @@ export const SkipAfterComponentFailure: Story = {
         await expect(store.transcription.plainText).toBe(transcript);
         await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
         await userEvent.click(canvas.getByRole('button', { name: 'Speaker settings' }));
-        await expect(within(canvasElement.ownerDocument.body).getByRole('button', { name: 'Analyze speakers' })).toBeEnabled();
+        await expect(await within(canvasElement.ownerDocument.body).findByRole('button', { name: 'Analyze speakers' })).toBeEnabled();
     },
 };
 

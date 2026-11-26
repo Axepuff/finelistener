@@ -1,6 +1,15 @@
 import { expect, it } from 'vitest';
 import { ProgressEstimate } from './progressEstimate';
 
+it('estimates regular progress even when updates arrive less often than the stale timeout', () => {
+    const estimate = new ProgressEstimate();
+    estimate.start(0, 0);
+    estimate.update(0.01, 20_000);
+    estimate.update(0.02, 40_000);
+    expect(estimate.label(40_000)).toBe('about 33 min left');
+    expect(estimate.label(59_000)).toBeNull();
+});
+
 it('rounds observed throughput, suppresses early and stalled estimates, and samples afresh after a stall', () => {
     const estimate = new ProgressEstimate();
     estimate.start(0, 0);

@@ -59,7 +59,7 @@ export const CancelDownload: Story = {
         await expect(settings.getByText('Downloading… 38%')).toBeVisible();
         await expect(settings.getByRole('radio', { name: 'Small' })).toBeDisabled();
         await expect(settings.getByRole('button', { name: 'Transcribe with Large' })).toBeDisabled();
-        await expect(settings.getByText('The selected model is downloading.')).toBeVisible();
+        await expect(settings.getByText('Large can transcribe once it is downloaded. You can start now with Base or wait.')).toBeVisible();
         await userEvent.click(settings.getByRole('button', { name: 'Cancel download' }));
         await waitFor(() => expect(settings.getByRole('button', { name: 'Download Large' })).toBeEnabled());
         await expect(settings.queryByRole('alert')).not.toBeInTheDocument();

@@ -43,7 +43,7 @@ const clearSessionBeforeStart = (previous: RecordingSessionState): RecordingSess
     recordingError: null,
     recordingLevel: null,
     sourceLevels: {},
-    sourceSilenceSinceMs: {},
+    lastSourceSignalMs: {},
     recordingDurationMs: 0,
     recordingBytesWritten: null,
     recordingStartAt: null,
@@ -55,12 +55,15 @@ const applyRecordingState = (previous: RecordingSessionState, state: RecordingSt
 
     if (state === 'recording' && !previous.recordingStartAt) {
         next.recordingStartAt = Date.now();
+        // A live capture helper may emit no samples at all while its source is silent.
+        const now = performance.now();
+        next.lastSourceSignalMs = Object.fromEntries(previous.recordingSources.map((source) => [source, now]));
     }
 
     if (state !== 'recording') {
         next.recordingStartAt = null;
         next.lastProgressAt = null;
-        next.sourceSilenceSinceMs = {};
+        next.lastSourceSignalMs = {};
     }
 
     return next;
@@ -78,7 +81,7 @@ const applyRecordingProgress = (
         recordingStartAt: previous.recordingState === 'recording' ? lastProgressAt - recordingDurationMs : previous.recordingStartAt,
         sourceLevels: Object.fromEntries(Object.entries(previous.sourceLevels).filter(([source]) =>
             !progress.sourceFailures?.some((failure) => failure.source === source))),
-        sourceSilenceSinceMs: Object.fromEntries(Object.entries(previous.sourceSilenceSinceMs).filter(([source]) =>
+        lastSourceSignalMs: Object.fromEntries(Object.entries(previous.lastSourceSignalMs).filter(([source]) =>
             !progress.sourceFailures?.some((failure) => failure.source === source))),
         recordingBytesWritten: typeof progress.bytesWritten === 'number' ? progress.bytesWritten : null,
         lastProgressAt,
@@ -107,6 +110,8 @@ const applyFallbackDuration = (previous: RecordingSessionState): RecordingSessio
 
 export class RecordingSessionStore {
     private stateValue: RecordingSessionState = initialSessionState;
+
+    private levelClockMs = 0;
 
     private activeOperation: ForegroundOperation | null = null;
 
@@ -142,6 +147,14 @@ export class RecordingSessionStore {
 
     get state(): Readonly<RecordingSessionState> {
         return this.stateValue;
+    }
+
+    get silentSources(): RecordingSourceKind[] {
+        const { recordingSources, lastSourceSignalMs } = this.stateValue;
+        return recordingSources.filter((source) => {
+            const lastSignal = lastSourceSignalMs[source];
+            return lastSignal !== undefined && this.levelClockMs - lastSignal >= 30_000;
+        });
     }
 
     initialize(): void {
@@ -338,10 +351,10 @@ export class RecordingSessionStore {
             const result = completedResult ?? await api.stopSystemRecording();
 
             captureStopped = true;
-            this.dependencies.logService.append('Recording finished.');
             if (!this.dependencies.operations.owns(operation) || this.disposed) {
                 return commandFailure('Recording was cancelled.');
             }
+            this.dependencies.logService.append('Recording finished.');
             const session = await api.getSession(result.sessionId);
 
             if (!this.dependencies.operations.owns(operation) || this.disposed) {
@@ -356,9 +369,12 @@ export class RecordingSessionStore {
 
             return commandSuccess(session);
         } catch (error: unknown) {
+            if (!this.dependencies.operations.owns(operation) || this.disposed) {
+                return commandFailure('Recording was cancelled.');
+            }
             const message = getErrorMessage(error);
 
-            captureStopped = this.stateValue.recordingState === 'idle';
+            captureStopped ||= this.stateValue.recordingState === 'idle';
 
             console.error('Failed to stop recording', error);
             runInAction(() => {
@@ -406,13 +422,13 @@ export class RecordingSessionStore {
     }
 
     private handleRecordingState(state: RecordingState): void {
-        this.stateValue = applyRecordingState(this.stateValue, state);
         if (this.pendingStart) this.pendingStart.idleReceived = state === 'idle';
 
         if (state !== 'idle' && !this.activeOperation && !this.dependencies.operations.isBusy) {
             this.activeOperation = this.dependencies.operations.begin('recording');
             this.stateValue = { ...this.stateValue, recordingSources: this.selectedSources() };
         }
+        this.stateValue = applyRecordingState(this.stateValue, state);
 
         // Start replies carry actionable failures even when the service has already emitted idle.
         if (state === 'idle' && !this.pendingStart && !this.stateValue.isProcessingRecording && this.activeOperation) {
@@ -422,6 +438,7 @@ export class RecordingSessionStore {
     }
 
     private handleRecordingProgress(progress: RecordingProgress): void {
+        this.levelClockMs = performance.now();
         this.stateValue = applyRecordingProgress(this.stateValue, progress);
     }
 
@@ -437,15 +454,13 @@ export class RecordingSessionStore {
         const recordingSources = level.source && !this.stateValue.recordingSources.includes(level.source) ?
             [...this.stateValue.recordingSources, level.source] : this.stateValue.recordingSources;
         const source = level.source ?? (platform === 'darwin' ? 'system' : undefined);
-        const sourceSilenceSinceMs = { ...this.stateValue.sourceSilenceSinceMs };
+        const lastSourceSignalMs = { ...this.stateValue.lastSourceSignalMs };
         if (source && this.stateValue.recordingState === 'recording') {
-            if (level.peak <= silenceThreshold && level.rms <= silenceThreshold) {
-                sourceSilenceSinceMs[source] ??= this.stateValue.recordingDurationMs;
-            } else {
-                delete sourceSilenceSinceMs[source];
+            if (level.peak > silenceThreshold || level.rms > silenceThreshold || lastSourceSignalMs[source] === undefined) {
+                lastSourceSignalMs[source] = performance.now();
             }
         }
-        this.stateValue = { ...this.stateValue, recordingLevel: combinedLevel, sourceLevels, recordingSources, sourceSilenceSinceMs };
+        this.stateValue = { ...this.stateValue, recordingLevel: combinedLevel, sourceLevels, recordingSources, lastSourceSignalMs };
     }
 
     private handleRecordingError(payload: { message: string }): void {
@@ -454,6 +469,7 @@ export class RecordingSessionStore {
     }
 
     private updateFallbackDuration(): void {
+        if (this.stateValue.recordingState === 'recording') this.levelClockMs = performance.now();
         this.stateValue = applyFallbackDuration(this.stateValue);
     }
 }
