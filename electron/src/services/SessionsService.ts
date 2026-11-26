@@ -16,6 +16,7 @@ import type {
 } from '../types/sessions';
 import { loadWaveformPeaks, readWavDurationMs } from './waveformPeaks';
 import { AudioPreprocessor } from './AudioPreprocessor';
+import { PlaybackFiles } from './PlaybackFiles';
 import type { RecordingResult } from './RecordingService';
 import { deriveSourceTranscript } from './transcriptDuplicateFilter';
 import { deriveSpeakerTranscript, getReadableSummary, getReadableSummaryDraft, getSummaryInput, materializeRecognitionTranscript } from './sessionTranscript';
@@ -147,7 +148,10 @@ export class SessionsService {
         }
     }
 
-    constructor(private readonly derivedCacheBudgetBytes = 1024 * 1024 * 1024) {}
+    constructor(
+        private readonly derivedCacheBudgetBytes = 1024 * 1024 * 1024,
+        private readonly playbackFiles = new PlaybackFiles(),
+    ) {}
 
     public getSessionsRootDir(): string {
         return path.join(app.getPath('userData'), 'sessions');
@@ -189,8 +193,10 @@ export class SessionsService {
         await this.withTranscriptWrite(sessionId, async () => {
             this.deletingSessions.add(sessionDir);
             try {
-                await this.cancelWaveforms(path.basename(sessionDir));
-                await fs.rm(sessionDir, { recursive: true, force: true });
+                await this.playbackFiles.withFilesReleased(sessionDir, async () => {
+                    await this.cancelWaveforms(path.basename(sessionDir));
+                    await fs.rm(sessionDir, { recursive: true, force: true });
+                });
             } finally { this.deletingSessions.delete(sessionDir); }
         });
     }

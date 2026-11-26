@@ -494,7 +494,11 @@ describe('AppStore', () => {
         })));
         const activeSession = createSession({ transcript: sourceTranscript, hasTranscript: true });
         const fake = createFakeRendererAdapter({
-            deleteSession: () => deletion.promise,
+            deleteSession: () => {
+                expect(store.getPlaybackSource()).toBeNull();
+                return deletion.promise;
+            },
+            getWaveformPeaks: () => Promise.resolve({ peaks: new Float32Array(1), duration: 1 }),
             setTranscriptDuplicateFilter,
         });
         const store = new AppStore(fake.adapter);
@@ -502,6 +506,7 @@ describe('AppStore', () => {
 
         store.workspace.replaceWorkspace(activeSession);
         store.transcription.replaceSavedTranscript(sourceTranscript);
+        expect(store.getPlaybackSource()).not.toBeNull();
         const deletePromise = store.deleteSession(activeSession.id);
 
         expect(store.operations.kind).toBe('deleting-session');

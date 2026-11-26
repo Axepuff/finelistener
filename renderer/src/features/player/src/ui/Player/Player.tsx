@@ -19,39 +19,72 @@ export const Player: React.FC = observer(() => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const adapterRef = useRef<WaveSurferAdapter | null>(null);
     const [waveformStatus, setWaveformStatus] = useState<WaveformStatus>('loading');
-    const { audioSourcePath, activeSession, audioMode, playbackDuration } = workspace;
+    const { audioSourcePath, playbackDuration } = workspace;
     const segmentSelection = workspace.segmentSelection;
     const { operationBlockReason } = store;
+    const hasPlaybackSource = Boolean(audioSourcePath) && !store.isPlaybackSuspended;
 
     useEffect(() => {
-        workspace.clearSegment();
-        workspace.setPlaybackPosition(0);
-        setWaveformStatus('loading');
-        const source = store.getPlaybackSource();
-        if (!source) return;
+        let releasePlayback: (() => void) | undefined;
+        const disposePlayback = reaction(
+            () => ({
+                session: workspace.activeSession,
+                path: workspace.audioSourcePath,
+                mode: workspace.audioMode,
+                suspended: store.isPlaybackSuspended,
+            }),
+            (sourceState, previous) => {
+                releasePlayback?.();
+                releasePlayback = undefined;
+                const source = store.getPlaybackSource();
+                if (!source) return;
 
-        const adapter = new WaveSurferAdapter(containerRef.current!, source, {
-            onPlayingChange: (playing) => workspace.setPlaying(playing),
-            onDuration: (duration) => workspace.setPlaybackDuration(duration),
-            onStatus: setWaveformStatus,
-            onTimeUpdate: (time) => workspace.setPlaybackPosition(time),
-            onRegionChange: ({ start, end }) => {
-                workspace.setSegmentStart(start);
-                workspace.setSegmentEnd(end);
+                const restoring = previous?.suspended && previous.session === sourceState.session
+                    && previous.path === sourceState.path && previous.mode === sourceState.mode;
+                let resumeFrom = restoring ? { position: workspace.playbackPosition, segment: workspace.segmentSelection } : undefined;
+                if (resumeFrom) {
+                    workspace.clearPlaybackRequest();
+                } else {
+                    workspace.clearSegment();
+                    workspace.setPlaybackPosition(0);
+                }
+                setWaveformStatus('loading');
+                const adapter = new WaveSurferAdapter(containerRef.current!, source, {
+                    onPlayingChange: (playing) => workspace.setPlaying(playing),
+                    onDuration: (duration) => {
+                        if (duration > 0 && resumeFrom) {
+                            adapter.seekTo(resumeFrom.position);
+                            if (resumeFrom.segment) adapter.setRegion(resumeFrom.segment);
+                            resumeFrom = undefined;
+                        }
+                        workspace.setPlaybackDuration(duration);
+                    },
+                    onStatus: setWaveformStatus,
+                    onTimeUpdate: (time) => workspace.setPlaybackPosition(time),
+                    onRegionChange: ({ start, end }) => {
+                        workspace.setSegmentStart(start);
+                        workspace.setSegmentEnd(end);
+                    },
+                });
+
+                adapterRef.current = adapter;
+                const disposeRegionLock = reaction(() => store.operations.isBusy, (locked) => adapter.setRegionEditing(!locked), { fireImmediately: true });
+                releasePlayback = () => {
+                    disposeRegionLock();
+                    adapter.destroy();
+                    adapterRef.current = null;
+                    workspace.setPlaying(false);
+                    workspace.setPlaybackDuration(0);
+                };
             },
-        });
-
-        adapterRef.current = adapter;
-        const disposeRegionLock = reaction(() => store.operations.isBusy, (locked) => adapter.setRegionEditing(!locked), { fireImmediately: true });
+            { fireImmediately: true },
+        );
 
         return () => {
-            disposeRegionLock();
-            adapter.destroy();
-            adapterRef.current = null;
-            workspace.setPlaying(false);
-            workspace.setPlaybackDuration(0);
+            disposePlayback();
+            releasePlayback?.();
         };
-    }, [activeSession, audioSourcePath, audioMode, store, workspace]);
+    }, [store, workspace]);
 
     useEffect(() => reaction(
         () => workspace.playbackDuration > 0 ? workspace.playbackRequest : null,
@@ -186,9 +219,9 @@ export const Player: React.FC = observer(() => {
             {operationBlockReason && store.operations.kind !== 'optimizing-audio' ? (
                 <Text size="xs" c="dimmed" ta="right" px={16}>Segment and audio version locked. {operationBlockReason}</Text>
             ) : null}
-            <Box className="player-strip__waveform" aria-busy={Boolean(audioSourcePath && waveformStatus === 'loading')}>
-                {audioSourcePath && waveformStatus === 'loading' ? <Loader size="sm" className="player-strip__loader" aria-label="Loading waveform" /> : null}
-                {audioSourcePath && (waveformStatus === 'audio-error' || waveformStatus === 'waveform-error') ? (
+            <Box className="player-strip__waveform" aria-busy={hasPlaybackSource && waveformStatus === 'loading'}>
+                {hasPlaybackSource && waveformStatus === 'loading' ? <Loader size="sm" className="player-strip__loader" aria-label="Loading waveform" /> : null}
+                {hasPlaybackSource && (waveformStatus === 'audio-error' || waveformStatus === 'waveform-error') ? (
                     <Text size="xs" c="dimmed" className="player-strip__loader" role="status">{waveformStatus === 'audio-error' ? 'Audio unavailable.' : 'Waveform unavailable.'}</Text>
                 ) : null}
                 <div ref={containerRef} />

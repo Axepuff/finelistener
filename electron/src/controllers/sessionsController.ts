@@ -50,7 +50,12 @@ export function registerSessionsController(
             throw new Error('Invalid session id');
         }
 
-        await service.deleteSession(sessionId);
+        try {
+            await service.deleteSession(sessionId);
+        } catch (error) {
+            console.error('Failed to delete session', { sessionId, error });
+            throw new Error('Failed to delete the session.');
+        }
 
         return true;
     });
