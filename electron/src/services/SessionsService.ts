@@ -15,7 +15,7 @@ import type {
 import { AudioPreprocessor } from './AudioPreprocessor';
 import type { RecordingResult } from './RecordingService';
 import { deriveSourceTranscript } from './transcriptDuplicateFilter';
-import { deriveSpeakerTranscript, getReadableSummary, getReadableSummaryDraft, getSummaryInput, materializeRecognitionTranscript } from './sessionTranscript';
+import { deriveSpeakerTranscript, getReadableSummary, getReadableSummaryDraft, getSummaryInput, materializeRecognitionTranscript, withReadableSummaries } from './sessionTranscript';
 
 const SESSION_FILE_NAME = 'session.json';
 const SESSION_VERSION = 1 as const;
@@ -290,9 +290,7 @@ export class SessionsService {
             const transcriptPath = path.join(sessionDir, resolvedSession.transcript.path);
 
             try {
-                transcript = await readJsonFile<SessionTranscriptV1>(transcriptPath);
-                if (transcript.summary) transcript.summary = getReadableSummary(transcript);
-                if (transcript.summaryDraft) transcript.summaryDraft = getReadableSummaryDraft(transcript);
+                transcript = withReadableSummaries(await readJsonFile<SessionTranscriptV1>(transcriptPath));
             } catch {
                 transcript = undefined;
             }
@@ -592,11 +590,11 @@ export class SessionsService {
         const { transcript, session } = await this.readStoredTranscript(sessionId);
         const input = getSummaryInput(transcript);
         if (!input) throw new Error('A complete transcript with speech is required.');
-        const saved = getReadableSummary(transcript);
+        const saved = getReadableSummary(transcript.summary, input);
         const setting = transcript.sourceRun?.settings.language ?? session.transcription?.language;
         const languageHint = typeof setting === 'string' ? setting.trim() : '';
         return { ...input, saved, savedSourceMatches: !transcript.summary?.sourceRevision || transcript.summary.sourceRevision === input.sourceRevision,
-            draft: getReadableSummaryDraft(transcript), ...(languageHint && languageHint.toLowerCase() !== 'auto' ? { languageHint } : {}) };
+            draft: getReadableSummaryDraft(transcript.summaryDraft, input), ...(languageHint && languageHint.toLowerCase() !== 'auto' ? { languageHint } : {}) };
     }
 
     public async saveSummary(sessionId: string, summary: SessionSummary, signal: AbortSignal, activeGeneration?: number): Promise<SessionSummary> {
@@ -610,9 +608,9 @@ export class SessionsService {
             }
             // This rename commits the summary. Cancellation after it must return the saved result.
             this.assertSummaryOwner(sessionId, activeGeneration);
-            const readable = getReadableSummary({ ...transcript, summary })!;
+            const readable = getReadableSummary(summary, input)!;
             await writeJsonFile(transcriptPath, { ...transcript, summary: readable,
-                summaryDraft: summary.brief ? undefined : getReadableSummaryDraft(transcript) }, signal,
+                summaryDraft: summary.brief ? undefined : getReadableSummaryDraft(transcript.summaryDraft, input) }, signal,
                 () => this.assertSummaryOwner(sessionId, activeGeneration));
             return readable;
         });
@@ -628,7 +626,7 @@ export class SessionsService {
             if (!input || draft.inputHash !== input.inputHash || draft.sourceRevision !== input.sourceRevision) {
                 throw new Error('The transcript changed during summarization.');
             }
-            const readable = getReadableSummaryDraft({ ...transcript, summaryDraft: draft });
+            const readable = getReadableSummaryDraft(draft, input);
             if (!readable) throw new Error('SUMMARY_DRAFT_INCOMPATIBLE');
             this.assertSummaryOwner(sessionId, activeGeneration);
             await writeJsonFile(transcriptPath, { ...transcript, summaryDraft: readable }, signal,
@@ -710,7 +708,7 @@ export class SessionsService {
 
         const transcriptPath = path.join(sessionDir, TRANSCRIPT_FILE_RELATIVE_PATH);
 
-        await writeJsonFile(transcriptPath, { ...transcript, summary: getReadableSummary(transcript), summaryDraft: getReadableSummaryDraft(transcript) }, signal);
+        await writeJsonFile(transcriptPath, withReadableSummaries(transcript), signal);
         await writeJsonFile(sessionFilePath, session);
     }
 

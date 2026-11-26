@@ -1,6 +1,6 @@
 import type { SessionDetails, SessionRawSpan, SessionSpeakerAssignment } from 'electron/src/types/sessions';
-import { defaultRecordingSummaryOptions, isRecordingSummaryOptions, recordingSummaryGenerationVersion, sameRecordingSummaryOptions, type RecordingSummaryOptions } from '../../../electron/src/types/summaryOptions';
-import { SUMMARY_MODEL_ARTIFACT } from '../../../electron/src/types/summaryModel';
+import { defaultRecordingSummaryOptions, isRecordingSummaryOptions, sameRecordingSummaryOptions, type RecordingSummaryOptions } from '../../../electron/src/types/summaryOptions';
+import { supportsSummaryDraft } from '../../../electron/src/types/summaryModel';
 import type { AnalyzeSpeakersOptions } from 'electron/src/types/transcription';
 import type { UiPreferenceKey, UiPreferenceValueMap } from 'electron/src/types/uiPreferences';
 import type { WhisperModelName } from 'electron/src/types/whisper';
@@ -789,9 +789,7 @@ export class AppStore {
         const transcript = this.transcription.savedTranscript;
         const draft = transcript?.summaryDraft;
         // The main-process reader validates exact source hashes, cursor coverage and provenance.
-        if (this.disposed || !this.canSummarize || !draft || draft.model !== SUMMARY_MODEL_ARTIFACT.name
-            || draft.generationVersion !== recordingSummaryGenerationVersion || draft.progress.version !== 1
-            || !isRecordingSummaryOptions(draft.options)) return undefined;
+        if (this.disposed || !this.canSummarize || !draft || !supportsSummaryDraft(draft)) return undefined;
         const options = Object.freeze({ ...draft.options });
         const operationRevision = this.operations.revision;
         return { options, onContinue: () => {

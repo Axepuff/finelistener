@@ -193,8 +193,10 @@ export interface SummaryChunkCursor {
     endChar: number;
 }
 
+export const summaryDraftProgressVersion = 1;
+
 export interface SummaryDraftProgress {
-    version: 1;
+    version: typeof summaryDraftProgressVersion;
     phase: 'chunks' | 'brief';
     // One source cursor per accepted chunk; the final endChar is the next unread position.
     cursors: SummaryChunkCursor[];

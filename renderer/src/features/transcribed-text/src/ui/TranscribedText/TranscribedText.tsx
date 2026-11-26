@@ -274,6 +274,7 @@ export const TranscribedText: React.FC<Props> = observer(({ summaryContinuation 
                                 </Text>
                             ) : (
                                 <TranscribedTextContent
+                                    key={activeSessionId}
                                     reading={reading ? { paragraphs: reading, labels: speakerLabels } : undefined}
                                     speakerHeader={speakerControls}
                                     showRegions={showRegions}

@@ -1,3 +1,4 @@
+import { supportsSummaryDraft } from '../types/summaryModel';
 import { reportActivityFailure } from './activityLog';
 import type { BrowserWindow, IpcMain } from 'electron';
 import { generateLocalSummary, SUMMARY_MODEL } from '../services/localSummary';
@@ -31,7 +32,7 @@ export function registerSummaryController(
                 }
             };
             const resume = draft?.inputHash === inputHash && draft.sourceRevision === sourceRevision
-                && draft.generationVersion === recordingSummaryGenerationVersion && draft.progress.version === 1 && draft.model === SUMMARY_MODEL && sameRecordingSummaryOptions(draft.options, options) ? draft : undefined;
+                && supportsSummaryDraft(draft, SUMMARY_MODEL) && sameRecordingSummaryOptions(draft.options, options) ? draft : undefined;
             const canRetryBrief = !resume && savedSourceMatches !== false && saved?.generationVersion === recordingSummaryGenerationVersion
                 && saved.inputHash === inputHash && saved.model === SUMMARY_MODEL && !saved.brief
                 && (!saved.sourceRevision || saved.sourceRevision === sourceRevision)

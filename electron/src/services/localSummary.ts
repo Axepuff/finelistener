@@ -1,3 +1,4 @@
+import { SUMMARY_MODEL_ARTIFACT } from '../types/summaryModel';
 import { randomUUID } from 'crypto';
 import { existsSync } from 'fs';
 import fs from 'fs/promises';
@@ -9,7 +10,7 @@ import { generateRecordingNotes, summaryContext } from './recordingNotes';
 import type { ReviewedSummaryChunk, SummarySourceRow, SummaryDraftProgress } from '../types/sessions';
 import type { RecordingSummaryOptions } from '../types/summaryOptions';
 
-export const SUMMARY_MODEL = 'Qwen3-4B-Instruct-2507 Q4_K_M';
+export const SUMMARY_MODEL = SUMMARY_MODEL_ARTIFACT.name;
 
 const runtimeBinary = (): string => {
     const windows = process.platform === 'win32';

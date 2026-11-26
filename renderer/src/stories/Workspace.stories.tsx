@@ -492,7 +492,12 @@ export const SpeakerReading: Story = {
             await userEvent.click(word);
             await expect(play).toHaveBeenCalled();
             audio.currentTime = 8;
-            await userEvent.click(word);
+            word.focus();
+            await userEvent.keyboard('{Enter}');
+            await expect(audio.currentTime).toBeGreaterThanOrEqual(5.69);
+            await expect(audio.currentTime).toBeLessThan(6.3);
+            audio.currentTime = 8;
+            await userEvent.keyboard(' ');
             await expect(audio.currentTime).toBeGreaterThanOrEqual(5.69);
             await expect(audio.currentTime).toBeLessThan(6.3);
             await userEvent.click(canvas.getByRole('textbox', { name: 'Search transcript' }));

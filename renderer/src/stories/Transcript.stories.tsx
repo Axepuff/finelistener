@@ -6,6 +6,7 @@ import { createStoryWorkspace, type StoryWorkspace, type WorkspaceScenario } fro
 import { StoryWorkspaceProvider } from './StoryWorkspaceProvider';
 
 const partialTimingSpeech = 'First. Second missing timed. Third starts here.';
+const longReadingTail = `Before ${'long'.repeat(18)} and after ${'wide'.repeat(18)} Closing beacon finishes the conversation.`;
 
 const meta = {
     title: 'Workspace/Transcript views',
@@ -23,6 +24,26 @@ const meta = {
                 ],
             }] });
             workspace.store.transcription.replaceSavedTranscript({ version: 1, segments });
+        }
+        if (parameters.longReading) {
+            const speakers = workspace.store.transcription.savedTranscript?.speakers;
+            if (!speakers) throw new Error('The speaker fixture is missing.');
+            const segments = Array.from({ length: 120 }, (_, index) => {
+                const text = index === 0 ? 'Opening beacon starts this conversation.' :
+                    index === 119 ? longReadingTail :
+                    `Section ${index} contains another sentence in the recorded conversation.`;
+                const startSec = index / 10;
+                const endSec = (index + 1) / 10;
+                const tokens = [...text.matchAll(/\w+/g)];
+                return {
+                    text, startSec, endSec, speakerId: 'alice',
+                    words: tokens.map((token, i) => ({
+                        text: token[0], startChar: token.index, endChar: token.index + token[0].length,
+                        startSec: startSec + i / (10 * tokens.length), endSec: startSec + (i + 1) / (10 * tokens.length),
+                    })).filter(word => word.text !== 'finishes'),
+                };
+            });
+            workspace.store.transcription.replaceSavedTranscript({ version: 1, segments, speakers });
         }
         if (parameters.manySpeakers) {
             const transcript = workspace.store.transcription.savedTranscript;
@@ -83,6 +104,92 @@ export const ExportToObsidian: Story = {
         } finally {
             open.mockRestore();
         }
+    },
+};
+
+export const LongSpeakerReading: Story = {
+    parameters: { longReading: true },
+    render: () => <div style={{ width: 1024 }}><Home /></div>,
+    play: async ({ canvas, canvasElement }) => {
+        await userEvent.click(canvas.getByRole('radio', { name: 'Speakers' }));
+        const opening = canvas.getByRole('button', { name: 'Opening · Alice' });
+        const first = opening.closest('p')!;
+        const last = first.parentElement!.querySelector<HTMLParagraphElement>('p:last-child')!;
+        const document = canvasElement.ownerDocument;
+        const selection = document.getSelection()!;
+        const frame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+
+        const search = canvas.getByRole('textbox', { name: 'Search transcript' });
+        await userEvent.type(search, 'beacon');
+        await expect(canvas.getByRole('status')).toHaveTextContent('1 of 2');
+        await userEvent.keyboard('{Enter}');
+        await expect(canvas.getByRole('status')).toHaveTextContent('2 of 2');
+        await waitFor(async () => {
+            const word = within(last).getByRole('button', { name: 'beacon · Alice' });
+            await expect(word.querySelector('mark')).toHaveAttribute('data-active', 'true');
+            const rect = word.getBoundingClientRect();
+            await expect(word.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))).toBe(true);
+        });
+        await userEvent.click(canvas.getByRole('button', { name: 'Previous search result' }));
+        await waitFor(() => expect(within(first).getByRole('button', { name: 'beacon · Alice' }).querySelector('mark')).toHaveAttribute('data-active', 'true'));
+        await userEvent.click(canvas.getByRole('button', { name: 'Clear search' }));
+
+        // Dispatch in the same frame as the scrollbar jump, before observer delivery.
+        const clickAfterJump = async (text: string, start = 0, length = text.length) => {
+            first.scrollIntoView({ block: 'start' });
+            await frame();
+            await frame();
+            const cursor = document.createTreeWalker(last, NodeFilter.SHOW_TEXT);
+            let node = cursor.nextNode();
+            while (node && !node.textContent?.includes(text)) node = cursor.nextNode();
+            if (!node?.textContent) throw new Error('The end of the transcript is missing.');
+            const offset = node.textContent.indexOf(text) + start;
+            const range = document.createRange();
+            range.setStart(node, offset);
+            range.setEnd(node, offset + length);
+            last.scrollIntoView({ block: 'end' });
+            const rect = range.getBoundingClientRect();
+            const point = { clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2, bubbles: true };
+            const target = document.elementFromPoint(point.clientX, point.clientY)!;
+            target.dispatchEvent(new PointerEvent('pointerdown', point));
+            target.dispatchEvent(new PointerEvent('pointerup', point));
+            target.dispatchEvent(new MouseEvent('click', { ...point, detail: 1 }));
+            await frame();
+        };
+        await clickAfterJump('Closing beacon', 'Closing'.length, 1);
+        await expect(last.querySelector('[aria-current="true"]')).toBeNull();
+        await clickAfterJump('finishes');
+        await expect(last.querySelector('[aria-current="true"]')).toBeNull();
+        await clickAfterJump('Closing');
+        await expect(within(last).getByRole('button', { name: 'Closing \u00b7 Alice' })).toHaveAttribute('aria-current', 'true');
+        first.scrollIntoView({ block: 'start' });
+        await frame();
+        await frame();
+        try {
+            selection.setBaseAndExtent(opening.firstChild!, 0, last, last.childNodes.length);
+            const selected = selection.toString();
+            await expect(selected).toContain('Opening beacon');
+            await expect(selected).toContain('Section 60');
+            await expect(selected).toContain('Closing beacon finishes the conversation.');
+            last.scrollIntoView({ block: 'end' });
+            await frame();
+            await frame();
+            await expect(selection.toString()).toBe(selected);
+        } finally {
+            selection.removeAllRanges();
+        }
+
+        first.scrollIntoView({ block: 'start' });
+        await frame();
+        await frame();
+        // Keyboard users can enter an offscreen paragraph and continue from its first timed word.
+        last.querySelector<HTMLElement>('[tabindex="0"]')!.focus();
+        const entry = document.activeElement;
+        await expect(last.contains(entry)).toBe(true);
+        await expect(entry).toHaveRole('button');
+        await userEvent.keyboard('{ArrowRight}');
+        await expect(last.contains(document.activeElement)).toBe(true);
+        await expect(document.activeElement).not.toBe(entry);
     },
 };
 

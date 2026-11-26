@@ -3,7 +3,7 @@ import type { TranscribeOpts, TranscriptionProgressEvent, TranscriptionTextEvent
 import type { WhisperModelName } from 'electron/src/types/whisper';
 import type { ActivityLogStore } from './activityLogStore';
 import { ProgressEstimate } from './progressEstimate';
-import { makeAutoObservable, runInAction } from 'mobx';
+import { makeAutoObservable, observableRef, runInAction } from 'mobx';
 import type { TranscriptionRunOutcome } from 'renderer/src/features/transcribe-state/src/model/transcriptionWorkflow';
 import type { RendererAdapter } from './rendererAdapter';
 import { transcriptToPlainText, parseTranscript, transcriptToHtml, transcriptToText } from './transcriptFormat';
@@ -87,8 +87,10 @@ export class TranscriptionStore {
     private duplicateFilterPreferenceRequestId = 0;
 
     constructor(private readonly adapter: RendererAdapter | null, private readonly activityLog: ActivityLogStore | null = null) {
-        makeAutoObservable<this, 'adapter' | 'activityLog' | 'runIsCurrent' | 'unsubscribeFunctions' | 'stopCompletion' | 'stoppingRunId'>(this, {
+        makeAutoObservable<this, 'adapter' | 'activityLog' | 'savedTranscriptValue' | 'runIsCurrent' | 'unsubscribeFunctions' | 'stopCompletion' | 'stoppingRunId'>(this, {
             adapter: false, activityLog: false,
+            // Saved transcripts are replaced as a whole, including speaker and summary edits.
+            savedTranscriptValue: observableRef,
             stopCompletion: false,
             stoppingRunId: false,
             runIsCurrent: false,
