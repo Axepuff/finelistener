@@ -27,19 +27,38 @@ export const Player: React.FC = observer(() => {
     useEffect(() => {
         let releasePlayback: (() => void) | undefined;
         const disposePlayback = reaction(
-            () => [workspace.activeSession, workspace.audioSourcePath, workspace.audioMode, store.isPlaybackSuspended],
-            () => {
+            () => ({
+                session: workspace.activeSession,
+                path: workspace.audioSourcePath,
+                mode: workspace.audioMode,
+                suspended: store.isPlaybackSuspended,
+            }),
+            (sourceState, previous) => {
                 releasePlayback?.();
                 releasePlayback = undefined;
                 const source = store.getPlaybackSource();
                 if (!source) return;
 
-                workspace.clearSegment();
-                workspace.setPlaybackPosition(0);
+                const restoring = previous?.suspended && previous.session === sourceState.session
+                    && previous.path === sourceState.path && previous.mode === sourceState.mode;
+                let resumeFrom = restoring ? { position: workspace.playbackPosition, segment: workspace.segmentSelection } : undefined;
+                if (resumeFrom) {
+                    workspace.clearPlaybackRequest();
+                } else {
+                    workspace.clearSegment();
+                    workspace.setPlaybackPosition(0);
+                }
                 setWaveformStatus('loading');
                 const adapter = new WaveSurferAdapter(containerRef.current!, source, {
                     onPlayingChange: (playing) => workspace.setPlaying(playing),
-                    onDuration: (duration) => workspace.setPlaybackDuration(duration),
+                    onDuration: (duration) => {
+                        if (duration > 0 && resumeFrom) {
+                            adapter.seekTo(resumeFrom.position);
+                            if (resumeFrom.segment) adapter.setRegion(resumeFrom.segment);
+                            resumeFrom = undefined;
+                        }
+                        workspace.setPlaybackDuration(duration);
+                    },
                     onStatus: setWaveformStatus,
                     onTimeUpdate: (time) => workspace.setPlaybackPosition(time),
                     onRegionChange: ({ start, end }) => {

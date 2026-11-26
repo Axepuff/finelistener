@@ -7,7 +7,7 @@ import { getFileByteRange } from '../utils/fileByteRange';
 interface PlaybackRead {
     filePath: string;
     stop: AbortController;
-    closed: Promise<boolean>;
+    closed: Promise<void>;
 }
 
 const isInside = (directory: string, filePath: string): boolean => {
@@ -17,6 +17,7 @@ const isInside = (directory: string, filePath: string): boolean => {
 
 export class PlaybackFiles {
     private readonly reads = new Set<PlaybackRead>();
+    private readonly unconfirmedClosures = new Set<string>();
     private readonly blockedDirectories = new Set<string>();
 
     public async serve(filePath: string, request: Request): Promise<Response> {
@@ -24,13 +25,13 @@ export class PlaybackFiles {
             return new Response(null, { status: 409 });
         }
 
-        const closed = Promise.withResolvers<boolean>();
+        const closed = Promise.withResolvers<void>();
         const read = { filePath, stop: new AbortController(), closed: closed.promise };
         this.reads.add(read);
         const signal = AbortSignal.any([read.stop.signal, request.signal]);
-        const finish = (success: boolean) => {
+        const finish = () => {
             this.reads.delete(read);
-            closed.resolve(success);
+            closed.resolve();
         };
         let stream: ReadStream | undefined;
 
@@ -51,15 +52,15 @@ export class PlaybackFiles {
             if (request.method === 'HEAD') return new Response(null, { status, headers });
 
             stream = createReadStream(filePath, { ...range, signal });
-            let closeFailed = false;
             stream.on('error', (error: NodeJS.ErrnoException) => {
                 if (error.syscall === 'close') {
-                    closeFailed = true;
+                    // The player can detach before delete IPC. Keep the failure after the stream ends.
+                    this.unconfirmedClosures.add(filePath);
                     console.error('Failed to close the playback file', error);
                 }
             });
             // The close event follows descriptor release, including when a read was in flight.
-            stream.once('close', () => finish(!closeFailed));
+            stream.once('close', finish);
             const body = Readable.toWeb(stream, {
                 strategy: { highWaterMark: stream.readableHighWaterMark, size: (chunk: Buffer) => chunk.byteLength },
             });
@@ -71,7 +72,7 @@ export class PlaybackFiles {
             if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Response(null, { status: 404 });
             throw error;
         } finally {
-            if (!stream) finish(true);
+            if (!stream) finish();
         }
     }
 
@@ -81,8 +82,10 @@ export class PlaybackFiles {
         try {
             const reads = Array.from(this.reads).filter(({ filePath }) => isInside(directory, filePath));
             for (const read of reads) read.stop.abort();
-            const released = await Promise.all(reads.map((read) => read.closed));
-            if (released.includes(false)) throw new Error('Playback file could not be released.');
+            await Promise.all(reads.map((read) => read.closed));
+            if (Array.from(this.unconfirmedClosures).some((filePath) => isInside(directory, filePath))) {
+                throw new Error('Playback file could not be released.');
+            }
             await action();
         } finally {
             this.blockedDirectories.delete(directory);
