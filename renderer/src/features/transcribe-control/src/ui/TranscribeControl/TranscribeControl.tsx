@@ -1,7 +1,6 @@
 import { TranscriptionError } from './TranscriptionError';
 import { InlineAlert } from 'renderer/src/shared/InlineAlert';
-import { ActionIcon, Box, Button, Checkbox, Group, Loader, Progress, Select, Stack, Switch, Text } from '@mantine/core';
-import { IconTrash } from '@tabler/icons-react';
+import { Box, Button, Checkbox, Group, Loader, Progress, Select, Stack, Switch, Text } from '@mantine/core';
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useState } from 'react';
 import { useAppStore } from '../../../../../AppContext';
@@ -48,11 +47,6 @@ const TranscribeControl: React.FC = observer(() => {
         } finally {
             setIsCustomModelImporting(false);
         }
-    };
-
-    const handleClear = () => {
-        const result = store.clearWorkspace();
-        if (!result.ok) appendLog(result.message);
     };
 
     const handlePrepareSpeakerComponent = async () => {
@@ -195,20 +189,13 @@ const TranscribeControl: React.FC = observer(() => {
                 />
                 <TranscriptionError />
             </Stack>
-            <Box className="settings-panel__footer">
-                <Group gap={8} justify="space-between" wrap="nowrap">
-                    {store.operations.kind === 'recording' ? (
-                        <Checkbox label="Transcribe when recording stops"
-                            checked={store.recording.transcribeWhenRecordingStops}
-                            onChange={(event) => void store.recording.setTranscribeWhenRecordingStops(event.currentTarget.checked)} />
-                    ) : null}
-                    <ActionIcon onClick={handleClear} aria-label="Clear workspace" title={store.operationBlockReason ?? 'Clear workspace'}
-                        aria-description={store.operationBlockReason} variant="default" size={32}
-                        className="settings-panel__clear" disabled={store.operations.isBusy || store.lifecycleState !== 'ready'}>
-                        <IconTrash size={20} />
-                    </ActionIcon>
-                </Group>
-            </Box>
+            {store.operations.kind === 'recording' ? (
+                <Box className="settings-panel__footer">
+                    <Checkbox label="Transcribe when recording stops"
+                        checked={store.recording.transcribeWhenRecordingStops}
+                        onChange={(event) => void store.recording.setTranscribeWhenRecordingStops(event.currentTarget.checked)} />
+                </Box>
+            ) : null}
         </Box>
     );
 });

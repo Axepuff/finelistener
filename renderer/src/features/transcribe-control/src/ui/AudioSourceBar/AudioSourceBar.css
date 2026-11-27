@@ -20,7 +20,7 @@
     min-width: 0;
 }
 
-.audio-source-bar__replace {
+.audio-source-bar__file-actions {
     flex-shrink: 0;
 }
 

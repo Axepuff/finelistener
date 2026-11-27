@@ -119,7 +119,7 @@ export const RecorderWithOpenSession: Story = {
             await expect(settings.getByRole('checkbox', { name: 'Transcribe when recording stops' })).not.toBeChecked();
             await expect(sources.getByRole('textbox', { name: 'System audio' })).toBeDisabled();
             await expect(canvas.queryByRole('button', { name: 'Transcribe' })).not.toBeInTheDocument();
-            await expect(settings.getByRole('button', { name: 'Clear workspace' })).toBeDisabled();
+            await expect(settings.queryByRole('button', { name: 'Clear workspace' })).not.toBeInTheDocument();
             const language = settings.getByRole('textbox', { name: 'Language' });
             await userEvent.click(language);
             await userEvent.click(page.getByRole('option', { name: 'French' }));

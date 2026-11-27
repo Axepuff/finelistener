@@ -83,7 +83,10 @@ export const SpeakerEdits: Story = { parameters: { scenario: 'sessions-speaker-e
     await waitFor(() => expect(within(panel.getByRole('region', { name: 'Today' })).getByRole('button', { name: 'Design discussion.wav' })).toHaveAccessibleDescription('00:12 · 2 speakers'));
     await expect(canvas.getByLabelText('Current position: 00:08.00 / 00:12.00')).toBeVisible();
     await expect(canvas.getByText('Segment 00:04.00 — 00:08.00')).toBeVisible();
-    await expect(store.clearWorkspace().ok).toBe(true);
+    const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
+    const source = within(settings.getByRole('group', { name: 'Audio source' }));
+    await userEvent.click(source.getByRole('button', { name: 'Clear workspace' }));
+    await expect(await canvas.findByRole('heading', { name: 'Record or import audio' })).toBeVisible();
     await waitFor(() => expect(within(panel.getByRole('region', { name: 'Today' })).getByRole('button', { name: 'Design discussion.wav' })).toHaveAccessibleDescription('00:12 · 2 speakers'));
     await expect(panel.getByRole('button', { name: 'Design discussion.wav' })).not.toHaveAttribute('aria-current');
 } };

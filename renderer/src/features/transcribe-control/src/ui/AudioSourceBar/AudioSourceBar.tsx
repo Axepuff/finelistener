@@ -1,5 +1,5 @@
-import { Box, Button, Group, Modal, Stack, Text } from '@mantine/core';
-import { IconFileMusic, IconHeadphones } from '@tabler/icons-react';
+import { ActionIcon, Box, Button, Group, Modal, Stack, Text } from '@mantine/core';
+import { IconFileMusic, IconHeadphones, IconTrash } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useId, useState } from 'react';
 import { useAppStore } from '../../../../../AppContext';
@@ -38,6 +38,11 @@ export const AudioSourceBar: React.FC = observer(() => {
         if (!result.ok) store.activityLog.appendEvent(result.message);
     };
 
+    const handleClear = () => {
+        const result = store.clearWorkspace();
+        if (!result.ok) store.activityLog.appendEvent(result.message);
+    };
+
     const handleStart = async (replaceSpeakerLabels = false) => {
         const result = await store.requestTranscriptionStart(replaceSpeakerLabels);
         if (!result.ok) store.activityLog.appendEvent(result.message);
@@ -51,8 +56,15 @@ export const AudioSourceBar: React.FC = observer(() => {
                     <Text size="sm" fw={600} truncate="end" title={fileName}>{fileName ?? 'No source selected'}</Text>
                     <Text size="xs" c="dimmed" ff="var(--brand-font-family-code)">{metadata || 'Source details unavailable'}</Text>
                 </Stack>
-                <Button variant="default" size="xs" disabled={operations.isBusy} title={store.operationBlockReason} aria-description={store.operationBlockReason}
-                    className="audio-source-bar__replace" onClick={() => void handleReplace()}>Replace</Button>
+                <Group gap={4} wrap="nowrap" className="audio-source-bar__file-actions">
+                    <Button variant="default" size="xs" px={8} disabled={operations.isBusy} title={store.operationBlockReason}
+                        aria-description={store.operationBlockReason} onClick={() => void handleReplace()}>Replace</Button>
+                    <ActionIcon variant="default" size={24} aria-label="Clear workspace" title={store.operationBlockReason ?? 'Clear workspace'}
+                        aria-description={store.operationBlockReason} onClick={handleClear}
+                        disabled={operations.isBusy || store.lifecycleState !== 'ready'}>
+                        <IconTrash size={16} aria-hidden="true" />
+                    </ActionIcon>
+                </Group>
             </Group>
             <Group gap={8} wrap="nowrap">
                 <Button
