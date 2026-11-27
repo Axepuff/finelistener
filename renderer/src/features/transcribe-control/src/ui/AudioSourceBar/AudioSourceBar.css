@@ -1,7 +1,7 @@
 .audio-source-bar {
     flex: 0 0 auto;
     padding: 12px 16px;
-    background: var(--brand-color-bg-container);
+    background: var(--brand-color-fill);
     border-bottom: var(--brand-line-width) solid var(--brand-color-border);
 }
 
