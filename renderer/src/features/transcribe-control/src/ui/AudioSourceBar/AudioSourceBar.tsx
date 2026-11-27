@@ -25,7 +25,6 @@ export const AudioSourceBar: React.FC = observer(() => {
     const downloadingSelectedModel = !useCustomModelFile && whisperModels.downloadProgress?.name === model;
     const modelName = model[0].toUpperCase() + model.slice(1);
     const canUseBase = downloadingSelectedModel && model !== 'base' && whisperModels.isDownloaded('base');
-    const showStart = operations.kind !== 'transcribing' && operations.kind !== 'analyzing-speakers';
     const blockReason = store.operationBlockReason ??
         (
         !workspace.hasAudioSource ? 'Choose an audio source to transcribe.' :
@@ -45,8 +44,8 @@ export const AudioSourceBar: React.FC = observer(() => {
     };
 
     return (
-        <Group className="audio-source-bar" gap={12}>
-            <Group className="audio-source-bar__source" gap={8} wrap="nowrap">
+        <Stack className="audio-source-bar" gap={8} role="group" aria-label="Audio source">
+            <Group gap={8} wrap="nowrap">
                 <Box className="audio-source-bar__icon"><IconFileMusic size={18} aria-hidden="true" /></Box>
                 <Stack gap={0} className="audio-source-bar__file">
                     <Text size="sm" fw={600} truncate="end" title={fileName}>{fileName ?? 'No source selected'}</Text>
@@ -55,26 +54,25 @@ export const AudioSourceBar: React.FC = observer(() => {
                 <Button variant="default" size="xs" disabled={operations.isBusy} title={store.operationBlockReason} aria-description={store.operationBlockReason}
                     className="audio-source-bar__replace" onClick={() => void handleReplace()}>Replace</Button>
             </Group>
-            {showStart ? (
-                <Group gap={8} justify="flex-end" className="audio-source-bar__actions">
-                    <Text id={statusId} size="xs" c="dimmed" aria-live="polite" className="audio-source-bar__status">{blockReason}</Text>
-                    {canUseBase ? (
-                        <Button variant="default" onClick={() => transcriptionControl.setModel('base')}>Use Base now</Button>
-                    ) : null}
-                    <Button
-                        onClick={() => {
-                            if (store.transcription.savedTranscript?.speakers) setConfirmReplaceSpeakers(true);
-                            else void handleStart();
-                        }}
-                        disabled={blockReason !== null}
-                        aria-describedby={blockReason ? statusId : undefined}
-                        leftSection={<IconHeadphones size={16} aria-hidden="true" />}
-                    >
-                        {downloadingSelectedModel ? `Transcribe with ${modelName}` :
-                            workspace.selectedSegment ? 'Transcribe segment' : 'Transcribe'}
-                    </Button>
-                </Group>
-            ) : null}
+            <Group gap={8} wrap="nowrap">
+                <Button
+                    className="audio-source-bar__transcribe"
+                    onClick={() => {
+                        if (store.transcription.savedTranscript?.speakers) setConfirmReplaceSpeakers(true);
+                        else void handleStart();
+                    }}
+                    disabled={blockReason !== null}
+                    aria-describedby={blockReason ? statusId : undefined}
+                    leftSection={<IconHeadphones size={16} aria-hidden="true" />}
+                >
+                    {downloadingSelectedModel ? `Transcribe with ${modelName}` :
+                        workspace.selectedSegment ? 'Transcribe segment' : 'Transcribe'}
+                </Button>
+                {canUseBase ? (
+                    <Button variant="default" onClick={() => transcriptionControl.setModel('base')}>Use Base now</Button>
+                ) : null}
+            </Group>
+            <Text id={statusId} size="xs" c="dimmed" aria-live="polite" className="audio-source-bar__status">{blockReason}</Text>
             <Modal opened={confirmReplaceSpeakers} onClose={() => setConfirmReplaceSpeakers(false)} title="Replace speaker labels?" centered={true}>
                 <Stack gap="sm">
                     <Text size="sm">A new transcription will replace speaker names, assignments, and merges in this session.</Text>
@@ -87,6 +85,6 @@ export const AudioSourceBar: React.FC = observer(() => {
                     </Group>
                 </Stack>
             </Modal>
-        </Group>
+        </Stack>
     );
 });

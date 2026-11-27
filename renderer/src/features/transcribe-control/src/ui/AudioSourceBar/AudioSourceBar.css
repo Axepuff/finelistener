@@ -1,11 +1,8 @@
 .audio-source-bar {
-    padding: 8px 16px;
-    border-bottom: var(--brand-line-width) solid var(--brand-color-border-secondary);
-}
-
-.audio-source-bar__source {
-    flex: 1 1 220px;
-    min-width: 0;
+    flex: 0 0 auto;
+    padding: 12px 16px;
+    background: var(--brand-color-bg-container);
+    border-bottom: var(--brand-line-width) solid var(--brand-color-border);
 }
 
 .audio-source-bar__icon {
@@ -19,6 +16,7 @@
 }
 
 .audio-source-bar__file {
+    flex: 1;
     min-width: 0;
 }
 
@@ -26,12 +24,8 @@
     flex-shrink: 0;
 }
 
-.audio-source-bar__actions {
-    margin-inline-start: auto;
-}
-
-.audio-source-bar__status {
-    max-width: 36ch;
+.audio-source-bar__transcribe {
+    flex: 1;
 }
 
 .audio-source-bar__status:empty {

@@ -189,15 +189,16 @@ export const AudioReady: Story = {
     parameters: { scenario: 'ready' },
     play: async ({ canvas, loaded }) => {
         const { adapter } = loaded.workspace as StoryWorkspace;
-        const player = within(canvas.getByRole('region', { name: 'Audio player' }));
-        const replace = player.getByRole('button', { name: 'Replace' });
+        const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
+        const source = within(settings.getByRole('group', { name: 'Audio source' }));
+        const replace = source.getByRole('button', { name: 'Replace' });
         const pickFile = spyOn(adapter, 'importAudio').mockResolvedValueOnce(null);
         try {
-            await expect(player.getByRole('button', { name: 'Transcribe' })).toBeEnabled();
+            await expect(source.getByRole('button', { name: 'Transcribe' })).toBeEnabled();
             await userEvent.click(replace);
             await expect(pickFile).toHaveBeenCalledOnce();
             await waitFor(() => expect(replace).toBeEnabled());
-            await expect(player.getByText('Design discussion.wav')).toBeVisible();
+            await expect(source.getByText('Design discussion.wav')).toBeVisible();
         } finally {
             pickFile.mockRestore();
         }

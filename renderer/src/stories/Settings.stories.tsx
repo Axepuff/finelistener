@@ -16,10 +16,9 @@ type Story = StoryObj<typeof meta>;
 export const ModelCards: Story = {
     play: async ({ canvas, canvasElement }) => {
         const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
-        const player = within(canvas.getByRole('region', { name: 'Audio player' }));
-        const transcribe = player.getByRole('button', { name: 'Transcribe' });
-        await expect(player.getByText('00:12 · 16 kHz · mono')).toBeVisible();
-        await expect(settings.queryByRole('button', { name: 'Transcribe' })).not.toBeInTheDocument();
+        const source = within(settings.getByRole('group', { name: 'Audio source' }));
+        const transcribe = source.getByRole('button', { name: 'Transcribe' });
+        await expect(source.getByText('00:12 · 16 kHz · mono')).toBeVisible();
         await userEvent.click(settings.getByRole('button', { name: 'Download Large' }));
         await waitFor(() => expect(settings.getByRole('alert')).toHaveTextContent('Check your connection'));
         await userEvent.click(settings.getByRole('button', { name: 'Show in log' }));
@@ -59,16 +58,16 @@ export const CancelDownload: Story = {
     parameters: { scenario: 'settings-downloading' },
     play: async ({ canvas }) => {
         const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
-        const player = within(canvas.getByRole('region', { name: 'Audio player' }));
+        const source = within(settings.getByRole('group', { name: 'Audio source' }));
         await expect(settings.getByText('Downloading… 38%')).toBeVisible();
         await expect(settings.getByRole('radio', { name: 'Small' })).toBeDisabled();
-        await expect(player.getByRole('button', { name: 'Transcribe with Large' })).toBeDisabled();
-        await expect(player.getByText('Large can transcribe once it is downloaded. You can start now with Base or wait.')).toBeVisible();
+        await expect(source.getByRole('button', { name: 'Transcribe with Large' })).toBeDisabled();
+        await expect(source.getByText('Large can transcribe once it is downloaded. You can start now with Base or wait.')).toBeVisible();
         await userEvent.click(settings.getByRole('button', { name: 'Cancel download' }));
         await waitFor(() => expect(settings.getByRole('button', { name: 'Download Large' })).toBeEnabled());
         await expect(settings.queryByRole('alert')).not.toBeInTheDocument();
         await userEvent.click(settings.getByRole('radio', { name: 'Base' }));
-        await expect(player.getByRole('button', { name: 'Transcribe' })).toBeEnabled();
+        await expect(source.getByRole('button', { name: 'Transcribe' })).toBeEnabled();
     },
 };
 export const Failed: Story = { parameters: { scenario: 'settings-failed' } };
@@ -78,11 +77,11 @@ export const Downloading: Story = {
     play: async ({ canvas, loaded }) => {
         const { store } = loaded.workspace as StoryWorkspace;
         const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
-        const player = within(canvas.getByRole('region', { name: 'Audio player' }));
-        await userEvent.click(player.getByRole('button', { name: 'Use Base now' }));
+        const source = within(settings.getByRole('group', { name: 'Audio source' }));
+        await userEvent.click(source.getByRole('button', { name: 'Use Base now' }));
         await expect(settings.getByRole('radio', { name: 'Base' })).toBeChecked();
         await expect(settings.getByText('Downloading… 38%')).toBeVisible();
-        await userEvent.click(player.getByRole('button', { name: 'Transcribe' }));
+        await userEvent.click(source.getByRole('button', { name: 'Transcribe' }));
         await waitFor(() => expect(store.transcription.runOutcome).toBe('success'));
         await expect(settings.getByText('Downloading… 38%')).toBeVisible();
     },
@@ -128,8 +127,8 @@ export const RecorderWithOpenSession: Story = {
             await userEvent.click(header.getByRole('button', { name: 'Stop recording' }));
             await waitFor(() => expect(recorder.getByRole('textbox', { name: 'Microphone' })).toBeEnabled());
             await expect(language).toHaveValue('French');
-            const player = within(canvas.getByRole('region', { name: 'Audio player' }));
-            await expect(player.getByRole('button', { name: 'Transcribe' })).toBeEnabled();
+            const source = within(settings.getByRole('group', { name: 'Audio source' }));
+            await expect(source.getByRole('button', { name: 'Transcribe' })).toBeEnabled();
         } finally { start.mockRestore(); }
     },
 };

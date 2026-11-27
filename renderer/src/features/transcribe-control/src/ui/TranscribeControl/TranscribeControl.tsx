@@ -5,6 +5,7 @@ import { IconTrash } from '@tabler/icons-react';
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useState } from 'react';
 import { useAppStore } from '../../../../../AppContext';
+import { AudioSourceBar } from '../AudioSourceBar/AudioSourceBar';
 import { TranscribeAdvancedSettings } from '../TranscribeAdvancedSettings/TranscribeAdvancedSettings';
 import { TranscriptionProgress } from './TranscriptionProgress';
 import { RecordingSettings } from './RecordingSettings';
@@ -76,6 +77,7 @@ const TranscribeControl: React.FC = observer(() => {
 
     return (
         <Box className="settings-panel">
+            {!store.recordingInProgress ? <AudioSourceBar /> : null}
             <Stack gap={20} className="settings-panel__scroll">
                 <Text component="h2" size="lg" fw={600} m={0}>Settings</Text>
                 {store.recordingInProgress ? <Text size="xs" c="dimmed">These settings apply to the next transcription.</Text> : null}
