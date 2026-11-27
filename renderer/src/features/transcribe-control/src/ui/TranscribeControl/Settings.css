@@ -2,7 +2,7 @@
 .settings-panel__scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px; }
 .settings-panel__footer { flex: 0 0 auto; padding: 16px; border-top: 1px solid var(--brand-color-border); background: var(--brand-color-bg-container); display: flex; flex-direction: column; gap: 12px; }
 .settings-panel__footer button { height: 32px; }
-.settings-source { padding: 12px; background: var(--brand-color-bg-container); border: 1px solid var(--brand-color-border); border-radius: 6px; }
+.settings-panel__clear { margin-inline-start: auto; flex-shrink: 0; }
 .settings-panel .settings-link { color: var(--brand-color-link-active); align-self: flex-start; font-weight: 400; padding-left: 0; padding-right: 0; height: auto; min-height: 24px; white-space: normal; text-align: left; }
 .settings-models { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .settings-models legend { padding: 0 0 4px; font-size: 14px; font-weight: 600; }
@@ -22,8 +22,6 @@
 .settings-advanced { display: flex; align-items: center; justify-content: space-between; background: transparent; border-left: 0; border-right: 0; border-bottom: 0; color: inherit; font: inherit; font-weight: 600; text-align: left; cursor: pointer; min-height: 32px; }
 .settings-advanced:focus-visible { outline: 2px solid var(--brand-color-link-active); outline-offset: 2px; }
 
-.settings-source__icon { display: flex; align-items: center; justify-content: center; flex: 0 0 32px; height: 32px; border-radius: 4px; background: var(--brand-color-fill-tertiary); color: var(--brand-color-text-secondary); }
-.settings-panel .settings-source .settings-link { align-self: center; }
 .settings-recording summary { cursor: pointer; font-weight: 600; line-height: 32px; }
 .settings-recording summary:focus-visible { outline: 2px solid var(--brand-color-link-active); outline-offset: 2px; }
 

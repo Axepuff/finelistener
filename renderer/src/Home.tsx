@@ -3,7 +3,7 @@ import { Player } from '@~/player';
 import { RecordingStrip } from '@~/recorder';
 import { ProcessLog } from '@~/process-log';
 import { SessionsSidebar } from '@~/sessions';
-import { TranscribeControl } from '@~/transcribe-control';
+import { AudioSourceBar, TranscribeControl } from '@~/transcribe-control';
 import { TranscribedText } from '@~/transcribed-text';
 import { EmptyWorkspace, SHELL_SIZES, StatusBar, TitleBar } from '@~/workspace-shell';
 import { observer } from 'mobx-react-lite';
@@ -53,7 +53,12 @@ export const Home: React.FC = observer(() => {
                     aria-label={store.recordingInProgress ? 'Recording monitor' : 'Audio player'}
                     style={{ flex: '0 0 auto', background: 'var(--brand-color-bg-container)', borderBottom: panelBorder }}
                 >
-                    {store.recordingInProgress ? <RecordingStrip /> : <Player />}
+                    {store.recordingInProgress ? <RecordingStrip /> : (
+                        <>
+                            <AudioSourceBar />
+                            <Player />
+                        </>
+                    )}
                 </Box>
             ) : null}
             <ResizableSidebarLayout
