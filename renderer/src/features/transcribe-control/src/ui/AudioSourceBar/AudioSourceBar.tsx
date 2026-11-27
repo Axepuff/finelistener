@@ -7,7 +7,7 @@ import './AudioSourceBar.css';
 
 export const AudioSourceBar: React.FC = observer(() => {
     const store = useAppStore();
-    const { operations, transcriptionControl, whisperModels, workspace } = store;
+    const { operations, recordingInProgress, transcriptionControl, whisperModels, workspace } = store;
     const [confirmReplaceSpeakers, setConfirmReplaceSpeakers] = useState(false);
     const statusId = useId();
     const session = workspace.activeSession;
@@ -22,10 +22,10 @@ export const AudioSourceBar: React.FC = observer(() => {
 
     const { model, useCustomModelFile, customModelFile } = transcriptionControl;
     const modelReady = useCustomModelFile ? Boolean(customModelFile) : whisperModels.isDownloaded(model);
-    const downloadingSelectedModel = !useCustomModelFile && whisperModels.downloadProgress?.name === model;
+    const downloadingSelectedModel = !recordingInProgress && !useCustomModelFile && whisperModels.downloadProgress?.name === model;
     const modelName = model[0].toUpperCase() + model.slice(1);
     const canUseBase = downloadingSelectedModel && model !== 'base' && whisperModels.isDownloaded('base');
-    const blockReason = store.operationBlockReason ??
+    const blockReason = operations.kind === 'recording' ? 'Stop recording to transcribe.' : store.operationBlockReason ??
         (
         !workspace.hasAudioSource ? 'Choose an audio source to transcribe.' :
         workspace.hasIncompleteSegment ? 'Complete or clear the selected segment.' :
@@ -49,23 +49,25 @@ export const AudioSourceBar: React.FC = observer(() => {
     };
 
     return (
-        <Stack className="audio-source-bar" gap={8} role="group" aria-label="Audio source">
-            <Group gap={8} wrap="nowrap">
-                <Box className="audio-source-bar__icon"><IconFileMusic size={18} aria-hidden="true" /></Box>
-                <Stack gap={0} className="audio-source-bar__file">
-                    <Text size="sm" fw={600} truncate="end" title={fileName}>{fileName ?? 'No source selected'}</Text>
-                    <Text size="xs" c="dimmed" ff="var(--brand-font-family-code)">{metadata || 'Source details unavailable'}</Text>
-                </Stack>
-                <Group gap={4} wrap="nowrap" className="audio-source-bar__file-actions">
-                    <Button variant="default" size="xs" px={8} disabled={operations.isBusy} title={store.operationBlockReason}
-                        aria-description={store.operationBlockReason} onClick={() => void handleReplace()}>Replace</Button>
-                    <ActionIcon variant="default" size={24} aria-label="Clear workspace" title={store.operationBlockReason ?? 'Clear workspace'}
-                        aria-description={store.operationBlockReason} onClick={handleClear}
-                        disabled={operations.isBusy || store.lifecycleState !== 'ready'}>
-                        <IconTrash size={16} aria-hidden="true" />
-                    </ActionIcon>
+        <Stack className="audio-source-bar" gap={8} role="group" aria-label={recordingInProgress ? 'Transcription controls' : 'Audio source'}>
+            {!recordingInProgress ? (
+                <Group gap={8} wrap="nowrap">
+                    <Box className="audio-source-bar__icon"><IconFileMusic size={18} aria-hidden="true" /></Box>
+                    <Stack gap={0} className="audio-source-bar__file">
+                        <Text size="sm" fw={600} truncate="end" title={fileName}>{fileName ?? 'No source selected'}</Text>
+                        <Text size="xs" c="dimmed" ff="var(--brand-font-family-code)">{metadata || 'Source details unavailable'}</Text>
+                    </Stack>
+                    <Group gap={4} wrap="nowrap" className="audio-source-bar__file-actions">
+                        <Button variant="default" size="xs" px={8} disabled={operations.isBusy} title={store.operationBlockReason}
+                            aria-description={store.operationBlockReason} onClick={() => void handleReplace()}>Replace</Button>
+                        <ActionIcon variant="default" size={24} aria-label="Clear workspace" title={store.operationBlockReason ?? 'Clear workspace'}
+                            aria-description={store.operationBlockReason} onClick={handleClear}
+                            disabled={operations.isBusy || store.lifecycleState !== 'ready'}>
+                            <IconTrash size={16} aria-hidden="true" />
+                        </ActionIcon>
+                    </Group>
                 </Group>
-            </Group>
+            ) : null}
             <Group gap={8} wrap="nowrap">
                 <Button
                     className="audio-source-bar__transcribe"
@@ -78,7 +80,7 @@ export const AudioSourceBar: React.FC = observer(() => {
                     leftSection={<IconHeadphones size={16} aria-hidden="true" />}
                 >
                     {downloadingSelectedModel ? `Transcribe with ${modelName}` :
-                        workspace.selectedSegment ? 'Transcribe segment' : 'Transcribe'}
+                        !recordingInProgress && workspace.selectedSegment ? 'Transcribe segment' : 'Transcribe'}
                 </Button>
                 {canUseBase ? (
                     <Button variant="default" onClick={() => transcriptionControl.setModel('base')}>Use Base now</Button>

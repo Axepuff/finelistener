@@ -71,7 +71,7 @@ const TranscribeControl: React.FC = observer(() => {
 
     return (
         <Box className="settings-panel">
-            {!store.recordingInProgress ? <AudioSourceBar /> : null}
+            <AudioSourceBar />
             <Stack gap={20} className="settings-panel__scroll">
                 <Text component="h2" size="lg" fw={600} m={0}>Settings</Text>
                 {store.recordingInProgress ? <Text size="xs" c="dimmed">These settings apply to the next transcription.</Text> : null}

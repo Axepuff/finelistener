@@ -118,7 +118,9 @@ export const RecorderWithOpenSession: Story = {
             const sources = within(settings.getByRole('group', { name: 'Recording sources' }));
             await expect(settings.getByRole('checkbox', { name: 'Transcribe when recording stops' })).not.toBeChecked();
             await expect(sources.getByRole('textbox', { name: 'System audio' })).toBeDisabled();
-            await expect(canvas.queryByRole('button', { name: 'Transcribe' })).not.toBeInTheDocument();
+            const transcribe = settings.getByRole('button', { name: 'Transcribe' });
+            await expect(transcribe).toBeDisabled();
+            await expect(transcribe).toHaveAccessibleDescription('Stop recording to transcribe.');
             await expect(settings.queryByRole('button', { name: 'Clear workspace' })).not.toBeInTheDocument();
             const language = settings.getByRole('textbox', { name: 'Language' });
             await userEvent.click(language);
