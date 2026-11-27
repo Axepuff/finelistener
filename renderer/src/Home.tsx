@@ -77,7 +77,6 @@ export const Home: React.FC = observer(() => {
                             component="aside"
                             aria-label="Transcription settings"
                             h="100%"
-                            bg="var(--brand-color-bg-layout)"
                             style={{ minHeight: 0, overflow: 'hidden' }}
                         >
                             <TranscribeControl />
