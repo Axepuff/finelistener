@@ -1,6 +1,6 @@
 .settings-panel { height: 100%; min-height: 0; display: flex; flex-direction: column; color: var(--brand-color-text); }
 .settings-panel__scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px; }
-.settings-panel__footer { flex: 0 0 auto; padding: 16px; border-top: 1px solid var(--brand-color-border); display: flex; flex-direction: column; gap: 12px; }
+.settings-panel__footer { flex: 0 0 auto; padding: 16px; border-top: 1px solid var(--brand-color-border); background: var(--brand-color-bg-container); display: flex; flex-direction: column; gap: 12px; }
 .settings-panel__footer button { height: 32px; }
 .settings-panel .settings-link { color: var(--brand-color-link-active); align-self: flex-start; font-weight: 400; padding-left: 0; padding-right: 0; height: auto; min-height: 24px; white-space: normal; text-align: left; }
 .settings-models { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }

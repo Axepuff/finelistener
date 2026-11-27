@@ -1,6 +1,7 @@
 .sessions-panel {
     min-height: 0;
     overflow: hidden;
+    background: var(--brand-color-bg-layout);
 }
 
 .sessions-panel > :not(.sessions-panel__list) {
