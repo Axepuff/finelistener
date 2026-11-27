@@ -38,9 +38,9 @@ This changes the quarantine attribute only for that app and its contents. It doe
 
 ## First transcription
 
-Import an audio file or make a recording, then select **Transcribe**. A basic Whisper transcription model is bundled. Audio and transcripts are processed and stored locally.
+Import an audio file or make a recording, then select **Transcribe** at the top of the right panel. A basic Whisper transcription model is bundled. Audio and transcripts are processed and stored locally.
 
-The first speaker analysis downloads a verified Nemotron component from the same GitHub release: approximately 110 MB for Windows CPU, 124 MB for Windows GPU or 117 MB for Mac. The app shows preparation progress and supports cancellation. Do not manually unpack the `finelistener-nemotron-*.zip` release assets. Once the component is installed, it can be reused offline. Microphone-only recordings do not need this download.
+The app includes the Nemotron model and runtime. It verifies and extracts the bundled component into its local cache when needed, then reuses it offline. Microphone-only recordings use a single speaker label without running the model. The app manages the separate `finelistener-nemotron-*.zip` release assets automatically.
 
 On Apple Silicon, the first GPU capability check can take about a minute while Metal shaders are compiled. If GPU analysis fails, select **CPU** in **Speaker analysis device** and retry; saved transcription remains available.
 
@@ -48,7 +48,7 @@ On Apple Silicon, the first GPU capability check can take about a minute while M
 
 After completing a transcription, open **Summary**. Choose **Download model** to install Qwen3-4B-Instruct-2507 Q4_K_M separately (about 2.50 GB of download and storage). This model is not bundled with the installer; once downloaded, it can be reused offline.
 
-Edit **Prompt** to describe what to include, then choose **Generate summary**. The **Brief overview** and **Detailed notes** are generated on your computer and saved with the session for later viewing. If brief generation fails after detailed notes are complete, keep the same prompt and choose **Generate brief summary** to retry.
+Edit **Prompt** to describe what to include, choose a preset if you like, then select **Generate summary**. You can also opt in to automatic generation while the model downloads. The **Brief overview** and **Detailed notes** are generated on your computer and saved with the session. If you stop generation, keep the same prompt and choose **Continue** when available. If brief generation fails after detailed notes are complete, choose **Generate brief summary** to retry with the same prompt.
 
 Summaries can omit details or contain incorrect claims. Review important results against the saved transcript and recording.
 

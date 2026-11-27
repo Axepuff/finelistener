@@ -1,6 +1,14 @@
 # FineListener 1.6.0-beta.1
 
-The new **Summary** tab generates a **Brief overview** and **Detailed notes** from a saved transcript locally. Edit the **Prompt** to guide the summary. Results are saved with the session and remain available when you reopen it.
+FineListener 1.6 adds local summaries, Obsidian export and a redesigned workspace for recording, transcribing and reviewing sessions.
+
+## What's new since 1.5.0-beta.1
+
+- **Summaries.** Generate a **Brief overview** and **Detailed notes** from a saved transcript. Edit the prompt, save it as a preset, and continue eligible stopped runs from the last saved progress. Results stay with the session. Download the 2.50 GB summary model once to use it offline.
+- **Obsidian export.** Save a session as a Markdown note in your vault with its available summary and a plain-text transcript, a timestamped transcript, or both. FineListener remembers your export options and lets you save a new copy while preserving the original note and your edits.
+- **Redesigned workspace.** Drop in an audio file or record directly from the empty workspace. With audio loaded, the right panel keeps **Audio source** and **Transcribe** at the top. Recording and transcription show progress, and you can skip speaker analysis once the transcript is saved.
+- **Offline speaker analysis from first use.** Each installer includes the verified Nemotron model and runtime. FineListener prepares it locally when needed.
+- **Faster review.** Long speaker transcripts and large session lists load faster. Waveform selection stays aligned when the player is resized.
 
 ## Downloads
 
@@ -14,16 +22,7 @@ Choose Windows CPU if you are unsure which Windows build to use. The Mac beta ta
 
 [Installation and first-launch instructions](https://github.com/Axepuff/finelistener/blob/v1.6.0-beta.1/INSTALL.md) · [SHA-256 checksums](https://github.com/Axepuff/finelistener/releases/download/v1.6.0-beta.1/SHA256SUMS.txt)
 
-## Included
-
-- Record microphone and system audio or import an existing recording.
-- Transcribe locally with Whisper and label speakers with Nemotron 3. Audio processing stays on your computer.
-- Generate summaries offline after downloading the separate Qwen3-4B-Instruct-2507 Q4_K_M model (about 2.50 GB). The summary model is not bundled with the installer.
-- During overlapping speech, Reading uses the saved speaker assignment when available. If the color is estimated from voice activity, the tooltip on the word identifies the estimate.
-- Save sessions and reopen their recordings and transcripts, including revealing a session's folder.
-- Choose CPU or supported GPU acceleration for speaker analysis. Ambiguous overlapping speech can remain **Unknown speaker**.
-
-The basic transcription model is bundled. Speaker analysis downloads an additional verified component on first use (about 110–124 MB), then reuses it offline. No Python installation, CUDA Toolkit or account login is required. Files named `finelistener-nemotron-*` are app-managed components, not installers.
+The installer includes the basic Whisper transcription model and Nemotron 3 for speaker analysis. Audio processing stays on your computer. No Python installation, CUDA Toolkit or account login is required. Choose the installer or ZIP for your platform from the table above. FineListener manages the separate Nemotron component files automatically.
 
 ## First launch
 
