@@ -27,6 +27,7 @@ export const ModelCards: Story = {
         await userEvent.click(canvas.getByRole('button', { name: 'Log' }));
         await expect(settings.getByRole('radio', { name: 'Base' })).toBeChecked();
         await expect(transcribe).toBeEnabled();
+        await expect(source.getByText('Ready to transcribe.')).toHaveAttribute('aria-live', 'polite');
         await expect(within(canvasElement.ownerDocument.body).queryByRole('dialog')).not.toBeInTheDocument();
         await userEvent.click(settings.getByRole('button', { name: 'Retry download Large' }));
         await waitFor(() => expect(settings.queryByRole('alert')).not.toBeInTheDocument());
@@ -77,10 +78,15 @@ export const Downloading: Story = {
     play: async ({ canvas, loaded }) => {
         const { store } = loaded.workspace as StoryWorkspace;
         const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
-        const source = within(settings.getByRole('group', { name: 'Audio source' }));
-        await userEvent.click(source.getByRole('button', { name: 'Use Base now' }));
+        const header = within(canvas.getByRole('banner'));
+        await expect(settings.getByRole('button', { name: 'Use Base now' })).toBeEnabled();
+        await userEvent.click(header.getByRole('button', { name: 'Start recording' }));
+        await userEvent.click(await settings.findByRole('button', { name: 'Use Base now' }));
         await expect(settings.getByRole('radio', { name: 'Base' })).toBeChecked();
         await expect(settings.getByText('Downloading… 38%')).toBeVisible();
+        await expect(settings.getByRole('button', { name: 'Transcribe' })).toBeDisabled();
+        await userEvent.click(header.getByRole('button', { name: 'Stop recording' }));
+        const source = within(await settings.findByRole('group', { name: 'Audio source' }));
         await userEvent.click(source.getByRole('button', { name: 'Transcribe' }));
         await waitFor(() => expect(store.transcription.runOutcome).toBe('success'));
         await expect(settings.getByText('Downloading… 38%')).toBeVisible();
@@ -121,7 +127,7 @@ export const RecorderWithOpenSession: Story = {
             const transcribe = settings.getByRole('button', { name: 'Transcribe' });
             await expect(transcribe).toBeDisabled();
             await expect(transcribe).toHaveAccessibleDescription('Stop recording to transcribe.');
-            await expect(settings.queryByRole('button', { name: 'Clear workspace' })).not.toBeInTheDocument();
+            await expect(settings.getByRole('button', { name: 'Clear workspace' })).toBeDisabled();
             const language = settings.getByRole('textbox', { name: 'Language' });
             await userEvent.click(language);
             await userEvent.click(page.getByRole('option', { name: 'French' }));

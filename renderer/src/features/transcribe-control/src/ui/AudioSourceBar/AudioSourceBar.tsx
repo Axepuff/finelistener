@@ -22,7 +22,7 @@ export const AudioSourceBar: React.FC = observer(() => {
 
     const { model, useCustomModelFile, customModelFile } = transcriptionControl;
     const modelReady = useCustomModelFile ? Boolean(customModelFile) : whisperModels.isDownloaded(model);
-    const downloadingSelectedModel = !recordingInProgress && !useCustomModelFile && whisperModels.downloadProgress?.name === model;
+    const downloadingSelectedModel = !useCustomModelFile && whisperModels.downloadProgress?.name === model;
     const modelName = model[0].toUpperCase() + model.slice(1);
     const canUseBase = downloadingSelectedModel && model !== 'base' && whisperModels.isDownloaded('base');
     const blockReason = operations.kind === 'recording' ? 'Stop recording to transcribe.' : store.operationBlockReason ??
@@ -48,6 +48,14 @@ export const AudioSourceBar: React.FC = observer(() => {
         if (!result.ok) store.activityLog.appendEvent(result.message);
     };
 
+    const clearWorkspace = (
+        <ActionIcon variant="default" size={24} aria-label="Clear workspace" title={store.operationBlockReason ?? 'Clear workspace'}
+            aria-description={store.operationBlockReason} onClick={handleClear}
+            disabled={operations.isBusy || store.lifecycleState !== 'ready'}>
+            <IconTrash size={16} aria-hidden="true" />
+        </ActionIcon>
+    );
+
     return (
         <Stack className="audio-source-bar" gap={8} role="group" aria-label={recordingInProgress ? 'Transcription controls' : 'Audio source'}>
             {!recordingInProgress ? (
@@ -60,11 +68,7 @@ export const AudioSourceBar: React.FC = observer(() => {
                     <Group gap={4} wrap="nowrap" className="audio-source-bar__file-actions">
                         <Button variant="default" size="xs" px={8} disabled={operations.isBusy} title={store.operationBlockReason}
                             aria-description={store.operationBlockReason} onClick={() => void handleReplace()}>Replace</Button>
-                        <ActionIcon variant="default" size={24} aria-label="Clear workspace" title={store.operationBlockReason ?? 'Clear workspace'}
-                            aria-description={store.operationBlockReason} onClick={handleClear}
-                            disabled={operations.isBusy || store.lifecycleState !== 'ready'}>
-                            <IconTrash size={16} aria-hidden="true" />
-                        </ActionIcon>
+                        {clearWorkspace}
                     </Group>
                 </Group>
             ) : null}
@@ -79,14 +83,18 @@ export const AudioSourceBar: React.FC = observer(() => {
                     aria-describedby={blockReason ? statusId : undefined}
                     leftSection={<IconHeadphones size={16} aria-hidden="true" />}
                 >
-                    {downloadingSelectedModel ? `Transcribe with ${modelName}` :
+                    {!recordingInProgress && downloadingSelectedModel ? `Transcribe with ${modelName}` :
                         !recordingInProgress && workspace.selectedSegment ? 'Transcribe segment' : 'Transcribe'}
                 </Button>
                 {canUseBase ? (
                     <Button variant="default" onClick={() => transcriptionControl.setModel('base')}>Use Base now</Button>
                 ) : null}
+                {recordingInProgress ? clearWorkspace : null}
             </Group>
-            <Text id={statusId} size="xs" c="dimmed" aria-live="polite" className="audio-source-bar__status">{blockReason}</Text>
+            <Text id={statusId} size="xs" c="dimmed" aria-live="polite" aria-atomic="true"
+                className="audio-source-bar__status" data-ready={blockReason === null || undefined}>
+                {blockReason ?? 'Ready to transcribe.'}
+            </Text>
             <Modal opened={confirmReplaceSpeakers} onClose={() => setConfirmReplaceSpeakers(false)} title="Replace speaker labels?" centered={true}>
                 <Stack gap="sm">
                     <Text size="sm">A new transcription will replace speaker names, assignments, and merges in this session.</Text>

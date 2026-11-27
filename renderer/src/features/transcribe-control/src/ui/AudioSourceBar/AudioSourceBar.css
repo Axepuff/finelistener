@@ -28,6 +28,11 @@
     flex: 1;
 }
 
-.audio-source-bar__status:empty {
+.audio-source-bar__status[data-ready] {
     position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
 }
