@@ -6,7 +6,7 @@ FineListener 1.6 adds local summaries, Obsidian export and a redesigned workspac
 
 - **Summaries.** Generate a **Brief overview** and **Detailed notes** from a saved transcript. Edit the prompt, save it as a preset, and continue eligible stopped runs from the last saved progress. Results stay with the session. Download the 2.50 GB summary model once to use it offline.
 - **Obsidian export.** Save a session as a Markdown note in your vault with its available summary and a plain-text transcript, a timestamped transcript, or both. FineListener remembers your export options and lets you save a new copy while preserving the original note and your edits.
-- **Redesigned workspace.** Drop in an audio file or record directly from the empty workspace. With audio loaded, the right panel keeps **Audio source** and **Transcribe** at the top. Recording and transcription show progress, and you can skip speaker analysis once the transcript is saved.
+- **Redesigned workspace.** Drop in an audio file or record directly from the empty workspace. With audio loaded, the right panel shows the source details and **Transcribe** at the top. Recording and transcription show progress, and you can skip speaker analysis once the transcript is saved.
 - **Offline speaker analysis from first use.** Each installer includes the verified Nemotron model and runtime. FineListener prepares it locally when needed.
 - **Faster review.** Long speaker transcripts and large session lists load faster. Waveform selection stays aligned when the player is resized.
 
