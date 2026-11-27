@@ -185,7 +185,25 @@ export const RecordingStartError: Story = {
         await waitFor(() => expect(canvas.getByText('Could not start recording. Check the selected devices.')).toBeVisible());
     },
 };
-export const AudioReady: Story = { parameters: { scenario: 'ready' } };
+export const AudioReady: Story = {
+    parameters: { scenario: 'ready' },
+    play: async ({ canvas, loaded }) => {
+        const { adapter } = loaded.workspace as StoryWorkspace;
+        const settings = within(canvas.getByRole('complementary', { name: 'Transcription settings' }));
+        const source = within(settings.getByRole('group', { name: 'Audio source' }));
+        const replace = source.getByRole('button', { name: 'Replace' });
+        const pickFile = spyOn(adapter, 'importAudio').mockResolvedValueOnce(null);
+        try {
+            await expect(source.getByRole('button', { name: 'Transcribe' })).toBeEnabled();
+            await userEvent.click(replace);
+            await expect(pickFile).toHaveBeenCalledOnce();
+            await waitFor(() => expect(replace).toBeEnabled());
+            await expect(source.getByText('Design discussion.wav')).toBeVisible();
+        } finally {
+            pickFile.mockRestore();
+        }
+    },
+};
 export const SegmentResizing: Story = {
     play: async ({ canvas, canvasElement, loaded }) => {
         const { adapter } = loaded.workspace as StoryWorkspace;

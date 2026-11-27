@@ -1,13 +1,12 @@
 import { TranscriptionError } from './TranscriptionError';
 import { InlineAlert } from 'renderer/src/shared/InlineAlert';
-import { ActionIcon, Box, Button, Checkbox, Group, Loader, Modal, Progress, Select, Stack, Switch, Text } from '@mantine/core';
-import { IconHeadphones, IconTrash } from '@tabler/icons-react';
+import { Box, Button, Checkbox, Group, Loader, Progress, Select, Stack, Switch, Text } from '@mantine/core';
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useState } from 'react';
 import { useAppStore } from '../../../../../AppContext';
+import { AudioSourceBar } from '../AudioSourceBar/AudioSourceBar';
 import { TranscribeAdvancedSettings } from '../TranscribeAdvancedSettings/TranscribeAdvancedSettings';
 import { TranscriptionProgress } from './TranscriptionProgress';
-import { SourceCard } from './SourceCard';
 import { RecordingSettings } from './RecordingSettings';
 import './Settings.css';
 import { WhisperModelSelect } from '../WhisperModelSelect/WhisperModelSelect';
@@ -27,7 +26,6 @@ const TranscribeControl: React.FC = observer(() => {
     const store = useAppStore();
     const control = store.transcriptionControl;
     const [isCustomModelImporting, setIsCustomModelImporting] = useState(false);
-    const [confirmReplaceSpeakers, setConfirmReplaceSpeakers] = useState(false);
     const { language: lang, model, useCustomModelFile, customModelFile, maxContext, maxLen, splitOnWord, useVad, microphoneGateEnabled } = control;
 
     const appendLog = useCallback((message: string) => {
@@ -51,16 +49,6 @@ const TranscribeControl: React.FC = observer(() => {
         }
     };
 
-    const handleStart = async (replaceSpeakerLabels = false) => {
-        const result = await store.requestTranscriptionStart(replaceSpeakerLabels);
-        if (!result.ok) appendLog(result.message);
-    };
-
-    const handleClear = () => {
-        const result = store.clearWorkspace();
-        if (!result.ok) appendLog(result.message);
-    };
-
     const handlePrepareSpeakerComponent = async () => {
         const result = await store.prepareSpeakerAssets();
         if (!result.ok) appendLog(result.message);
@@ -72,18 +60,6 @@ const TranscribeControl: React.FC = observer(() => {
     };
 
     const showProgress = store.operations.kind === 'transcribing' || store.operations.kind === 'analyzing-speakers';
-    const modelReady = useCustomModelFile ? Boolean(customModelFile) : store.whisperModels.isDownloaded(model);
-    const downloadingSelectedModel = !useCustomModelFile && store.whisperModels.downloadProgress?.name === model;
-    const modelName = model[0].toUpperCase() + model.slice(1);
-    const canUseBase = downloadingSelectedModel && model !== 'base' && store.whisperModels.isDownloaded('base');
-    const blockReason = store.operations.kind === 'recording' ? 'Stop recording to transcribe.' : store.operationBlockReason ??
-        (
-        !store.workspace.hasAudioSource ? 'Choose an audio source to transcribe.' :
-        store.workspace.hasIncompleteSegment ? 'Complete or clear the selected segment.' :
-        !modelReady ? (useCustomModelFile ? 'Choose a local model file to transcribe.' :
-            downloadingSelectedModel ? `${modelName} can transcribe once it is downloaded.${canUseBase ? ' You can start now with Base or wait.' : ''}` :
-            'Download the selected model to transcribe.') : null);
-    const canStart = blockReason === null;
     const hasSystemAudio = store.workspace.activeSession?.sourceKind === 'imported'
         || store.workspace.activeSession?.tracks?.some((track) => track.source === 'system');
     const preparingSpeakerAssets = store.operations.kind === 'preparing-speaker-assets';
@@ -95,9 +71,10 @@ const TranscribeControl: React.FC = observer(() => {
 
     return (
         <Box className="settings-panel">
+            <AudioSourceBar />
             <Stack gap={20} className="settings-panel__scroll">
                 <Text component="h2" size="lg" fw={600} m={0}>Settings</Text>
-                {!store.recordingInProgress ? <SourceCard /> : <Text size="xs" c="dimmed">These settings apply to the next transcription.</Text>}
+                {store.recordingInProgress ? <Text size="xs" c="dimmed">These settings apply to the next transcription.</Text> : null}
                 <RecordingSettings />
                 <Select
                     w="100%"
@@ -212,47 +189,13 @@ const TranscribeControl: React.FC = observer(() => {
                 />
                 <TranscriptionError />
             </Stack>
-            <Box className="settings-panel__footer">
-                {store.operations.kind === 'recording' ? <Checkbox label="Transcribe when recording stops"
-                    checked={store.recording.transcribeWhenRecordingStops}
-                    onChange={(event) => void store.recording.setTranscribeWhenRecordingStops(event.currentTarget.checked)} /> : null}
-                <Text id="settings-transcription-status" size="xs" c="dimmed" aria-live="polite">{blockReason ?? 'Ready to transcribe.'}</Text>
-                <Group gap={8} wrap="nowrap">
-                    <Button
-                        fullWidth={true}
-                        onClick={() => {
-                            if (store.transcription.savedTranscript?.speakers) setConfirmReplaceSpeakers(true);
-                            else void handleStart();
-                        }}
-                        disabled={!canStart}
-                        aria-describedby="settings-transcription-status"
-                        leftSection={<IconHeadphones size={16} />}
-                    >
-                        {downloadingSelectedModel ? `Transcribe with ${modelName}` :
-                            !store.recordingInProgress && store.workspace.selectedSegment ? 'Transcribe segment' : 'Transcribe'}
-                    </Button>
-                    {canUseBase ? (
-                        <Button variant="default" onClick={() => control.setModel('base')}>Use Base now</Button>
-                    ) : null}
-                    <ActionIcon onClick={handleClear} aria-label="Clear workspace" title={store.operations.isBusy ? blockReason ?? undefined : 'Clear workspace'}
-                        aria-describedby={store.operations.isBusy ? 'settings-transcription-status' : undefined}
-                        variant="default" size={32} disabled={store.operations.isBusy || store.lifecycleState !== 'ready'}>
-                        <IconTrash size={20} />
-                    </ActionIcon>
-                </Group>
-            </Box>
-            <Modal opened={confirmReplaceSpeakers} onClose={() => setConfirmReplaceSpeakers(false)} title="Replace speaker labels?" centered={true}>
-                <Stack gap="sm">
-                    <Text size="sm">A new transcription will replace speaker names, assignments, and merges in this session.</Text>
-                    <Group justify="flex-end">
-                        <Button variant="default" onClick={() => setConfirmReplaceSpeakers(false)}>Cancel</Button>
-                        <Button color="red" disabled={store.operations.isBusy} title={store.operationBlockReason} aria-description={store.operationBlockReason} onClick={() => {
-                            setConfirmReplaceSpeakers(false);
-                            void handleStart(true);
-                        }}>Replace and transcribe</Button>
-                    </Group>
-                </Stack>
-            </Modal>
+            {store.operations.kind === 'recording' ? (
+                <Box className="settings-panel__footer">
+                    <Checkbox label="Transcribe when recording stops"
+                        checked={store.recording.transcribeWhenRecordingStops}
+                        onChange={(event) => void store.recording.setTranscribeWhenRecordingStops(event.currentTarget.checked)} />
+                </Box>
+            ) : null}
         </Box>
     );
 });

@@ -88,7 +88,7 @@ export const ExportToObsidian: Story = {
             const confirm = options.getByRole('button', { name: 'Export note' });
             await expect(confirm).toBeDisabled();
             await userEvent.click(options.getByRole('button', { name: 'Choose folder' }));
-            await expect(await options.findByText('Work / Meetings')).toBeVisible();
+            await waitFor(() => expect(options.getByText('Work / Meetings')).toBeVisible());
             await userEvent.click(options.getByRole('checkbox', { name: 'Timestamped transcript' }));
             await expect(confirm).toBeDisabled();
             await userEvent.click(options.getByRole('checkbox', { name: 'Plain text' }));
